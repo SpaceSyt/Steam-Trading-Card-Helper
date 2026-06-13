@@ -2,8 +2,8 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @version      0.8.0
-// @description  Scan badges, find & buy cheap trading card sets via buylisting
-// @description:zh-CN 扫描徽章，寻找低价卡牌套组，通过 buylisting 购买缺失卡牌
+// @description  Scan Steam badges, batch query card prices, estimate full set costs
+// @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
 // @include      http*://steamcommunity.com/*/badges*
 // @include      http*://steamcommunity.com/id/*/badges*
@@ -770,7 +770,7 @@
 
     const btn = document.createElement("span");
     btn.className = "sbc-btn-entry";
-    btn.textContent = "徽章卡牌购买助手";
+    btn.textContent = "SBC";
     btn.addEventListener("click", openModal);
 
     if (target.classList.contains("profile_xp_block")) {
@@ -809,7 +809,7 @@
     modal.addEventListener("click", e => e.stopPropagation());
     modal.innerHTML = `
       <div class="sbc-header">
-        <h2>Steam 徽章卡牌购买助手</h2>
+        <h2>Steam 徽章助手</h2>
         <span class="sbc-close" title="关闭">✕</span>
       </div>
       <div class="sbc-body">
@@ -846,7 +846,7 @@
         <div id="sbc-log"></div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V0.8.0 · 默认货币：人民币(CNY) · 仅 V1 手动 buylisting</span>
+        <span class="sbc-label">V0.8.0 · 默认货币：人民币(CNY) · 仅扫描与价格估算</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -957,7 +957,7 @@
     switch (phase) {
       case "phase1": btn.textContent = "扫描中: 徽章列表"; break;
       case "phase2": btn.textContent = "扫描中: 卡牌详情+查价"; break;
-      case "phase3": btn.textContent = "扫描完成: 可购买"; break;
+      case "phase3": btn.textContent = "扫描完成"; break;
       case "scanning": btn.textContent = "扫描中..."; break;
       case "done": btn.textContent = "扫描完成"; break;
     }

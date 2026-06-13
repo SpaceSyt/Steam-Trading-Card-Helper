@@ -1,8 +1,8 @@
 # Steam Badge Helper
 
-Tampermonkey 用户脚本，在 Steam 徽章页面扫描有未完成进度的游戏徽章，批量查询卡牌价格，计算Steam市场购买卡牌套装价格。
+Tampermonkey 用户脚本，在 Steam 徽章页面扫描有未完成进度的游戏徽章，批量查询卡牌价格，计算卡牌套装成本。
 
-> **当前版本 v0.8.0**：购买功能尚未实现，版本号未到 1.0 正是因此。目前仅支持扫描与价格估算。
+> **v0.8.0**：购买功能尚未实现（按钮仅为占位），版本号未到 1.0 正是因此。目前仅支持扫描与价格估算。
 
 ## 功能
 
@@ -14,16 +14,19 @@ Tampermonkey 用户脚本，在 Steam 徽章页面扫描有未完成进度的游
 ## 安装
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
-2. 导入 `steam-badge-helper.user.js`
-3. 打开任意 Steam 徽章页 (如 `steamcommunity.com/id/xxx/badges/`)
-4. 点击页面右侧 "徽章卡牌购买助手" 按钮
+2. 打开脚本的 GitHub raw 链接，Tampermonkey 会自动弹出安装提示：
+   ```
+   https://github.com/SpaceSyt/Steam-Badge-Helper/raw/master/steam-badge-helper.user.js
+   ```
+   或者在 Tampermonkey 管理面板中手动新建脚本，将 `steam-badge-helper.user.js` 内容粘贴进去。
+3. 安装后打开任意 Steam 徽章页 (`steamcommunity.com/id/xxx/badges/`)，页面右侧会出现 **SBC** 入口按钮
 
 ## 使用说明
 
-1. 点击入口按钮打开助手面板
+1. 点击 **SBC** 按钮打开助手面板
 2. 设置 **单套卡牌价格上限**（人民币）
 3. 点击 **开始扫描**，等待扫描完成
-4. 勾选感兴趣的游戏，查看价格估算，手动购买
+4. 勾选感兴趣的游戏，查看价格估算，手动到 Steam 市场购买
 
 ## 配置项
 
@@ -37,9 +40,20 @@ Tampermonkey 用户脚本，在 Steam 徽章页面扫描有未完成进度的游
 
 ## 注意事项
 
-- 仅支持人民币 (CNY) 交易
+- 仅支持人民币 (CNY)
 - 满级价格为估算值，成交量低时可能不准
 - 不支持闪卡
+
+## Steam 请求速率限制
+
+Steam 市场 API 的具体速率限制官方并未公开。当前脚本的默认请求间隔（1200ms，每20次暂停15秒）可以稳定运行约 1-2 小时。但如果短时间内发起过多请求，Steam 可能会**暂时封锁 IP 地址**。
+
+**如果你发现按 F12 打开浏览器开发者工具 → Network 标签页，所有 `priceoverview` 请求都返回 429 状态码，说明 IP 已被暂时封锁**。解决方法：
+
+- 等待几个小时让封锁自动解除
+- 更换 IP 地址（例如使用 VPN 切换节点）
+
+脚本扫描过程中如遇到限流，会在状态栏显示"限流冷却中"，并自动等待后重试。但如果持续被 429 拒绝，建议停止扫描并等待。
 
 ## License
 
