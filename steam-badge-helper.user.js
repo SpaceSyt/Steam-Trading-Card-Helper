@@ -34,7 +34,6 @@
   // ============================================================
   const DEFAULT_CONFIG = {
     threshold: 10,
-    buffer: 1,
     scanInterval: 800,
     requestInterval: 1200,
     batchSize: 20,
@@ -61,12 +60,6 @@
 
   function saveConfig(cfg) {
     GM_setValue("sbc_config", JSON.stringify(cfg));
-  }
-
-  function getSessionId() {
-    if (unsafeWindow.g_sessionID) return unsafeWindow.g_sessionID;
-    const match = document.cookie.match(/sessionid=([^;]+)/);
-    return match ? decodeURIComponent(match[1]) : null;
   }
 
   function getProfileUrl() {
@@ -420,85 +413,6 @@
   }
 
   // ============================================================
-  // Buylisting
-  // ============================================================
-  async function findListingId(marketHashName, maxPriceCents, queue) {
-    const url = `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}/render?start=0&count=30&currency=${getWalletCurrency()}`;
-    const res = await queue.fetch(url);
-
-    if (!res || !res.text) return null;
-
-    const matchHtml = res.text.match(/"listinginfo"\s*:\s*(\{[\s\S]*?"total_count"\s*:\s*\d+[\s\S]*?\})/);
-    let listingInfoJson = null;
-    if (matchHtml) {
-      try { listingInfoJson = JSON.parse(matchHtml[1]); } catch (_) {}
-      if (listingInfoJson && listingInfoJson.listinginfo) {
-        const ids = Object.keys(listingInfoJson.listinginfo);
-        for (const id of ids) {
-          const info = listingInfoJson.listinginfo[id];
-          const price = info.converted_price_with_fees || info.price_with_fees;
-          if (price != null && price <= maxPriceCents) {
-            return id;
-          }
-        }
-      }
-    }
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(res.text, "text/html");
-    const rows = doc.querySelectorAll(".market_listing_row");
-    for (const row of rows) {
-      const rowId = row.getAttribute("id") || "";
-      const listingMatch = rowId.match(/(?:listing_|mylisting_)(\d+)/);
-      if (!listingMatch) continue;
-
-      const priceEl = row.querySelector(".market_listing_price.market_listing_price_with_fee");
-      if (!priceEl) continue;
-      const priceText = priceEl.textContent;
-      const cents = parsePriceToCents(priceText);
-      if (cents != null && cents <= maxPriceCents) {
-        return listingMatch[1];
-      }
-    }
-
-    return null;
-  }
-
-  function parsePriceToCents(priceText) {
-    if (!priceText) return null;
-    const cleaned = priceText.replace(/[^\d.,]/g, "").replace(/,/g, "");
-    if (!cleaned) return null;
-    const parts = cleaned.split(".");
-    let main = parts[0] || "0";
-    let sub = parts[1] || "0";
-    sub = sub.substring(0, 2).padEnd(2, "0");
-    const cents = parseInt(main, 10) * 100 + parseInt(sub, 10);
-    return isNaN(cents) ? null : cents;
-  }
-
-  async function buyListing(listingId, priceCents, queue) {
-    const sessionId = getSessionId();
-    const currency = getWalletCurrency();
-
-    const body = new URLSearchParams({
-      sessionid: sessionId || "",
-      listingid: listingId,
-      currency: String(currency),
-      subtotal: String(priceCents),
-      fee: "0",
-      quantity: "1",
-    });
-
-    const res = await queue.fetch("https://steamcommunity.com/market/buylisting/", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
-      body: body.toString(),
-    });
-
-    return { status: res.status, data: res.data };
-  }
-
-  // ============================================================
   // CSS
   // ============================================================
   GM_addStyle(`
@@ -678,9 +592,6 @@
       font-size: 12px;
       text-align: right;
     }
-    .sbc-game-row .sbc-buf {
-      display: none;
-    }
     .sbc-game-row .sbc-drops {
       width: 55px;
       flex-shrink: 0;
@@ -693,10 +604,6 @@
       flex-shrink: 0;
       text-align: center;
     }
-    .sbc-game-row .sbc-actions {
-      display: none;
-    }
-
     .sbc-toolbar {
       display: flex;
       gap: 14px;
@@ -775,7 +682,7 @@
 
     const btn = document.createElement("span");
     btn.className = "sbc-btn-entry";
-    btn.textContent = "SBC";
+    btn.textContent = "Steam Badge Helper";
     btn.addEventListener("click", openModal);
 
     if (target.classList.contains("profile_xp_block")) {
@@ -791,7 +698,6 @@
     results: [],
     selected: new Set(),
     scanning: false,
-    buying: false,
     stopRequested: false,
     skipCurrent: false,
     queue: null,
@@ -837,7 +743,6 @@
         </div>
         <div style="display:flex; gap:10px; margin-bottom:8px;">
           <div class="sbc-btn" id="sbc-scan-btn">开始扫描</div>
-          <div class="sbc-btn alt disabled" id="sbc-buy-btn">购买选中</div>
           <div class="sbc-btn alt disabled" id="sbc-stop-btn">停止</div>
           <div class="sbc-btn alt disabled" id="sbc-skip-btn" title="跳过当前徽章">跳过当前</div>
         </div>
@@ -879,7 +784,6 @@
     });
 
     document.getElementById("sbc-scan-btn").addEventListener("click", startScan);
-    document.getElementById("sbc-buy-btn").addEventListener("click", startBuy);
     document.getElementById("sbc-stop-btn").addEventListener("click", requestStop);
     document.getElementById("sbc-skip-btn").addEventListener("click", skipCurrentBadge);
   }
@@ -890,7 +794,7 @@
   }
 
   function closeModal() {
-    if (state.scanning || state.buying) {
+    if (state.scanning) {
       state.stopRequested = true;
       state.queue?.stop();
     }
@@ -956,7 +860,6 @@
   // ============================================================
   function setScanPhase(phase) {
     const btn = document.getElementById("sbc-scan-btn");
-    const buyBtn = document.getElementById("sbc-buy-btn");
     if (!btn) return;
     btn.textContent = "开始扫描";
     switch (phase) {
@@ -969,7 +872,7 @@
   }
 
   async function startScan() {
-    if (state.scanning || state.buying) return;
+    if (state.scanning) return;
     state.scanning = true;
     state.stopRequested = false;
     state.skipCurrent = false;
@@ -978,7 +881,6 @@
     document.getElementById("sbc-list").innerHTML = "";
     document.getElementById("sbc-log").innerHTML = "";
     document.getElementById("sbc-scan-btn").classList.add("disabled");
-    document.getElementById("sbc-buy-btn").classList.add("disabled");
     document.getElementById("sbc-skip-btn").classList.remove("disabled");
     document.getElementById("sbc-stop-btn").classList.remove("disabled");
     setScanPhase("scanning");
@@ -1082,7 +984,6 @@
           info.cheapestSetCostCents = 0;
           info.fullSetCostCents = 0;
           info.level5CostCents = 0;
-          info.missingCards = [];
 
           if (info.totalInSet === 0 || info.need === 0) {
             log(`[${b.appid}] ${info.gameName}: Lv${info.level}, 套卡完整或无卡牌`, "info");
@@ -1154,8 +1055,6 @@
               ? pk.lowestSellCents + (need5 - 1) * Math.max(pk.lowestSellCents, pk.medianCents)
               : 0;
 
-            if (need1 > 0) info.missingCards.push(card);
-
             // smart skip: if full set cost already exceeds threshold
             if (fullSetCostCents > thresholdCents) {
               log(`  → 已查${info.cardPrices.length}/${info.totalInSet}张, 全套 ¥${formatCNY(fullSetCostCents)} > ¥${cfg.threshold}，跳过`, "info");
@@ -1206,7 +1105,6 @@
 
       if (resultCount > 0) {
         setScanPhase("phase3");
-        document.getElementById("sbc-buy-btn").classList.remove("disabled");
       } else {
         setScanPhase("done");
       }
@@ -1320,102 +1218,15 @@
     `;
   }
 
-  // ============================================================
-  // Buy flow (V1: buylisting only)
-  // ============================================================
-  async function startBuy() {
-    if (state.scanning || state.buying) return;
-    if (state.selected.size === 0) {
-      log("未选择任何游戏", "warn");
-      return;
-    }
-
-    state.buying = true;
-    state.stopRequested = false;
-    document.getElementById("sbc-buy-btn").classList.add("disabled");
-    document.getElementById("sbc-stop-btn").classList.remove("disabled");
-
-    const queue = new RequestQueue(state.cfg.requestInterval, state.cfg.batchSize, state.cfg.batchPause, state, setStatus);
-    state.queue = queue;
-    const bufferCents = Math.round((state.cfg.buffer || 0) * 100);
-
-    const total = state.results.filter(r => {
-      const k = r.appid + (r.isFoil ? "f" : "");
-      return state.selected.has(k);
-    });
-
-    let successCount = 0, failCount = 0, skipCount = 0;
-    let totalSpentCents = 0;
-
-    for (const info of total) {
-      if (state.stopRequested) { log("手动停止购买", "warn"); break; }
-
-      log(`\n购买 ${info.appid} ${info.gameName} Lv${info.level}...`, "info");
-      const rowEl = document.querySelector(`.sbc-game-row[data-appid="${info.appid}"]`);
-      const statusEl = rowEl?.querySelector(".sbc-status");
-      if (statusEl) statusEl.textContent = "购买中...";
-
-      const buyTasks = [];
-      for (const card of info.cards) {
-        const needed = Math.max(0, info.setsToLevel5 - card.owned);
-        for (let i = 0; i < needed; i++) {
-          buyTasks.push({ card, idx: i });
-        }
-      }
-
-      let localOk = 0, localFail = 0, localSkip = 0;
-      for (const task of buyTasks) {
-        if (state.stopRequested) break;
-        const maxCents = task.card.lowestCents + bufferCents;
-        try {
-          const listingId = await findListingId(task.card.marketHashName, maxCents, queue);
-          if (!listingId) {
-            log(`  ${task.card.name}: buffer 范围内无挂牌，跳过`, "warn");
-            localSkip++; skipCount++;
-            continue;
-          }
-          const buyRes = await buyListing(listingId, task.card.lowestCents + bufferCents, queue);
-          if (buyRes.status === 200 && buyRes.data && (buyRes.data.success === 1 || buyRes.data.success === true)) {
-            log(`  ${task.card.name}: 成功购买 listing=${listingId} ¥${formatCNY(maxCents)}`, "ok");
-            localOk++; successCount++;
-            totalSpentCents += maxCents;
-          } else {
-            const errMsg = buyRes.data?.message || buyRes.data?.strError || `status=${buyRes.status}`;
-            log(`  ${task.card.name}: 购买失败 (${errMsg})`, "err");
-            localFail++; failCount++;
-          }
-        } catch (e) {
-          log(`  ${task.card.name}: 网络错误 ${e?.error || e?.status || JSON.stringify(e)}`, "err");
-          localFail++; failCount++;
-        }
-      }
-
-      log(`  ${info.appid} ${info.gameName} 本局: 成功=${localOk} 失败=${localFail} 跳过=${localSkip}`, "info");
-      if (statusEl) statusEl.textContent = `OK=${localOk} F=${localFail} S=${localSkip}`;
-    }
-
-    log(`\n===== 总购买 =====`, "info");
-    log(`成功: ${successCount}  失败: ${failCount}  跳过: ${skipCount}`, successCount > 0 ? "ok" : "warn");
-    log(`总花费(含buffer估算): ¥${formatCNY(totalSpentCents)}`, "info");
-
-    state.buying = false;
-    state.queue = null;
-    document.getElementById("sbc-buy-btn").classList.remove("disabled");
-    document.getElementById("sbc-stop-btn").classList.add("disabled");
-  }
-
   function requestStop() {
-    if (state.scanning || state.buying) {
+    if (state.scanning) {
       state.stopRequested = true;
       state.queue?.stop();
       log("已请求停止...", "warn");
-      
-      // safety timeout: force re-enable buttons after 5 seconds if finally doesn't run
+
       setTimeout(() => {
-        if (state.scanning || state.buying) {
-          console.log("[SBC] Safety timeout: force reset state");
+        if (state.scanning) {
           state.scanning = false;
-          state.buying = false;
           state.stopRequested = false;
           if (state.queue) {
             state.queue.clear();
@@ -1423,9 +1234,8 @@
           }
           hideProgress();
           document.getElementById("sbc-scan-btn").classList.remove("disabled");
-      document.getElementById("sbc-skip-btn").classList.add("disabled");
+          document.getElementById("sbc-skip-btn").classList.add("disabled");
           document.getElementById("sbc-stop-btn").classList.add("disabled");
-          document.getElementById("sbc-buy-btn").classList.add("disabled");
           setScanPhase("done");
         }
       }, 5000);
