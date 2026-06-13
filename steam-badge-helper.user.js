@@ -1,13 +1,18 @@
 // ==UserScript==
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
+// @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
 // @version      0.8.0
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
-// @include      http*://steamcommunity.com/*/badges*
-// @include      http*://steamcommunity.com/id/*/badges*
-// @include      http*://steamcommunity.com/profiles/*/badges*
+// @homepageURL  https://github.com/SpaceSyt/Steam-Badge-Helper
+// @supportURL   https://github.com/SpaceSyt/Steam-Badge-Helper/issues
+// @downloadURL  https://github.com/SpaceSyt/Steam-Badge-Helper/raw/master/steam-badge-helper.user.js
+// @updateURL    https://github.com/SpaceSyt/Steam-Badge-Helper/raw/master/steam-badge-helper.user.js
+// @match        *://steamcommunity.com/*/badges*
+// @match        *://steamcommunity.com/id/*/badges*
+// @match        *://steamcommunity.com/profiles/*/badges*
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
