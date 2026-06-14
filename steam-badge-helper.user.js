@@ -600,7 +600,7 @@
       text-align: center;
     }
     .sbc-game-row .sbc-select {
-      width: 30px;
+      width: 50px;
       flex-shrink: 0;
       text-align: center;
     }
@@ -617,10 +617,6 @@
     .sbc-primary-label { color: #fff !important; font-weight: bold; }
 
     .sbc-status-text { color: #8db7d7; font-size: 13px; padding: 6px 0; min-height: 20px; }
-
-    .sbc-game-row.sbc-selected { background: rgba(120,170,255,0.12); }
-    .sbc-select-all { cursor: pointer; user-select: none; margin-left: 2px; }
-    .sbc-row-cb { cursor: pointer; width: 16px; height: 16px; accent-color: #75b022; }
 
     #sbc-log {
       margin-top: 10px;
@@ -696,7 +692,6 @@
   const state = {
     cfg: loadConfig(),
     results: [],
-    selected: new Set(),
     scanning: false,
     stopRequested: false,
     skipCurrent: false,
@@ -877,7 +872,6 @@
     state.stopRequested = false;
     state.skipCurrent = false;
     state.results = [];
-    state.selected.clear();
     document.getElementById("sbc-list").innerHTML = "";
     document.getElementById("sbc-log").innerHTML = "";
     document.getElementById("sbc-scan-btn").classList.add("disabled");
@@ -1066,7 +1060,7 @@
 
           if (!allPriced) {
             if (thresholdSkip) {
-              log(`  → 单套卡牌价格已大于上限，跳过`, "info");
+              log(`  → 整套卡牌价格已大于上限，跳过`, "info");
             } else {
               log(`  → 部分卡牌无法取价, 跳过`, "warn");
             }
@@ -1083,7 +1077,7 @@
           info.level5CNY = formatCNY(level5CostCents);
 
           if (fullSetCostCents > thresholdCents) {
-            log(`  → 单套卡牌价格已大于上限(¥${info.fullSetCNY} > ¥${cfg.threshold})，跳过`, "info");
+            log(`  → 整套卡牌价格已大于上限(¥${info.fullSetCNY} > ¥${cfg.threshold})，跳过`, "info");
             skipped++;
             continue;
           }
@@ -1140,40 +1134,19 @@
         <span class="sbc-full">单套最低价</span>
         <span class="sbc-lv5" title="满级价格不准, 绿色会准一些, 灰色不准">满级价格估算</span>
         <span class="sbc-drops">掉落</span>
-        <span class="sbc-select"><span class="sbc-select-all" title="全选/全不选">☐</span></span>
+        <span class="sbc-select">购买</span>
       `;
-      const selAll = hdr.querySelector(".sbc-select-all");
-      selAll.addEventListener("click", () => {
-        const rows = list.querySelectorAll(".sbc-game-row:not(.sbc-row-header)");
-        const allChecked = [...rows].every(r => r.querySelector(".sbc-row-cb")?.checked);
-        rows.forEach(r => {
-          const cb = r.querySelector(".sbc-row-cb");
-          const infoKey = r.dataset.infoKey;
-          if (cb) {
-            cb.checked = !allChecked;
-            if (!allChecked) {
-              state.selected.add(infoKey);
-              r.classList.add("sbc-selected");
-            } else {
-              state.selected.delete(infoKey);
-              r.classList.remove("sbc-selected");
-            }
-          }
-        });
-        selAll.textContent = allChecked ? "☐" : "☑";
-        updateSummary();
-      });
       list.appendChild(hdr);
     }
 
+    const profileUrl = getProfileUrl();
     const row = document.createElement("div");
     row.className = "sbc-game-row";
     row.dataset.appid = info.appid;
     row.dataset.foil = info.isFoil ? 1 : 0;
     const ownedCards = info.cards.reduce((sum, c) => sum + Math.min(c.owned, 1), 0);
-    const infoKey = info.appid + (info.isFoil ? "f" : "");
     const lv5Color = (info.minVolume || 0) > 1 ? "color:#4caf50" : (info.minVolume || 0) === 0 ? "color:#888" : "";
-    row.dataset.infoKey = infoKey;
+    const buyUrl = profileUrl ? `${profileUrl}/gamecards/${info.appid}/` : "#";
     row.innerHTML = `
       <span class="sbc-appid">${info.appid}${info.isFoil ? "(箔)" : ""}</span>
       <span class="sbc-name">${info.gameName || "(未知)"}</span>
@@ -1183,38 +1156,19 @@
       <span class="sbc-full">¥${info.fullSetCNY}</span>
       <span class="sbc-lv5" style="${lv5Color}">¥${info.level5CNY}</span>
       <span class="sbc-drops">${info.dropsRemaining}</span>
-      <span class="sbc-select"><input type="checkbox" class="sbc-row-cb" title="选择此游戏"></span>
+      <span class="sbc-select"><a href="${buyUrl}" target="_blank" style="text-decoration:underline;color:#66c0f4;">购买</a></span>
     `;
-
-    const cb = row.querySelector(".sbc-row-cb");
-    cb.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (cb.checked) {
-        state.selected.add(infoKey);
-        row.classList.add("sbc-selected");
-      } else {
-        state.selected.delete(infoKey);
-        row.classList.remove("sbc-selected");
-      }
-      updateSummary();
-    });
-
-    row.addEventListener("click", () => {
-      cb.checked = !cb.checked;
-      cb.dispatchEvent(new Event("click"));
-    });
 
     list.appendChild(row);
   }
 
   function updateSummary() {
     const count = state.results.length;
-    const selCount = state.selected.size;
     const totalCNY = (state.results.reduce((s, r) => s + r.cheapestSetCostCents, 0) / 100).toFixed(2);
     const fullCNY = (state.results.reduce((s, r) => s + r.fullSetCostCents, 0) / 100).toFixed(2);
     const lv5CNY = (state.results.reduce((s, r) => s + r.level5CostCents, 0) / 100).toFixed(2);
     document.getElementById("sbc-summary").innerHTML = `
-      共 <b>${count}</b> 个 ≤ ¥${state.cfg.threshold} (单套卡牌价格上限)，已选 <b>${selCount}</b>，补全总价 <b>¥${totalCNY}</b>，全套总价 ¥${fullCNY}，满级总价 ¥${lv5CNY}
+      共 <b>${count}</b> 个 ≤ ¥${state.cfg.threshold} (单套卡牌价格上限)，补全总价 <b>¥${totalCNY}</b>，全套总价 ¥${fullCNY}，满级总价 ¥${lv5CNY}
     `;
   }
 
