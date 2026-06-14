@@ -42,6 +42,7 @@
     includeDrops: false,
     maxBadgePages: 10,
     blacklist: "",
+    blacklistNames: "{}",
     buyMode: "complete1",
   };
 
@@ -814,8 +815,11 @@
         <div class="sbc-tab-content" id="sbc-tab-blacklist">
           <div class="sbc-bl-form">
             <label>游戏 AppID <input id="sbc-bl-appid" class="sbc-input" type="text" style="width:100px" placeholder="例如: 261640"></label>
-            <div class="sbc-btn alt" id="sbc-bl-add">加入黑名单</div>
+            <div class="sbc-btn alt" id="sbc-bl-lookup">查询游戏</div>
             <span class="sbc-bl-result" id="sbc-bl-result"></span>
+          </div>
+          <div class="sbc-bl-form">
+            <div class="sbc-btn" id="sbc-bl-add" style="display:none;">加入黑名单</div>
           </div>
           <div class="sbc-bl-list" id="sbc-bl-list"></div>
         </div>
@@ -831,7 +835,7 @@
 
     const cfgIds = ["sbc-threshold", "sbc-scan-interval",
       "sbc-req-interval", "sbc-max-pages", "sbc-include-drops",
-      "sbc-batch-size", "sbc-batch-pause"];
+      "sbc-batch-size", "sbc-batch-pause", "sbc-buy-mode"];
     cfgIds.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -865,22 +869,47 @@
     document.getElementById("sbc-skip-btn").addEventListener("click", skipCurrentBadge);
 
     // Blacklist tab
-    document.getElementById("sbc-bl-add").addEventListener("click", () => {
+    let blLookupAppid = "";
+    let blLookupName = "";
+    document.getElementById("sbc-bl-lookup").addEventListener("click", () => {
       const appid = document.getElementById("sbc-bl-appid").value.trim();
       if (!appid || !/^\d+$/.test(appid)) {
         document.getElementById("sbc-bl-result").textContent = "请输入有效的 AppID";
         return;
       }
+      document.getElementById("sbc-bl-result").textContent = "查询中...";
+      document.getElementById("sbc-bl-add").style.display = "none";
+      lookupGameName(appid).then(name => {
+        blLookupAppid = appid;
+        blLookupName = name;
+        document.getElementById("sbc-bl-result").textContent = name ? `${appid} — ${name}` : "未找到该游戏";
+        if (name) {
+          document.getElementById("sbc-bl-add").style.display = "";
+        }
+      });
+    });
+
+    document.getElementById("sbc-bl-add").addEventListener("click", () => {
+      if (!blLookupAppid || !blLookupName) return;
       const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
-      if (bl.includes(appid)) {
-        document.getElementById("sbc-bl-result").textContent = "该 AppID 已在黑名单中";
+      if (bl.includes(blLookupAppid)) {
+        document.getElementById("sbc-bl-result").textContent = "该游戏已在黑名单中";
         return;
       }
-      bl.push(appid);
+      bl.push(blLookupAppid);
       state.cfg.blacklist = bl.join(",");
+
+      let names = {};
+      try { names = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) {}
+      names[blLookupAppid] = blLookupName;
+      state.cfg.blacklistNames = JSON.stringify(names);
+
       saveConfig(state.cfg);
+      document.getElementById("sbc-bl-add").style.display = "none";
+      document.getElementById("sbc-bl-result").textContent = `${blLookupName} 已加入黑名单`;
       document.getElementById("sbc-bl-appid").value = "";
-      document.getElementById("sbc-bl-result").textContent = `${appid} 已加入黑名单`;
+      blLookupAppid = "";
+      blLookupName = "";
       renderBlacklist();
     });
 
@@ -1416,26 +1445,55 @@
   // ============================================================
   // Blacklist management
   // ============================================================
+  async function lookupGameName(appid) {
+    try {
+      const profileUrl = getProfileUrl();
+      if (!profileUrl) return null;
+      const url = `${profileUrl}/gamecards/${appid}/`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) return null;
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const titleEl = doc.querySelector(".badge_title");
+      if (titleEl) {
+        return (titleEl.querySelector(".badge_title_row")?.textContent || titleEl.textContent)
+          .replace(/(?:View badge progress|查看徽章进度|View details|查看详情|[\u200B\u200C\u200D\ufeff])/gi, "")
+          .replace(/徽章$/i, "").trim() || null;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   function renderBlacklist() {
     const list = document.getElementById("sbc-bl-list");
     if (!list) return;
     const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
+    let names = {};
+    try { names = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) {}
 
     if (bl.length === 0) {
       list.innerHTML = `<div class="sbc-bl-row"><span style="color:#8f98a0">黑名单为空</span></div>`;
       return;
     }
 
-    list.innerHTML = bl.map(appid => `<div class="sbc-bl-row">
+    list.innerHTML = bl.map(appid => {
+      const name = names[appid] || "—";
+      return `<div class="sbc-bl-row">
         <span class="sbc-bl-id">${appid}</span>
+        <span class="sbc-bl-name">${name}</span>
         <span class="sbc-bl-del" data-appid="${appid}" title="移除">✕</span>
-      </div>`).join("");
+      </div>`;
+    }).join("");
 
     list.querySelectorAll(".sbc-bl-del").forEach(btn => {
       btn.addEventListener("click", () => {
         const appid = btn.dataset.appid;
         const newBl = bl.filter(a => a !== appid);
         state.cfg.blacklist = newBl.join(",");
+        delete names[appid];
+        state.cfg.blacklistNames = JSON.stringify(names);
         saveConfig(state.cfg);
         renderBlacklist();
       });
