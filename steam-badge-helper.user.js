@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      0.9.5
+// @version      1.0.0
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -787,7 +787,7 @@
               <option value="buy1" ${state.cfg.buyMode === "buy1" ? "selected" : ""}>购买单套</option>
               <option value="buy5" ${state.cfg.buyMode === "buy5" ? "selected" : ""}>购买五套</option>
             </select></label>
-            <label>价格上浮 ¥ <input id="sbc-buffer" class="sbc-input" type="number" min="0" step="0.01" value="${state.cfg.buffer}" style="width:60px"></label>
+            <label class="sbc-primary-label">价格上浮 ¥ <input id="sbc-buffer" class="sbc-input" type="number" min="0" step="0.01" value="${state.cfg.buffer}" style="width:60px"></label>
             <label>最大徽章页数 <input id="sbc-max-pages" class="sbc-input" type="number" min="1" max="20" value="${state.cfg.maxBadgePages}"></label>
             <label>
               <input id="sbc-include-drops" type="checkbox" ${state.cfg.includeDrops ? "checked" : ""}>
@@ -827,7 +827,7 @@
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V0.9.5 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.0.0 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -1390,6 +1390,20 @@
 
     console.log("[SBC] loaded data:", data.cards.length, "cards, bufferCents:", data.bufferCents);
     const bufferCents = data.bufferCents || 0;
+
+    // Inject "恢复默认价格" button next to Steam's title
+    const injectResetBtn = () => {
+      const heading = document.querySelector("h2, h1, .market_multibuy_header, .pageheader");
+      if (heading && !document.getElementById("sbc-reset-btn")) {
+        const btn = document.createElement("span");
+        btn.id = "sbc-reset-btn";
+        btn.textContent = "恢复默认价格";
+        btn.style.cssText = "margin-left:12px;padding:4px 12px;background:rgba(67,137,179,0.85);color:#fff;border-radius:3px;cursor:pointer;font-size:13px;";
+        btn.addEventListener("click", () => { location.reload(); });
+        heading.appendChild(btn);
+      }
+    };
+    injectResetBtn();
 
     let fillAttempted = false;
     const tryFill = () => {
