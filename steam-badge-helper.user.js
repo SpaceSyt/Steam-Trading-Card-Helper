@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.0.4
+// @version      1.0.4.1
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -45,6 +45,7 @@
     blacklistNames: "{}",
     blacklistSources: "{}",
     autoBlackThreshold: 10,
+    autoBlackEnabled: false,
     buyMode: "complete5",
     buffer: 0.10,
   };
@@ -526,6 +527,12 @@
     .sbc-btn.alt:hover {
       background: linear-gradient(to bottom, #8ed8ff 5%, #5297b7 95%);
     }
+    .sbc-btn.sbc-btn-danger {
+      background: linear-gradient(to bottom, #c04040 5%, #8b2020 95%);
+    }
+    .sbc-btn.sbc-btn-danger:hover {
+      background: linear-gradient(to bottom, #e05050 5%, #a03030 95%);
+    }
 
     .sbc-game-list {
       max-height: 30vh;
@@ -830,23 +837,27 @@
         </div>
         <div class="sbc-tab-content" id="sbc-tab-blacklist">
           <div class="sbc-bl-form">
-            <label>游戏 AppID <input id="sbc-bl-appid" class="sbc-input" type="text" style="width:100px" placeholder="例如: 261640"></label>
+            <label>输入游戏 AppID <input id="sbc-bl-appid" class="sbc-input" type="text" style="width:100px" placeholder="例如: 261640"></label>
             <div class="sbc-btn alt" id="sbc-bl-lookup">查询游戏</div>
-            <div class="sbc-btn alt" id="sbc-bl-del-sel" style="display:none;">删除选中</div>
+            <div class="sbc-btn alt disabled" id="sbc-bl-del-sel">删除选中</div>
             <span class="sbc-bl-result" id="sbc-bl-result"></span>
           </div>
           <div class="sbc-bl-form">
             <div class="sbc-btn" id="sbc-bl-add" style="display:none;">加入黑名单</div>
           </div>
           <div class="sbc-bl-form">
-            <label class="sbc-primary-label">自动黑名单价格上限 ¥ <input id="sbc-auto-bl-threshold" class="sbc-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
+            <label>
+              <input id="sbc-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
+              启用自动黑名单
+            </label>
+            <label class="sbc-primary-label">价格上限 ¥ <input id="sbc-auto-bl-threshold" class="sbc-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
             <span style="color:#8f98a0;font-size:12px;">扫描时超过此价格的游戏自动加入黑名单</span>
           </div>
           <div class="sbc-bl-list" id="sbc-bl-list"></div>
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.0.4 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.0.4.1 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -893,6 +904,10 @@
     // Auto blacklist threshold
     document.getElementById("sbc-auto-bl-threshold").addEventListener("change", () => {
       state.cfg.autoBlackThreshold = parseFloat(document.getElementById("sbc-auto-bl-threshold").value) || 0;
+      saveConfig(state.cfg);
+    });
+    document.getElementById("sbc-auto-bl-enabled").addEventListener("change", () => {
+      state.cfg.autoBlackEnabled = document.getElementById("sbc-auto-bl-enabled").checked;
       saveConfig(state.cfg);
     });
 
@@ -1250,7 +1265,7 @@
           info.level5CNY = formatCNY(level5CostCents);
 
           const autoBlCents = Math.round((state.cfg.autoBlackThreshold || 0) * 100);
-          if (autoBlCents > 0 && fullSetCostCents > autoBlCents) {
+          if (state.cfg.autoBlackEnabled && autoBlCents > 0 && fullSetCostCents > autoBlCents) {
             addToBlacklist(b.appid, info.gameName || b.gameName || "", 1);
             log(`  → 自动加入黑名单: 全套 ¥${info.fullSetCNY} > ¥${state.cfg.autoBlackThreshold}`, "info");
             skipped++;
@@ -1625,7 +1640,7 @@
       if (titleEl) {
         return (titleEl.querySelector(".badge_title_row")?.textContent || titleEl.textContent)
           .replace(/(?:View badge progress|查看徽章进度|View details|查看详情|[\u200B\u200C\u200D\ufeff])/gi, "")
-          .trim() || null;
+          .replace(/徽章$/, "").trim() || null;
       }
       return null;
     } catch (_) {
@@ -1646,27 +1661,45 @@
 
     if (bl.length === 0) {
       list.innerHTML = `<div class="sbc-bl-row"><span style="color:#8f98a0">黑名单为空</span></div>`;
-      document.getElementById("sbc-bl-del-sel").style.display = "none";
+      const delBtn = document.getElementById("sbc-bl-del-sel");
+      if (delBtn) { delBtn.classList.add("disabled"); delBtn.classList.remove("sbc-btn-danger"); }
       return;
     }
 
-    document.getElementById("sbc-bl-del-sel").style.display = "";
+    const delBtn = document.getElementById("sbc-bl-del-sel");
+    if (delBtn) { delBtn.classList.add("disabled"); delBtn.classList.remove("sbc-btn-danger"); }
 
     list.innerHTML = `<div class="sbc-bl-row sbc-row-header">
-        <span class="sbc-bl-cb-hd"></span>
         <span class="sbc-bl-id">游戏ID</span>
         <span class="sbc-bl-name">游戏名</span>
         <span class="sbc-bl-source">来源</span>
+        <span class="sbc-bl-cb-hd"></span>
       </div>` + bl.map(appid => {
       const name = names[appid] || "—";
       const src = sourceLabels[sources[appid]] || "—";
       return `<div class="sbc-bl-row">
-        <span class="sbc-bl-cb-hd"><input type="checkbox" class="sbc-bl-cb" data-appid="${appid}"></span>
         <span class="sbc-bl-id">${appid}</span>
         <span class="sbc-bl-name">${name}</span>
         <span class="sbc-bl-source">${src}</span>
+        <span class="sbc-bl-cb-hd"><input type="checkbox" class="sbc-bl-cb" data-appid="${appid}"></span>
       </div>`;
     }).join("");
+
+    // Update "删除选中" button state on checkbox change
+    list.querySelectorAll(".sbc-bl-cb").forEach(cb => {
+      cb.addEventListener("change", () => {
+        const delBtn = document.getElementById("sbc-bl-del-sel");
+        if (!delBtn) return;
+        const anyChecked = list.querySelectorAll(".sbc-bl-cb:checked").length > 0;
+        if (anyChecked) {
+          delBtn.classList.remove("disabled");
+          delBtn.classList.add("sbc-btn-danger");
+        } else {
+          delBtn.classList.add("disabled");
+          delBtn.classList.remove("sbc-btn-danger");
+        }
+      });
+    });
   }
 
   function requestStop() {
