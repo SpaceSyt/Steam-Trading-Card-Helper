@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.0.10
+// @version      1.1.0
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -52,8 +52,6 @@
     buffer: 0.10,
   };
 
-  const CURRENCY_CNY = 23;
-
   // ============================================================
   // Config
   // ============================================================
@@ -75,13 +73,6 @@
     if (unsafeWindow.g_strProfileURL) return unsafeWindow.g_strProfileURL;
     const a = document.querySelector("#global_actions a.user_avatar");
     return a ? a.href.replace(/\/$/, "") : null;
-  }
-
-  function getWalletCurrency() {
-    if (unsafeWindow.g_rgWalletInfo && typeof unsafeWindow.g_rgWalletInfo.wallet_currency === "number") {
-      return unsafeWindow.g_rgWalletInfo.wallet_currency;
-    }
-    return CURRENCY_CNY;
   }
 
   function formatCNY(cents) {
@@ -868,7 +859,7 @@
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.0.10 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.1.0 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -1193,36 +1184,36 @@
       const thresholdCents = Math.round(cfg.threshold * 100);
 
       for (const b of badges) {
-            if (state.stopRequested || state.skipCurrent) { log("已手动停止", "warn"); break; }
-            // blacklist check
-            const blAppids = (cfg.blacklist || "").split(",").map(s => s.trim()).filter(Boolean);
-            if (blAppids.includes(String(b.appid))) {
-              log(`[${b.appid}] ${b.gameName || ""}: 在黑名单中, 跳过`, "info");
-              skipped++;
-              continue;
-            }
+        if (state.stopRequested) { log("已手动停止", "warn"); break; }
+        if (state.skipCurrent) {
+          state.skipCurrent = false;
+          log(`[${b.appid}] 跳过 (手动)`, "warn");
+          skipped++;
+          continue;
+        }
+        // blacklist check
+        const blAppids = (cfg.blacklist || "").split(",").map(s => s.trim()).filter(Boolean);
+        if (blAppids.includes(String(b.appid))) {
+          log(`[${b.appid}] ${b.gameName || ""}: 在黑名单中, 跳过`, "info");
+          skipped++;
+          continue;
+        }
         processed++;
         setProgress(processed, badges.length,
           `阶段2: 获取卡牌详情 ${processed}/${badges.length} · ${b.gameName || b.appid}`);
 
         try {
-          if (state.stopRequested || state.skipCurrent) { skipped++; continue; }
-          if (state.skipCurrent) {
-            state.skipCurrent = false;
-            log(`[${b.appid}] 跳过 (手动)`, "warn");
-            skipped++;
-            continue;
-          }
           const suffix = b.isFoil ? "?border=1" : "";
           const url = `${profileUrl}/gamecards/${b.appid}/${suffix}`;
           let res;
           try {
             res = await queue.fetch(url);
           } catch (fetchErr) {
-            if (state.stopRequested || state.skipCurrent) {
-              if (state.skipCurrent) { state.skipCurrent = false; log("已跳过当前徽章", "warn"); skipped++; }
-              else { log("已手动停止", "warn"); }
-              if (state.stopRequested) break;
+            if (state.stopRequested) { log("已手动停止", "warn"); break; }
+            if (state.skipCurrent) {
+              state.skipCurrent = false;
+              log("已跳过当前徽章", "warn");
+              skipped++;
               continue;
             }
             log(`[${b.appid}] ${b.gameName || ""}: 拉取 gamecards 网络错误`, "warn");
@@ -1271,10 +1262,10 @@
           log(`[${b.appid}] ${info.gameName} Lv${info.level} 缺 ${info.need}/${info.totalInSet} 张, 正在查价...`);
 
           // Phase 3: price each card type
-          let setCostCents = 0;            // 单套补全价: missing for 1 level
-          let fullSetCostCents = 0;         // 单套最低价: all cards
-          let level5CostCents = 0;          // 满级最低价: to Lv5
-          let minVolume = Infinity;          // smallest volume across priced cards
+          let setCostCents = 0;
+          let fullSetCostCents = 0;
+          let level5CostCents = 0;
+          let minVolume = Infinity;
           const setsTo5 = Math.max(0, 5 - info.level);
           let allPriced = true;
           let thresholdSkip = false;
@@ -1315,12 +1306,10 @@
             const need5 = Math.max(0, setsTo5 - card.owned);
             setCostCents += pk.lowestSellCents * need1;
             fullSetCostCents += pk.lowestSellCents;
-            // level5: 1st copy at lowest, rest at median
             level5CostCents += need5 > 0
               ? pk.lowestSellCents + (need5 - 1) * Math.max(pk.lowestSellCents, pk.medianCents)
               : 0;
 
-            // smart skip: if full set cost already exceeds threshold
             if (fullSetCostCents > thresholdCents) {
               log(`  → 已查${info.cardPrices.length}/${info.totalInSet}张, 全套 ¥${formatCNY(fullSetCostCents)} > ¥${cfg.threshold}，跳过`, "info");
               allPriced = false;
@@ -1518,20 +1507,15 @@
   }
 
   function initMultibuyAutoFill() {
-    console.log("[SBC] multibuy auto-fill init");
-
     let data;
     try {
       const raw = GM_getValue("sbc_multibuy_data", null);
-      if (!raw) { console.log("[SBC] no multibuy data in storage"); return; }
+      if (!raw) return;
       data = JSON.parse(raw);
-    } catch (_) { console.log("[SBC] failed to parse multibuy data"); return; }
+    } catch (_) { return; }
 
-    if (!data || !data.cards || data.cards.length === 0) {
-      console.log("[SBC] multibuy data empty"); return;
-    }
+    if (!data || !data.cards || data.cards.length === 0) return;
 
-    console.log("[SBC] loaded data:", data.cards.length, "cards, bufferCents:", data.bufferCents);
     const bufferCents = data.bufferCents || 0;
 
     // Inject "恢复默认价格" button next to Steam's title
@@ -1552,11 +1536,8 @@
     const tryFill = () => {
       if (fillAttempted) return;
 
-      // Find ALL input elements (not just type=text)
       const allInputs = document.querySelectorAll("input");
-      console.log("[SBC] found", allInputs.length, "total inputs on page");
 
-      // Categorize: qty inputs vs price inputs
       const qtyInputs = [];
       const priceInputs = [];
       allInputs.forEach(inp => {
@@ -1570,28 +1551,22 @@
         } else if (name.includes("price") || cls.includes("price") || placeholder.includes("price") || t === "number") {
           priceInputs.push(inp);
         } else if (t === "text") {
-          // Generic text input: determine role by position in row
           const row = inp.closest("tr");
           if (row) {
             const textInputsInRow = row.querySelectorAll("input[type='text']");
             if (textInputsInRow.length === 1 && textInputsInRow[0] === inp) {
-              // Only one text input in this row → it's the qty
               qtyInputs.push(inp);
             }
           }
         }
       });
-      console.log("[SBC] qty inputs:", qtyInputs.length, "price inputs:", priceInputs.length);
 
-      // Group by parent row (tr or container)
       const rows = new Map();
       const getRowKey = (el) => {
         const tr = el.closest("tr");
         if (tr) return tr;
         return el.closest(".market_multibuy_item") || el.closest(".multibuy_item_row") || el.parentElement;
       };
-
-      // Collect all rows that have at least one of our inputs
       const seenRows = new Set();
       qtyInputs.forEach(inp => {
         const row = getRowKey(inp);
@@ -1607,9 +1582,6 @@
         rows.get(row).price = inp;
         seenRows.add(row);
       });
-
-      // Also try matching price inputs to qty rows by looking for price input in same tr
-      // If a qty row has no price, search for any input that could be price in the same tr
       rows.forEach((fields, row) => {
         if (!fields.price) {
           const allInRow = row.querySelectorAll("input");
@@ -1619,7 +1591,6 @@
               break;
             }
           }
-          // Last resort: any non-qty input in the row
           if (!fields.price) {
             for (const inp of allInRow) {
               if (inp !== fields.qty) { fields.price = inp; break; }
@@ -1629,7 +1600,6 @@
       });
 
       const entries = Array.from(rows.entries()).filter(([_, f]) => f.price);
-      console.log("[SBC] rows with price input:", entries.length);
 
       let filled = 0;
       entries.forEach(([row, fields], idx) => {
@@ -1644,13 +1614,8 @@
           }
         }
         if (!card && idx < data.cards.length) card = data.cards[idx];
+        if (!card) return;
 
-        if (!card) {
-          console.log("[SBC] unmatched row", idx, rowText.substring(0, 60));
-          return;
-        }
-
-        console.log("[SBC] matched:", card.name, "qty:", card.qty, "lowest:", card.lowestCents);
         if (card.lowestCents != null && fields.price) {
           const p = ((card.lowestCents + bufferCents) / 100).toFixed(2);
           fields.price.value = p;
@@ -1666,7 +1631,6 @@
       });
 
       if (filled > 0) {
-        console.log("[SBC] filled", filled, "items, clearing storage");
         fillAttempted = true;
         GM_setValue("sbc_multibuy_data", null);
       }
