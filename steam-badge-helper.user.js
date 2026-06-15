@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.0.1
+// @version      1.0.2
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -124,7 +124,7 @@
             if (res.status === 429) {
               this._consecutive429++;
               this.queue.unshift(job);
-              const backoff = [20000, 45000, 90000, 180000, 360000][this._consecutive429 - 1] || 360000;
+              const backoff = [20000, 20000, 45000, 90000, 180000, 360000][this._consecutive429 - 1] || 360000;
               if (this.onStatus) this.onStatus(`限流冷却中 (第${this._consecutive429}次, ${(backoff/1000).toFixed(0)}s)`, true);
               for (let tick = 0; tick < backoff / 500; tick++) {
                 await new Promise(r => setTimeout(r, 500));
@@ -550,6 +550,7 @@
       color: #66c0f4;
       font-family: monospace;
       font-size: 12px;
+      text-align: center;
     }
     .sbc-game-row .sbc-name {
       flex: 1;
@@ -583,21 +584,21 @@
       text-align: center;
     }
     .sbc-game-row .sbc-full {
-      width: 80px;
+      width: 85px;
       flex-shrink: 0;
       color: #ffc902;
       font-size: 12px;
       text-align: center;
     }
     .sbc-game-row .sbc-lv5 {
-      width: 80px;
+      width: 100px;
       flex-shrink: 0;
       color: #e74c3c;
       font-size: 12px;
       text-align: center;
     }
     .sbc-game-row .sbc-drops {
-      width: 55px;
+      width: 60px;
       flex-shrink: 0;
       color: #8db7d7;
       font-size: 12px;
@@ -830,7 +831,7 @@
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.0.1 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.0.2 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
