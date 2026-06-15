@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.0.8
+// @version      1.0.9
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -862,16 +862,13 @@
             <label class="sbc-primary-label">价格上限 ¥ <input id="sbc-auto-bl-threshold" class="sbc-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
             <span style="color:#8f98a0;font-size:12px;">扫描时超过此价格的游戏自动加入黑名单</span>
           </div>
-          <div class="sbc-bl-form">
-            <div class="sbc-btn alt disabled" id="sbc-bl-cleanup">一键清理过期</div>
-          </div>
           <div class="sbc-bl-list" id="sbc-bl-list"></div>
-          <div class="sbc-bl-list" id="sbc-bl-list-fixed" style="max-height:80px;margin-top:8px;"></div>
+          <div class="sbc-bl-list" id="sbc-bl-list-fixed" style="max-height:100px;margin-top:8px;"></div>
           <div class="sbc-bl-count" id="sbc-bl-count"></div>
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.0.8 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.0.9 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -931,44 +928,6 @@
     // Days:   computed from stored Date.now() timestamp, 0 = today
     let blLookupAppid = "";
     let blLookupName = "";
-
-    const updateBlRow = () => {
-      const add = document.getElementById("sbc-bl-add");
-      const addF = document.getElementById("sbc-bl-add-fixed");
-      const del = document.getElementById("sbc-bl-del-sel");
-      const fix = document.getElementById("sbc-bl-fix-sel");
-      const unfix = document.getElementById("sbc-bl-unfix-sel");
-      if (!add) return;
-
-      const list = document.getElementById("sbc-bl-list");
-      const listFixed = document.getElementById("sbc-bl-list-fixed");
-      const cbs = [...(list ? list.querySelectorAll(".sbc-bl-cb:checked") : [])];
-      if (listFixed) cbs.push(...listFixed.querySelectorAll(".sbc-bl-cb:checked"));
-
-      const anyChecked = cbs.length > 0;
-      const hasNormal = cbs.some(cb => {
-        let fixed = {};
-        try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
-        return !fixed[cb.dataset.appid];
-      });
-      const hasFixed = cbs.some(cb => {
-        let fixed = {};
-        try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
-        return !!fixed[cb.dataset.appid];
-      });
-
-      add.style.display = (blLookupName && !anyChecked) ? "" : "none";
-      addF.style.display = (blLookupName && !anyChecked) ? "" : "none";
-      del.style.display = anyChecked ? "" : "none";
-      fix.style.display = (anyChecked && hasNormal) ? "" : "none";
-      unfix.style.display = (anyChecked && hasFixed) ? "" : "none";
-
-      if (anyChecked) { del.classList.remove("disabled"); del.classList.add("sbc-btn-danger"); }
-      if (fix.style.display !== "none") fix.classList.remove("disabled");
-      if (unfix.style.display !== "none") unfix.classList.remove("disabled");
-
-      if (anyChecked) document.getElementById("sbc-bl-result").textContent = "";
-    };
 
     document.getElementById("sbc-bl-lookup").addEventListener("click", () => {
       const appid = document.getElementById("sbc-bl-appid").value.trim();
@@ -1786,6 +1745,43 @@
     } catch (_) {
       return null;
     }
+  }
+
+  function updateBlRow() {
+    const add = document.getElementById("sbc-bl-add");
+    const addF = document.getElementById("sbc-bl-add-fixed");
+    const del = document.getElementById("sbc-bl-del-sel");
+    const fix = document.getElementById("sbc-bl-fix-sel");
+    const unfix = document.getElementById("sbc-bl-unfix-sel");
+    if (!add) return;
+
+    const list = document.getElementById("sbc-bl-list");
+    const listFixed = document.getElementById("sbc-bl-list-fixed");
+    const cbs = [...(list ? list.querySelectorAll(".sbc-bl-cb:checked") : [])];
+    if (listFixed) cbs.push(...listFixed.querySelectorAll(".sbc-bl-cb:checked"));
+
+    const anyChecked = cbs.length > 0;
+    const hasNormal = cbs.some(cb => {
+      let fixed = {};
+      try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
+      return !fixed[cb.dataset.appid];
+    });
+    const hasFixed = cbs.some(cb => {
+      let fixed = {};
+      try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
+      return !!fixed[cb.dataset.appid];
+    });
+
+    add.style.display = (typeof blLookupName !== "undefined" && blLookupName && !anyChecked) ? "" : "none";
+    addF.style.display = (typeof blLookupName !== "undefined" && blLookupName && !anyChecked) ? "" : "none";
+    del.style.display = anyChecked ? "" : "none";
+    fix.style.display = (anyChecked && hasNormal) ? "" : "none";
+    unfix.style.display = (anyChecked && hasFixed) ? "" : "none";
+
+    if (anyChecked) { del.classList.remove("disabled"); del.classList.add("sbc-btn-danger"); }
+    if (fix.style.display !== "none") fix.classList.remove("disabled");
+    if (unfix.style.display !== "none") unfix.classList.remove("disabled");
+    if (anyChecked) document.getElementById("sbc-bl-result").textContent = "";
   }
 
   function renderBlacklist() {
