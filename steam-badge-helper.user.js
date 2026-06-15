@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.0.6
+// @version      1.0.7
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -688,7 +688,8 @@
     .sbc-bl-row .sbc-bl-id { width: 70px; color: #66c0f4; font-family: monospace; }
     .sbc-bl-row .sbc-bl-name { flex: 1; color: #e2e2e2; }
     .sbc-bl-row .sbc-bl-source { width: 50px; color: #8f98a0; font-size: 12px; text-align: center; }
-    .sbc-bl-row .sbc-bl-date { width: 60px; color: #8f98a0; font-size: 12px; text-align: center; }
+    .sbc-bl-row .sbc-bl-fixed-col { width: 40px; color: #75b022; font-size: 12px; text-align: center; }
+    .sbc-bl-row .sbc-bl-days { width: 45px; color: #8f98a0; font-size: 12px; text-align: center; }
     .sbc-bl-row .sbc-bl-cb-hd { width: 24px; flex-shrink: 0; text-align: center; }
     .sbc-bl-cb { cursor: pointer; accent-color: #75b022; }
     .sbc-bl-count { color: #8f98a0; font-size: 12px; margin-top: 6px; }
@@ -845,12 +846,14 @@
           <div class="sbc-bl-form">
             <label>输入游戏 AppID <input id="sbc-bl-appid" class="sbc-input" type="text" style="width:100px" placeholder="例如: 261640"></label>
             <div class="sbc-btn alt" id="sbc-bl-lookup">查询游戏</div>
-            <div class="sbc-btn alt disabled" id="sbc-bl-del-sel">删除选中</div>
-            <div class="sbc-btn alt disabled" id="sbc-bl-cleanup">一键清理过期</div>
+            <div class="sbc-btn" id="sbc-bl-add" style="display:none;">加入黑名单</div>
+            <div class="sbc-btn" id="sbc-bl-add-fixed" style="display:none;">加入固定黑名单</div>
             <span class="sbc-bl-result" id="sbc-bl-result"></span>
           </div>
-          <div class="sbc-bl-form">
-            <div class="sbc-btn" id="sbc-bl-add" style="display:none;">加入黑名单</div>
+          <div class="sbc-bl-form" id="sbc-bl-row2" style="display:none;">
+            <div class="sbc-btn alt sbc-btn-danger disabled" id="sbc-bl-del-sel">删除选中项</div>
+            <div class="sbc-btn alt disabled" id="sbc-bl-fix-sel">固定黑名单</div>
+            <span></span>
           </div>
           <div class="sbc-bl-form">
             <label>
@@ -860,13 +863,16 @@
             <label class="sbc-primary-label">价格上限 ¥ <input id="sbc-auto-bl-threshold" class="sbc-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
             <span style="color:#8f98a0;font-size:12px;">扫描时超过此价格的游戏自动加入黑名单</span>
           </div>
+          <div class="sbc-bl-form">
+            <div class="sbc-btn alt disabled" id="sbc-bl-cleanup">一键清理过期</div>
+          </div>
           <div class="sbc-bl-list" id="sbc-bl-list"></div>
           <div class="sbc-bl-list" id="sbc-bl-list-fixed" style="max-height:80px;margin-top:8px;"></div>
           <div class="sbc-bl-count" id="sbc-bl-count"></div>
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.0.6 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.0.7 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -921,7 +927,9 @@
     });
 
     // Blacklist tab
-    // Source: 0 = manual (query+add), 1 = auto (scan threshold)
+    // Source: 0 = 手动 (manual query+add), 1 = 自动 (auto threshold during scan)
+    // Fixed:  0 = 普通黑名单,           1 = 固定黑名单 (permanent, ignored by cleanup)
+    // Days:   computed from stored Date.now() timestamp, 0 = today
     let blLookupAppid = "";
     let blLookupName = "";
     document.getElementById("sbc-bl-lookup").addEventListener("click", () => {
@@ -932,26 +940,42 @@
       }
       document.getElementById("sbc-bl-result").textContent = "查询中...";
       document.getElementById("sbc-bl-add").style.display = "none";
+      document.getElementById("sbc-bl-add-fixed").style.display = "none";
       lookupGameName(appid).then(name => {
         blLookupAppid = appid;
         blLookupName = name;
         document.getElementById("sbc-bl-result").textContent = name ? `${appid} — ${name}` : "未找到该游戏";
         if (name) {
           document.getElementById("sbc-bl-add").style.display = "";
+          document.getElementById("sbc-bl-add-fixed").style.display = "";
         }
       });
     });
 
-    document.getElementById("sbc-bl-add").addEventListener("click", () => {
+    const addBlAndClear = (fixedVal) => {
       if (!blLookupAppid || !blLookupName) return;
-      addToBlacklist(blLookupAppid, blLookupName, 0);
+      addToBlacklist(blLookupAppid, blLookupName, 0, fixedVal);
+      const label = fixedVal ? "固定黑名单" : "黑名单";
+      document.getElementById("sbc-bl-result").textContent = `${blLookupName} 已加入${label}`;
       document.getElementById("sbc-bl-add").style.display = "none";
-      document.getElementById("sbc-bl-result").textContent = `${blLookupName} 已加入黑名单`;
+      document.getElementById("sbc-bl-add-fixed").style.display = "none";
       document.getElementById("sbc-bl-appid").value = "";
       blLookupAppid = "";
       blLookupName = "";
       renderBlacklist();
-    });
+    };
+    document.getElementById("sbc-bl-add").addEventListener("click", () => addBlAndClear(0));
+    document.getElementById("sbc-bl-add-fixed").addEventListener("click", () => addBlAndClear(1));
+
+    const updateRow2Visibility = () => {
+      const list = document.getElementById("sbc-bl-list");
+      const listFixed = document.getElementById("sbc-bl-list-fixed");
+      const row2 = document.getElementById("sbc-bl-row2");
+      if (!row2) return;
+      const anyChecked = (list && [...list.querySelectorAll(".sbc-bl-cb:checked")].length > 0)
+        || (listFixed && [...listFixed.querySelectorAll(".sbc-bl-cb:checked")].length > 0);
+      row2.style.display = anyChecked ? "" : "none";
+    };
 
     document.getElementById("sbc-bl-del-sel").addEventListener("click", () => {
       const list = document.getElementById("sbc-bl-list");
@@ -961,14 +985,11 @@
       if (listFixed) allCbs.push(...listFixed.querySelectorAll(".sbc-bl-cb:checked"));
       if (allCbs.length === 0) return;
       const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
-      let names = {};
-      try { names = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) {}
-      let sources = {};
-      try { sources = JSON.parse(state.cfg.blacklistSources || "{}"); } catch (_) {}
-      let dates = {};
-      try { dates = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) {}
-      let fixed = {};
-      try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
+      let names, sources, dates, fixed;
+      try { names = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) { names = {}; }
+      try { sources = JSON.parse(state.cfg.blacklistSources || "{}"); } catch (_) { sources = {}; }
+      try { dates = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) { dates = {}; }
+      try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { fixed = {}; }
       allCbs.forEach(cb => {
         const appid = cb.dataset.appid;
         const idx = bl.indexOf(appid);
@@ -984,23 +1005,38 @@
       renderBlacklist();
     });
 
+    document.getElementById("sbc-bl-fix-sel").addEventListener("click", () => {
+      const list = document.getElementById("sbc-bl-list");
+      const listFixed = document.getElementById("sbc-bl-list-fixed");
+      if (!list) return;
+      const allCbs = [...list.querySelectorAll(".sbc-bl-cb:checked")];
+      if (listFixed) allCbs.push(...listFixed.querySelectorAll(".sbc-bl-cb:checked"));
+      if (allCbs.length === 0) return;
+      let fixed = {};
+      try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { fixed = {}; }
+      allCbs.forEach(cb => {
+        const appid = cb.dataset.appid;
+        fixed[appid] = 1;
+      });
+      state.cfg.blacklistFixed = JSON.stringify(fixed);
+      saveConfig(state.cfg);
+      renderBlacklist();
+    });
+
     document.getElementById("sbc-bl-cleanup").addEventListener("click", () => {
       const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
-      let names = {};
-      try { names = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) {}
-      let sources = {};
-      try { sources = JSON.parse(state.cfg.blacklistSources || "{}"); } catch (_) {}
-      let dates = {};
-      try { dates = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) {}
-      let fixed = {};
-      try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
+      let names, sources, dates, fixed;
+      try { names = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) { names = {}; }
+      try { sources = JSON.parse(state.cfg.blacklistSources || "{}"); } catch (_) { sources = {}; }
+      try { dates = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) { dates = {}; }
+      try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { fixed = {}; }
       const now = Date.now();
       const expired = bl.filter(a => !fixed[a] && dates[a] && (now - dates[a] > 7 * 86400000));
       if (expired.length === 0) {
         document.getElementById("sbc-bl-result").textContent = "没有可清理的过期项";
         return;
       }
-      if (!confirm(`将清理 ${expired.length} 项过期（>7天）自动黑名单，确定？`)) return;
+      if (!confirm(`将清理 ${expired.length} 项过期（>7天）黑名单，确定？`)) return;
       const keep = bl.filter(a => !expired.includes(a));
       expired.forEach(a => { delete names[a]; delete sources[a]; delete dates[a]; delete fixed[a]; });
       state.cfg.blacklist = keep.join(",");
@@ -1653,7 +1689,7 @@
   // Blacklist management
   // Source: 0 = 手动 (manual query+add), 1 = 自动 (auto threshold during scan)
   // ============================================================
-  function addToBlacklist(appid, name, source) {
+  function addToBlacklist(appid, name, source, fixedVal = 0) {
     const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
     if (bl.includes(appid)) return;
     bl.push(appid);
@@ -1673,6 +1709,13 @@
     try { dates = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) {}
     dates[appid] = Date.now();
     state.cfg.blacklistDates = JSON.stringify(dates);
+
+    if (fixedVal) {
+      let fixed = {};
+      try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
+      fixed[appid] = 1;
+      state.cfg.blacklistFixed = JSON.stringify(fixed);
+    }
 
     saveConfig(state.cfg);
   }
@@ -1719,20 +1762,22 @@
     const normal = bl.filter(a => !fixed[a]);
     const fixedList = bl.filter(a => fixed[a]);
 
-    const formatDate = ts => {
-      const d = new Date(ts);
-      return `${d.getMonth()+1}/${d.getDate()}`;
+    const formatDays = ts => {
+      if (!ts) return "—";
+      return String(Math.floor((Date.now() - ts) / 86400000));
     };
 
     const renderItems = (items) => items.map(appid => {
       const name = names[appid] || "—";
       const src = sourceLabels[sources[appid]] || "—";
-      const dateStr = dates[appid] ? formatDate(dates[appid]) : "—";
+      const isFixed = fixed[appid] ? "固定" : "";
+      const daysStr = dates[appid] ? formatDays(dates[appid]) : "—";
       return `<div class="sbc-bl-row">
         <span class="sbc-bl-id">${appid}</span>
         <span class="sbc-bl-name">${name}</span>
+        <span class="sbc-bl-fixed-col">${isFixed}</span>
         <span class="sbc-bl-source">${src}</span>
-        <span class="sbc-bl-date">${dateStr}</span>
+        <span class="sbc-bl-days">${daysStr}</span>
         <span class="sbc-bl-cb-hd"><input type="checkbox" class="sbc-bl-cb" data-appid="${appid}"></span>
       </div>`;
     }).join("");
@@ -1745,8 +1790,9 @@
       list.innerHTML = `<div class="sbc-bl-row sbc-row-header">
           <span class="sbc-bl-id">游戏ID</span>
           <span class="sbc-bl-name">游戏名</span>
+          <span class="sbc-bl-fixed-col"></span>
           <span class="sbc-bl-source">来源</span>
-          <span class="sbc-bl-date">添加日期</span>
+          <span class="sbc-bl-days">天数</span>
           <span class="sbc-bl-cb-hd"></span>
         </div>` + (normal.length > 0 ? renderItems(normal) : `<div class="sbc-bl-row"><span style="color:#8f98a0">—</span></div>`);
       if (countEl) countEl.innerHTML = `共 <b>${bl.length}</b> 项（固定 <b>${fixedList.length}</b>）`;
@@ -1772,6 +1818,19 @@
             || (listFixed && [...listFixed.querySelectorAll(".sbc-bl-cb:checked")].length > 0);
           if (anyChecked) { delBtn.classList.remove("disabled"); delBtn.classList.add("sbc-btn-danger"); }
           else { delBtn.classList.add("disabled"); delBtn.classList.remove("sbc-btn-danger"); }
+        }
+        const fixBtn = document.getElementById("sbc-bl-fix-sel");
+        if (fixBtn) {
+          const anyChecked = [...list.querySelectorAll(".sbc-bl-cb:checked")].length > 0
+            || (listFixed && [...listFixed.querySelectorAll(".sbc-bl-cb:checked")].length > 0);
+          if (anyChecked) fixBtn.classList.remove("disabled");
+          else fixBtn.classList.add("disabled");
+        }
+        const row2 = document.getElementById("sbc-bl-row2");
+        if (row2) {
+          const anyChecked = [...list.querySelectorAll(".sbc-bl-cb:checked")].length > 0
+            || (listFixed && [...listFixed.querySelectorAll(".sbc-bl-cb:checked")].length > 0);
+          row2.style.display = anyChecked ? "" : "none";
         }
       });
     });
