@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.0.2
+// @version      1.0.3
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -88,16 +88,18 @@
   // Request Queue
   // ============================================================
   class RequestQueue {
-    constructor(interval = 300, batchSize = 18, batchPause = 3500, state = null, onStatus = null) {
+    constructor(interval = 300, batchSize = 18, batchPause = 3500, state = null, onStatus = null, onLog = null) {
       this.interval = interval;
       this.batchSize = batchSize;
       this.batchPause = batchPause;
       this.state = state;
       this.onStatus = onStatus;
+      this.onLog = onLog;
       this.queue = [];
       this.running = false;
       this.stopped = false;
       this._consecutive429 = 0;
+      this._429Warned = false;
       this._reqCount = 0;
     }
 
@@ -126,6 +128,10 @@
               this.queue.unshift(job);
               const backoff = [20000, 20000, 45000, 90000, 180000, 360000][this._consecutive429 - 1] || 360000;
               if (this.onStatus) this.onStatus(`限流冷却中 (第${this._consecutive429}次, ${(backoff/1000).toFixed(0)}s)`, true);
+              if (this._consecutive429 >= 4 && !this._429Warned && this.onLog) {
+                this._429Warned = true;
+                this.onLog("Steam 可能暂时限制了此 IP 访问价格 API，建议更换 IP 或等候几小时", "warn-ip");
+              }
               for (let tick = 0; tick < backoff / 500; tick++) {
                 await new Promise(r => setTimeout(r, 500));
                 if (this.stopped) break;
@@ -692,6 +698,7 @@
     }
     #sbc-log .ok { color: #75b022; }
     #sbc-log .warn { color: #ffc902; }
+    #sbc-log .warn-ip { color: #fff; }
     #sbc-log .err { color: #c04040; }
     #sbc-log .info { color: #67c1f5; }
 
@@ -831,7 +838,7 @@
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.0.2 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.0.3 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -1021,7 +1028,7 @@
     setStatus("正在扫描徽章页");
 
     const cfg = state.cfg;
-    const queue = new RequestQueue(cfg.requestInterval, cfg.batchSize, cfg.batchPause, state, setStatus);
+    const queue = new RequestQueue(cfg.requestInterval, cfg.batchSize, cfg.batchPause, state, setStatus, log);
 
 
     state.queue = queue;
@@ -1272,7 +1279,7 @@
         <span class="sbc-cards">卡牌</span>
         <span class="sbc-cost">单套补全价</span>
         <span class="sbc-full">单套最低价</span>
-        <span class="sbc-lv5">满级价格估算 <span style="cursor:help;color:#8f98a0;font-size:11px;" title="绿色:近期有成交(volume>1)较准&#10;灰色:无近期成交(volume=0)不准&#10;红色(默认):仅有1次成交，参考性一般">?</span></span>
+        <span class="sbc-lv5">满级价格估算 <span style="cursor:help;color:#8f98a0;font-size:11px;" title="绿色:近期成交>1，参考性较强&#10;灰色:近期成交=1，参考性不强&#10;红色:近期成交=0，参考性较弱">?</span></span>
         <span class="sbc-drops">掉落</span>
         <span class="sbc-select"></span>
       `;
@@ -1284,7 +1291,7 @@
     row.dataset.appid = info.appid;
     row.dataset.foil = info.isFoil ? 1 : 0;
     const ownedCards = info.cards.reduce((sum, c) => sum + Math.min(c.owned, 1), 0);
-    const lv5Color = (info.minVolume || 0) > 1 ? "color:#4caf50" : (info.minVolume || 0) === 0 ? "color:#888" : "";
+    const lv5Color = (info.minVolume || 0) > 1 ? "color:#4caf50" : (info.minVolume || 0) === 1 ? "color:#888" : "";
     row.innerHTML = `
       <span class="sbc-appid">${info.appid}${info.isFoil ? "(箔)" : ""}</span>
       <span class="sbc-name">${info.gameName || "(未知)"}</span>
