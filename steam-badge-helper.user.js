@@ -926,8 +926,6 @@
     // Source: 0 = 手动 (manual query+add), 1 = 自动 (auto threshold during scan)
     // Fixed:  0 = 普通黑名单,           1 = 固定黑名单 (permanent, ignored by cleanup)
     // Days:   computed from stored Date.now() timestamp, 0 = today
-    let blLookupAppid = "";
-    let blLookupName = "";
 
     document.getElementById("sbc-bl-lookup").addEventListener("click", () => {
       const appid = document.getElementById("sbc-bl-appid").value.trim();
@@ -1747,6 +1745,9 @@
     }
   }
 
+  let blLookupAppid = "";
+  let blLookupName = "";
+
   function updateBlRow() {
     const add = document.getElementById("sbc-bl-add");
     const addF = document.getElementById("sbc-bl-add-fixed");
@@ -1772,8 +1773,8 @@
       return !!fixed[cb.dataset.appid];
     });
 
-    add.style.display = (typeof blLookupName !== "undefined" && blLookupName && !anyChecked) ? "" : "none";
-    addF.style.display = (typeof blLookupName !== "undefined" && blLookupName && !anyChecked) ? "" : "none";
+    add.style.display = (blLookupName && !anyChecked) ? "" : "none";
+    addF.style.display = (blLookupName && !anyChecked) ? "" : "none";
     del.style.display = anyChecked ? "" : "none";
     fix.style.display = (anyChecked && hasNormal) ? "" : "none";
     unfix.style.display = (anyChecked && hasFixed) ? "" : "none";
