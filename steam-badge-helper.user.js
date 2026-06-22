@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.2.1
+// @version      1.2.2
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -109,7 +109,6 @@
       this.running = false;
       this.stopped = false;
       this._consecutive429 = 0;
-      this._429Warned = false;
       this._reqCount = 0;
     }
 
@@ -136,13 +135,9 @@
             if (res.status === 429) {
               this._consecutive429++;
               this.queue.unshift(job);
-              const backoff = [20000, 20000, 45000, 90000, 180000, 360000][this._consecutive429 - 1] || 360000;
-              if (this.onStatus) this.onStatus(`限流冷却中 (第${this._consecutive429}次, ${(backoff/1000).toFixed(0)}s)`, true);
-              if (this._consecutive429 >= 3 && !this._429Warned && this.onLog) {
-                this._429Warned = true;
-                this.onLog("Steam 可能暂时限制了此 IP 访问价格 API，建议更换 IP 或等候几小时", "warn-ip");
-              }
-              for (let tick = 0; tick < backoff / 500; tick++) {
+              const pauseMs = this.batchPause;
+              if (this.onStatus) this.onStatus(`限流冷却中 (第${this._consecutive429}次, ${(pauseMs/1000).toFixed(0)}s)`, true);
+              for (let tick = 0; tick < pauseMs / 500; tick++) {
                 await new Promise(r => setTimeout(r, 500));
                 if (this.stopped) break;
                 if (this.state?.skipCurrent || this.state?.stopRequested) break;
@@ -890,7 +885,7 @@
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.2.1 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.2.2 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
