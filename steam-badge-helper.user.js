@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.1.0
+// @version      1.1.1
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -649,6 +649,7 @@
     .sbc-tab:hover { color: #fff; background: rgba(103,193,245,0.1); }
     .sbc-tab.active { color: #fff; background: #1b2838; border: 1px solid #45556b; border-bottom-color: #1b2838; }
     .sbc-tab-disabled { color: #555; cursor: not-allowed; opacity: 0.5; }
+    .sbc-tab-right { margin-left: auto; }
     .sbc-tab-content { display: none; }
     .sbc-tab-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
@@ -796,6 +797,7 @@
           <span class="sbc-tab sbc-tab-disabled" title="未实现">闪卡价格扫描</span>
           <span class="sbc-tab" data-tab="blacklist">黑名单</span>
           <span class="sbc-tab sbc-tab-disabled" title="未实现">多余卡牌检测</span>
+          <span class="sbc-tab sbc-tab-right" data-tab="settings">设置</span>
         </div>
         <div class="sbc-tab-content active" id="sbc-tab-scan">
           <div class="sbc-toolbar">
@@ -812,12 +814,6 @@
               <input id="sbc-include-drops" type="checkbox" ${state.cfg.includeDrops ? "checked" : ""}>
               包含有掉落卡牌的游戏
             </label>
-          </div>
-          <div class="sbc-toolbar" style="margin-bottom:6px">
-            <label>请求间隔 ms <input id="sbc-req-interval" class="sbc-input" type="number" min="100" step="100" value="${state.cfg.requestInterval}" style="width:70px"></label>
-            <label>扫描间隔 ms <input id="sbc-scan-interval" class="sbc-input" type="number" min="200" step="100" value="${state.cfg.scanInterval}"></label>
-            <label>每 <input id="sbc-batch-size" class="sbc-input" type="number" min="5" step="1" value="${state.cfg.batchSize}" style="width:55px"> 次快速price请求后暂停</label>
-            <label><input id="sbc-batch-pause" class="sbc-input" type="number" min="500" step="500" value="${state.cfg.batchPause}" style="width:75px"> ms</label>
           </div>
           <div style="display:flex; gap:10px; margin-bottom:8px;">
             <div class="sbc-btn" id="sbc-scan-btn">开始扫描</div>
@@ -857,9 +853,21 @@
           <div class="sbc-bl-list" id="sbc-bl-list-fixed" style="max-height:100px;margin-top:8px;"></div>
           <div class="sbc-bl-count" id="sbc-bl-count"></div>
         </div>
+        <div class="sbc-tab-content" id="sbc-tab-settings">
+          <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">价格扫描</div>
+          <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+          <div class="sbc-toolbar">
+            <label>请求间隔 ms <input id="sbc-req-interval" class="sbc-input" type="number" min="100" step="100" value="${state.cfg.requestInterval}" style="width:70px"></label>
+            <label>扫描间隔 ms <input id="sbc-scan-interval" class="sbc-input" type="number" min="200" step="100" value="${state.cfg.scanInterval}"></label>
+          </div>
+          <div class="sbc-toolbar">
+            <label>每 <input id="sbc-batch-size" class="sbc-input" type="number" min="5" step="1" value="${state.cfg.batchSize}" style="width:55px"> 次快速price请求后暂停</label>
+            <label><input id="sbc-batch-pause" class="sbc-input" type="number" min="500" step="500" value="${state.cfg.batchPause}" style="width:75px"> ms</label>
+          </div>
+        </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.1.0 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.1.1 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
