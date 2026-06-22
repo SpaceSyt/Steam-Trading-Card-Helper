@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.2.0
+// @version      1.2.1
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -34,6 +34,7 @@
   // Constants
   // ============================================================
   const DEFAULT_CONFIG = {
+    configVersion: 2,
     threshold: 5,
     scanInterval: 0,
     requestInterval: 450,
@@ -56,13 +57,26 @@
   // Config
   // ============================================================
   function loadConfig() {
+    const defaults = { ...DEFAULT_CONFIG };
     try {
       const raw = GM_getValue("sbc_config", null);
-      if (raw) return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (!saved.configVersion || saved.configVersion < DEFAULT_CONFIG.configVersion) {
+          // migrate: force v2 timing defaults, preserve other settings
+          saved.scanInterval = DEFAULT_CONFIG.scanInterval;
+          saved.requestInterval = DEFAULT_CONFIG.requestInterval;
+          saved.batchPause = DEFAULT_CONFIG.batchPause;
+          saved.configVersion = DEFAULT_CONFIG.configVersion;
+          saveConfig(saved);
+          return { ...defaults, ...saved };
+        }
+        return { ...defaults, ...saved };
+      }
     } catch (e) {
       console.warn("[SBC] Config load failed:", e);
     }
-    return { ...DEFAULT_CONFIG };
+    return defaults;
   }
 
   function saveConfig(cfg) {
@@ -865,8 +879,8 @@
           <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">价格扫描</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="sbc-toolbar">
-            <label>priceoverview请求间隔 ms <input id="sbc-req-interval" class="sbc-input" type="number" min="100" step="100" value="${state.cfg.requestInterval}" style="width:70px"></label>
-            <label>gamecard请求间隔 ms <input id="sbc-scan-interval" class="sbc-input" type="number" min="0" step="100" value="${state.cfg.scanInterval}"></label>
+            <label>priceoverview请求间隔 <input id="sbc-req-interval" class="sbc-input" type="number" min="100" step="100" value="${state.cfg.requestInterval}" style="width:70px"> ms</label>
+            <label>gamecard请求间隔 <input id="sbc-scan-interval" class="sbc-input" type="number" min="0" step="100" value="${state.cfg.scanInterval}"> ms</label>
           </div>
           <div class="sbc-toolbar">
             <label>每 <input id="sbc-batch-size" class="sbc-input" type="number" min="5" step="1" value="${state.cfg.batchSize}" style="width:55px"> 次priceoverview请求后暂停</label>
@@ -876,7 +890,7 @@
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.2.0 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.2.1 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
