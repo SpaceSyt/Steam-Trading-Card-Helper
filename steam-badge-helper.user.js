@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.2.2
+// @version      1.2.3
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -94,6 +94,13 @@
     return (cents / 100).toFixed(2);
   }
 
+  function createTextSpan(className, text) {
+    const span = document.createElement("span");
+    span.className = className;
+    span.textContent = String(text);
+    return span;
+  }
+
   // ============================================================
   // Request Queue
   // ============================================================
@@ -135,7 +142,6 @@
 
             if (res.status === 429) {
               this._consecutive429++;
-              this.queue.unshift(job);
               const pauseMs = this.batchPause;
               if (this.onStatus) this.onStatus(`限流冷却中 (第${this._consecutive429}次, ${(pauseMs/1000).toFixed(0)}s)`, true);
               if (this._consecutive429 >= 5 && !this._429Warned && this.onLog) {
@@ -156,6 +162,7 @@
                 job.reject({ status: 0, error: "stopped" });
                 continue;
               }
+              this.queue.unshift(job);
               continue;
             }
             this._consecutive429 = 0;
@@ -178,14 +185,17 @@
             job.reject({ error: e?.message || String(e) });
           }
 
-          // adaptive delay: after N fast requests, pause to avoid rate limit
-          this._reqCount++;
-          if (this._reqCount >= this._batchSize) {
-            this._reqCount = 0;
-            await new Promise(r => setTimeout(r, this.batchPause));
-          } else {
-            await new Promise(r => setTimeout(r, this.interval));
+          // Only priceoverview calls count toward the proactive market API cooldown.
+          if (job.url.includes("/market/priceoverview/")) {
+            this._reqCount++;
+            if (this._reqCount >= this.batchSize) {
+              this._reqCount = 0;
+              if (this.onStatus) this.onStatus(`主动冷却中 (${(this.batchPause/1000).toFixed(0)}s)`, true);
+              await new Promise(r => setTimeout(r, this.batchPause));
+              continue;
+            }
           }
+          await new Promise(r => setTimeout(r, this.interval));
         }
       } finally {
         this.running = false;
@@ -826,7 +836,7 @@
             <label class="sbc-primary-label">单套卡牌价格上限 ¥ <input id="sbc-threshold" class="sbc-input" type="number" min="0" step="0.5" value="${state.cfg.threshold}"></label>
             <label class="sbc-primary-label">购买卡牌逻辑 <select id="sbc-buy-mode" class="sbc-input" style="width:110px">
               <option value="complete1" ${state.cfg.buyMode === "complete1" ? "selected" : ""}>补全单套</option>
-              <option value="complete5" ${state.cfg.buyMode === "complete5" ? "selected" : ""}>补全五套</option>
+              <option value="complete5" ${state.cfg.buyMode === "complete5" ? "selected" : ""}>补至五级</option>
               <option value="buy1" ${state.cfg.buyMode === "buy1" ? "selected" : ""}>购买单套</option>
               <option value="buy5" ${state.cfg.buyMode === "buy5" ? "selected" : ""}>购买五套</option>
             </select></label>
@@ -890,7 +900,7 @@
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.2.2 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.2.3 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -1484,18 +1494,28 @@
     row.dataset.foil = info.isFoil ? 1 : 0;
     const ownedCards = info.cards.reduce((sum, c) => sum + Math.min(c.owned, 1), 0);
     const lv5Color = (info.minVolume || 0) > 1 ? "color:#4caf50" : (info.minVolume || 0) === 1 ? "color:#888" : "";
-    row.innerHTML = `
-      <span class="sbc-appid">${info.appid}${info.isFoil ? "(箔)" : ""}</span>
-      <span class="sbc-name">${info.gameName || "(未知)"}</span>
-      <span class="sbc-level">Lv${info.level}/5</span>
-      <span class="sbc-cards">${ownedCards}/${info.totalInSet}</span>
-      <span class="sbc-cost">¥${info.cheapestSetCNY}</span>
-      <span class="sbc-full">¥${info.fullSetCNY}</span>
-      <span class="sbc-lv5" style="${lv5Color}">¥${info.level5CNY}</span>
-      <span class="sbc-drops">${info.dropsRemaining}</span>
-      <span class="sbc-select"><a href="javascript:void(0)" class="sbc-buy-link" data-appid="${info.appid}" style="text-decoration:underline;color:#66c0f4;cursor:pointer;">购买</a></span>
-    `;
-    const buyLink = row.querySelector(".sbc-buy-link");
+    row.appendChild(createTextSpan("sbc-appid", `${info.appid}${info.isFoil ? "(箔)" : ""}`));
+    row.appendChild(createTextSpan("sbc-name", info.gameName || "(未知)"));
+    row.appendChild(createTextSpan("sbc-level", `Lv${info.level}/5`));
+    row.appendChild(createTextSpan("sbc-cards", `${ownedCards}/${info.totalInSet}`));
+    row.appendChild(createTextSpan("sbc-cost", `¥${info.cheapestSetCNY}`));
+    row.appendChild(createTextSpan("sbc-full", `¥${info.fullSetCNY}`));
+    const lv5 = createTextSpan("sbc-lv5", `¥${info.level5CNY}`);
+    lv5.style.cssText = lv5Color;
+    row.appendChild(lv5);
+    row.appendChild(createTextSpan("sbc-drops", info.dropsRemaining));
+
+    const buyCell = document.createElement("span");
+    buyCell.className = "sbc-select";
+    const buyLink = document.createElement("a");
+    buyLink.href = "javascript:void(0)";
+    buyLink.className = "sbc-buy-link";
+    buyLink.dataset.appid = info.appid;
+    buyLink.style.cssText = "text-decoration:underline;color:#66c0f4;cursor:pointer;";
+    buyLink.textContent = "购买";
+    buyCell.appendChild(buyLink);
+    row.appendChild(buyCell);
+
     buyLink.addEventListener("click", (e) => {
       e.stopPropagation();
       openMultibuy(info);
@@ -1528,6 +1548,22 @@
   // ============================================================
   // Multibuy
   // ============================================================
+  const MULTIBUY_DATA_KEY = "sbc_multibuy_data";
+  const MULTIBUY_DATA_TTL = 15000;
+
+  function clearMultibuyData() {
+    GM_setValue(MULTIBUY_DATA_KEY, null);
+  }
+
+  function getMultibuyQuantity(mode, badgeLevel, owned) {
+    switch (mode) {
+      case "complete5": return Math.max(0, (5 - badgeLevel) - owned);
+      case "buy1":      return 1;
+      case "buy5":      return 5;
+      default:          return owned < 1 ? 1 : 0;
+    }
+  }
+
   function openMultibuy(info) {
     const cardsWithHash = info.cards.filter(c => c.marketHashName);
     if (cardsWithHash.length === 0) {
@@ -1541,13 +1577,7 @@
 
     const qtyByCard = [];
     cardsWithHash.forEach(c => {
-      let qty;
-      switch (mode) {
-        case "complete5": qty = Math.max(0, 5 - c.owned); break;
-        case "buy1":      qty = 1; break;
-        case "buy5":      qty = 5; break;
-        default:          qty = c.owned < 1 ? 1 : 0; break; // complete1
-      }
+      const qty = getMultibuyQuantity(mode, info.level, c.owned);
       params.append("items[]", c.marketHashName);
       params.append("qty[]", String(qty));
       qtyByCard.push({ card: c, qty });
@@ -1564,6 +1594,8 @@
       appid: info.appid,
       gameName: info.gameName,
       bufferCents,
+      createdAt: Date.now(),
+      items: cardsWithHash.map(c => c.marketHashName),
       cards: toBuy.map(q => ({
         marketHashName: q.card.marketHashName,
         lowestCents: q.card.lowestCents || 0,
@@ -1572,7 +1604,7 @@
       })),
     };
 
-    GM_setValue("sbc_multibuy_data", JSON.stringify(buyData));
+    GM_setValue(MULTIBUY_DATA_KEY, JSON.stringify(buyData));
 
     const multibuyUrl = `https://steamcommunity.com/market/multibuy?${params.toString()}`;
     const totalQty = toBuy.reduce((s, q) => s + q.qty, 0);
@@ -1583,12 +1615,25 @@
   function initMultibuyAutoFill() {
     let data;
     try {
-      const raw = GM_getValue("sbc_multibuy_data", null);
+      const raw = GM_getValue(MULTIBUY_DATA_KEY, null);
       if (!raw) return;
       data = JSON.parse(raw);
-    } catch (_) { return; }
+    } catch (_) {
+      clearMultibuyData();
+      return;
+    }
 
-    if (!data || !data.cards || data.cards.length === 0) return;
+    const currentItems = new URL(window.location.href).searchParams.getAll("items[]");
+    const storedItems = Array.isArray(data?.items) ? data.items : [];
+    const sameItems = currentItems.length === storedItems.length
+      && currentItems.every((item, index) => item === storedItems[index]);
+    const isFresh = Number.isFinite(data?.createdAt)
+      && Date.now() - data.createdAt <= MULTIBUY_DATA_TTL;
+
+    if (!data || !Array.isArray(data.cards) || data.cards.length === 0 || !sameItems || !isFresh) {
+      clearMultibuyData();
+      return;
+    }
 
     const bufferCents = data.bufferCents || 0;
 
@@ -1606,9 +1651,17 @@
     };
     injectResetBtn();
 
-    let fillAttempted = false;
+    let finished = false;
+    let observer = null;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearMultibuyData();
+      observer?.disconnect();
+    };
+
     const tryFill = () => {
-      if (fillAttempted) return;
+      if (finished) return;
 
       const items = document.querySelectorAll(".market_multibuy_item, tr[class*='multibuy'], tr .item_name");
       if (items.length === 0) return;
@@ -1657,24 +1710,27 @@
       });
 
       if (filled > 0) {
-        fillAttempted = true;
-        GM_setValue("sbc_multibuy_data", null);
+        finish();
       }
     };
 
     let pollCount = 0;
     const poll = () => {
       tryFill();
-      if (fillAttempted || ++pollCount >= 20) return;
+      if (finished) return;
+      if (++pollCount >= 20) {
+        finish();
+        return;
+      }
       setTimeout(poll, 500);
     };
     setTimeout(poll, 600);
 
-    const observer = new MutationObserver(() => {
-      if (!fillAttempted) tryFill();
+    observer = new MutationObserver(() => {
+      if (!finished) tryFill();
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    setTimeout(() => observer.disconnect(), 15000);
+    setTimeout(finish, MULTIBUY_DATA_TTL);
   }
 
   // ============================================================
@@ -1811,41 +1867,66 @@
       return String(Math.floor((Date.now() - ts) / 86400000));
     };
 
-    const renderItems = (items) => items.map(appid => {
-      const name = names[appid] || "—";
-      const src = sourceLabels[sources[appid]] || "—";
-      const isFixed = fixed[appid] ? "固定" : "";
-      const daysStr = dates[appid] ? formatDays(dates[appid]) : "—";
-      return `<div class="sbc-bl-row">
-        <span class="sbc-bl-id">${appid}</span>
-        <span class="sbc-bl-name">${name}</span>
-        <span class="sbc-bl-fixed-col">${isFixed}</span>
-        <span class="sbc-bl-source">${src}</span>
-        <span class="sbc-bl-days">${daysStr}</span>
-        <span class="sbc-bl-cb-hd"><input type="checkbox" class="sbc-bl-cb" data-appid="${appid}"></span>
-      </div>`;
-    }).join("");
+    const createHeader = () => {
+      const header = document.createElement("div");
+      header.className = "sbc-bl-row sbc-row-header";
+      header.appendChild(createTextSpan("sbc-bl-id", "游戏ID"));
+      header.appendChild(createTextSpan("sbc-bl-name", "游戏名"));
+      header.appendChild(createTextSpan("sbc-bl-fixed-col", ""));
+      header.appendChild(createTextSpan("sbc-bl-source", "来源"));
+      header.appendChild(createTextSpan("sbc-bl-days", "天数"));
+      header.appendChild(createTextSpan("sbc-bl-cb-hd", ""));
+      return header;
+    };
+
+    const createPlaceholder = (text) => {
+      const row = document.createElement("div");
+      row.className = "sbc-bl-row";
+      const span = createTextSpan("", text);
+      span.style.color = "#8f98a0";
+      row.appendChild(span);
+      return row;
+    };
+
+    const appendItems = (target, items) => {
+      for (const appid of items) {
+        const row = document.createElement("div");
+        row.className = "sbc-bl-row";
+        row.appendChild(createTextSpan("sbc-bl-id", appid));
+        row.appendChild(createTextSpan("sbc-bl-name", names[appid] || "—"));
+        row.appendChild(createTextSpan("sbc-bl-fixed-col", fixed[appid] ? "固定" : ""));
+        row.appendChild(createTextSpan("sbc-bl-source", sourceLabels[sources[appid]] || "—"));
+        row.appendChild(createTextSpan("sbc-bl-days", dates[appid] ? formatDays(dates[appid]) : "—"));
+
+        const checkboxCell = document.createElement("span");
+        checkboxCell.className = "sbc-bl-cb-hd";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "sbc-bl-cb";
+        checkbox.dataset.appid = appid;
+        checkboxCell.appendChild(checkbox);
+        row.appendChild(checkboxCell);
+        target.appendChild(row);
+      }
+    };
+
+    list.replaceChildren();
+    if (listFixed) listFixed.replaceChildren();
 
     if (normal.length === 0 && fixedList.length === 0) {
-      list.innerHTML = `<div class="sbc-bl-row"><span style="color:#8f98a0">黑名单为空</span></div>`;
-      if (listFixed) listFixed.innerHTML = "";
+      list.appendChild(createPlaceholder("黑名单为空"));
       if (countEl) countEl.textContent = "";
     } else {
-      list.innerHTML = `<div class="sbc-bl-row sbc-row-header">
-          <span class="sbc-bl-id">游戏ID</span>
-          <span class="sbc-bl-name">游戏名</span>
-          <span class="sbc-bl-fixed-col"></span>
-          <span class="sbc-bl-source">来源</span>
-          <span class="sbc-bl-days">天数</span>
-          <span class="sbc-bl-cb-hd"></span>
-        </div>` + (normal.length > 0 ? renderItems(normal) : `<div class="sbc-bl-row"><span style="color:#8f98a0">—</span></div>`);
+      list.appendChild(createHeader());
+      if (normal.length > 0) appendItems(list, normal);
+      else list.appendChild(createPlaceholder("—"));
       if (countEl) countEl.innerHTML = `共 <b>${bl.length}</b> 项（固定 <b>${fixedList.length}</b>）`;
     }
 
     if (listFixed && fixedList.length > 0) {
-      listFixed.innerHTML = `<div class="sbc-bl-sep">固定黑名单</div>` + renderItems(fixedList);
-    } else if (listFixed) {
-      listFixed.innerHTML = "";
+      const separator = createTextSpan("sbc-bl-sep", "固定黑名单");
+      listFixed.appendChild(separator);
+      appendItems(listFixed, fixedList);
     }
 
     const delBtn = document.getElementById("sbc-bl-del-sel");
