@@ -1212,6 +1212,7 @@
 
   async function startScan() {
     if (state.scanning) return;
+    if (_stopTimeout) { clearTimeout(_stopTimeout); _stopTimeout = null; }
     state.scanning = true;
     state.stopRequested = false;
     state.skipCurrent = false;
@@ -1827,6 +1828,7 @@
       const listingLinks = document.querySelectorAll('a[href*="/market/listings/753/"]');
       listingLinks.forEach(listingLink => {
         const marketHashName = getMarketHashNameFromLink(listingLink);
+        if (filledCards.has(marketHashName)) return;
         const card = cardsByHash.get(marketHashName);
         if (!card) return;
 
@@ -2099,13 +2101,15 @@
     }
   }
 
+  let _stopTimeout = null;
+
   function requestStop() {
     if (state.scanning) {
       state.stopRequested = true;
       state.queue?.stop();
       log("已请求停止...", "warn");
 
-      setTimeout(() => {
+      _stopTimeout = setTimeout(() => {
         if (state.scanning) {
           state.scanning = false;
           state.stopRequested = false;
