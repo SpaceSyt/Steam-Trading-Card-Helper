@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.3.2
+// @version      1.3.3
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -938,7 +938,7 @@
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.3.2 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.3.3 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
