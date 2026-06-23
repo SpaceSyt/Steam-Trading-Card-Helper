@@ -427,17 +427,14 @@
       const url = `https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=${encodeURIComponent(marketHashName)}`;
       const res = await queue.fetch(url);
 
-      if (!res?.data?.success) {
-        return null;
-      }
+      const lowestCents = parsePrice(res?.data?.lowest_price);
+      const medianCents = parsePrice(res?.data?.median_price);
+      const sellCents = lowestCents || medianCents;
+      if (!sellCents) return null;
 
-      const lowestCents = parsePrice(res.data.lowest_price);
-      if (!lowestCents) return null;
+      const volume = parseInt(res?.data?.volume, 10) || 0;
 
-      const medianCents = parsePrice(res.data.median_price);
-      const volume = parseInt(res.data.volume, 10) || 0;
-
-      return { lowestSellCents: lowestCents, medianCents, volume };
+      return { lowestSellCents: sellCents, medianCents, volume };
     } catch (e) {
       return null;
     }
@@ -1363,14 +1360,8 @@
 
             const pk = await priceCard(card.marketHashName, queue);
             if (!pk) {
-              log(`  ⚠ 卡牌 "${card.name}" (market: ${card.marketHashName}) 查价失败, 跳过此游戏`, "warn");
-              allPriced = false;
-              break;
-            }
-            if (pk.lowestSellCents == null) {
-              log(`  ⚠ 卡牌 "${card.name}" 无卖单, 跳过此游戏`, "warn");
-              allPriced = false;
-              break;
+              log(`  ⚠ 卡牌 "${card.name}" (market: ${card.marketHashName}) 查价失败, 跳过此卡`, "warn");
+              continue;
             }
 
             card.lowestCents = pk.lowestSellCents;
