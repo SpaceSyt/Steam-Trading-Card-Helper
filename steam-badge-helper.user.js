@@ -1352,16 +1352,15 @@
               ? pk.lowestSellCents + (need5 - 1) * Math.max(pk.lowestSellCents, pk.medianCents)
               : 0;
 
-            // Predictive skip: after 2 cards, estimate if full set exceeds threshold
+            // Predictive skip: after 2 cards, conservative estimate via min price
             if (info.cardPrices.length === 2) {
               const p0 = info.cardPrices[0];
               const p1 = info.cardPrices[1];
-              const maxP = Math.max(p0.lowestCents, p1.lowestCents);
               const minP = Math.min(p0.lowestCents, p1.lowestCents);
-              if (p0.volume > 0 && p1.volume > 0 && maxP / minP < 2) {
-                const predicted = Math.ceil(maxP * info.totalInSet * 1.15);
+              if (p0.volume > 0 && p1.volume > 0 && minP > 0) {
+                const predicted = Math.ceil(minP * info.totalInSet * 0.85);
                 if (predicted > thresholdCents) {
-                  log(`  → 2张预测全套≈¥${formatCNY(predicted)} > ¥${cfg.threshold}，跳过 (max=¥${formatCNY(maxP)}, n=${info.totalInSet})`, "info");
+                  log(`  → 2张保守预测全套≥¥${formatCNY(predicted)} > ¥${cfg.threshold}，跳过 (min=¥${formatCNY(minP)}, n=${info.totalInSet})`, "info");
                   allPriced = false;
                   thresholdSkip = true;
                   break;
