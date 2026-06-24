@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.4.1
+// @version      1.4.2
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -982,6 +982,7 @@
     selectedResults: new Set(),
     bulkActionRunning: false,
     pendingOrderQuantities: new Map(),
+    highestBuyPrices: new Map(),
   };
 
   function openModal() {
@@ -1029,11 +1030,12 @@
           </div>
           <div class="sbc-toolbar">
             <label class="sbc-primary-label">购买价格
+              <span class="sbc-help" title="在售最低：当前最低卖单价格，通常可立即成交&#10;平均价格：Steam 返回的 median_price，用作市场参考价&#10;求购最高：当前最高买单价格，通常需要等待卖家成交&#10;仅用于自动提交长期订购单；手动购买仍使用在售最低">?</span>
               <select id="sbc-order-price-source" class="sbc-input" style="width:118px">
-                <option value="lowest" ${state.cfg.orderPriceSource === "lowest" ? "selected" : ""}>lowest_price</option>
-                <option value="median" ${state.cfg.orderPriceSource === "median" ? "selected" : ""}>median_price</option>
+                <option value="lowest" ${state.cfg.orderPriceSource === "lowest" ? "selected" : ""}>在售最低</option>
+                <option value="median" ${state.cfg.orderPriceSource === "median" ? "selected" : ""}>平均价格</option>
+                <option value="highest" ${state.cfg.orderPriceSource === "highest" ? "selected" : ""}>求购最高</option>
               </select>
-              <span class="sbc-help" title="仅用于自动提交长期订购单；手动购买仍使用 lowest_price">?</span>
             </label>
             <label class="sbc-primary-label">买价调整 ¥ <input id="sbc-price-adjustment" class="sbc-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
           </div>
@@ -1050,7 +1052,7 @@
             <div class="sbc-progress-bar" id="sbc-progress-bar" style="width:0"></div>
             <div class="sbc-progress-text" id="sbc-progress-text">0/0</div>
           </div>
-          <div class="sbc-summary">
+          <div class="sbc-summary" id="sbc-summary-row" style="display:none">
             <span class="sbc-summary-text" id="sbc-summary"></span>
             <span class="sbc-selected-count" id="sbc-selected-count">已选择 0 项</span>
           </div>
@@ -1101,7 +1103,7 @@
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.4.1 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.4.2 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -1355,6 +1357,11 @@
     if (el) el.innerHTML = html;
   }
 
+  function setSummaryVisibility(visible) {
+    const row = document.getElementById("sbc-summary-row");
+    if (row) row.style.display = visible ? "" : "none";
+  }
+
   // ============================================================
   // Animated status
   // ============================================================
@@ -1585,6 +1592,8 @@
     state.skipCurrent = false;
     state.results = [];
     state.selectedResults.clear();
+    setSummary("");
+    setSummaryVisibility(false);
     document.getElementById("sbc-list").innerHTML = "";
     document.getElementById("sbc-log").innerHTML = "";
     document.getElementById("sbc-scan-btn").classList.add("disabled");
@@ -1619,7 +1628,6 @@
 
       if (badges.length === 0) {
         log("未找到任何有未完成进度的徽章", "warn");
-        setSummary("扫描完成: 未找到有未完成进度的徽章");
         setStatus(null);
         setScanPhase("done");
         return;
@@ -1892,8 +1900,10 @@
       }
 
       const resultCount = state.results.length;
-      setSummary(`扫描完成: 扫描 ${processed} 个徽章, 跳过 ${skipped} 个`);
-      updateSummary();
+      if (!state.stopRequested && !queue.stopped) {
+        updateSummary();
+        setSummaryVisibility(resultCount > 0);
+      }
       setStatus(null);
 
       if (resultCount > 0) {
@@ -2202,12 +2212,74 @@
     return pending.expectedQuantity;
   }
 
-  function buildBuyOrderPlan(selected, activeOrders) {
+  function getOrderPriceSourceLabel(priceSource) {
+    if (priceSource === "median") return "平均价格";
+    if (priceSource === "highest") return "求购最高";
+    return "在售最低";
+  }
+
+  async function fetchHighestBuyPrice(marketHashName) {
+    const cached = state.highestBuyPrices.get(marketHashName);
+    if (
+      Number.isFinite(cached?.priceCents)
+      && cached.priceCents > 0
+      && Date.now() - cached.fetchedAt < 30000
+    ) {
+      return cached.priceCents;
+    }
+
+    const listingUrl =
+      `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}`;
+    const listingResponse = await window.fetch(listingUrl, { credentials: "include" });
+    if (!listingResponse.ok) {
+      throw new Error(`读取商品页失败 (${listingResponse.status})`);
+    }
+    const listingHtml = await listingResponse.text();
+    const itemNameIdMatch =
+      listingHtml.match(/Market_LoadOrderSpread\(\s*(\d+)\s*\)/)
+      || listingHtml.match(/ItemActivityTicker\.Start\(\s*(\d+)\s*\)/);
+    if (!itemNameIdMatch) {
+      throw new Error("商品页缺少 item_nameid");
+    }
+
+    const params = new URLSearchParams({
+      country: unsafeWindow.g_strCountryCode || "CN",
+      language: unsafeWindow.g_strLanguage || "schinese",
+      currency: String(unsafeWindow.g_rgWalletInfo?.wallet_currency || 23),
+      item_nameid: itemNameIdMatch[1],
+    });
+    const histogramResponse = await window.fetch(
+      `https://steamcommunity.com/market/itemordershistogram?${params}`,
+      { credentials: "include" }
+    );
+    if (!histogramResponse.ok) {
+      throw new Error(`读取市场订单簿失败 (${histogramResponse.status})`);
+    }
+    const histogram = await histogramResponse.json();
+    const highestBuyCents = parseInt(histogram?.highest_buy_order, 10);
+    if (
+      (histogram?.success !== true && histogram?.success !== 1)
+      || !Number.isFinite(highestBuyCents)
+      || highestBuyCents <= 0
+    ) {
+      throw new Error("当前没有可用的最高求购价格");
+    }
+
+    state.highestBuyPrices.set(marketHashName, {
+      priceCents: highestBuyCents,
+      fetchedAt: Date.now(),
+    });
+    return highestBuyCents;
+  }
+
+  async function buildBuyOrderPlan(selected, activeOrders) {
     const configuredPriceSource =
       document.getElementById("sbc-order-price-source")?.value
       || state.cfg.orderPriceSource
       || "lowest";
-    const priceSource = configuredPriceSource === "median" ? "median" : "lowest";
+    const priceSource = ["lowest", "median", "highest"].includes(configuredPriceSource)
+      ? configuredPriceSource
+      : "lowest";
     const adjustmentInput = document.getElementById("sbc-price-adjustment");
     const adjustmentValue = adjustmentInput
       ? parseFloat(adjustmentInput.value)
@@ -2223,12 +2295,13 @@
       missingHash: 0,
       clamped: 0,
     };
+    const candidates = [];
 
-    selected.forEach(info => {
-      info.cards.forEach(card => {
+    for (const info of selected) {
+      for (const card of info.cards) {
         if (!card.marketHashName) {
           skipped.missingHash++;
-          return;
+          continue;
         }
 
         const targetQuantity = getMultibuyQuantity(
@@ -2236,7 +2309,7 @@
           info.level,
           card.owned
         );
-        if (targetQuantity <= 0) return;
+        if (targetQuantity <= 0) continue;
 
         const activeQuantity = activeOrders.get(card.marketHashName)?.quantity || 0;
         const pendingQuantity = getPendingOrderExpectedQuantity(card.marketHashName);
@@ -2244,46 +2317,67 @@
         const quantity = Math.max(0, targetQuantity - reservedQuantity);
         if (quantity <= 0) {
           skipped.covered++;
-          return;
+          continue;
         }
 
-        let basePriceCents = null;
-        if (
-          priceSource === "lowest"
-          && card.priceSource === "lowest"
-          && Number.isFinite(card.lowestCents)
-          && card.lowestCents > 0
-        ) {
-          basePriceCents = card.lowestCents;
-        } else if (
-          priceSource === "median"
-          && Number.isFinite(card.medianCents)
-          && card.medianCents > 0
-        ) {
-          basePriceCents = card.medianCents;
-        }
-        if (basePriceCents == null) {
-          skipped.missingPrice++;
-          return;
-        }
-
-        const adjustedPrice = basePriceCents + adjustmentCents;
-        const unitPriceCents = Math.max(minimumCents, adjustedPrice);
-        if (unitPriceCents !== adjustedPrice) skipped.clamped++;
-        plan.push({
-          appid: info.appid,
-          gameName: info.gameName,
-          cardName: card.name,
-          marketHashName: card.marketHashName,
+        candidates.push({
+          info,
+          card,
           quantity,
           reservedQuantity,
           targetQuantity,
-          basePriceCents,
-          unitPriceCents,
-          totalPriceCents: unitPriceCents * quantity,
         });
+      }
+    }
+
+    for (let index = 0; index < candidates.length; index++) {
+      const { info, card, quantity, reservedQuantity, targetQuantity } = candidates[index];
+      let basePriceCents = null;
+      if (
+        priceSource === "lowest"
+        && card.priceSource === "lowest"
+        && Number.isFinite(card.lowestCents)
+        && card.lowestCents > 0
+      ) {
+        basePriceCents = card.lowestCents;
+      } else if (
+        priceSource === "median"
+        && Number.isFinite(card.medianCents)
+        && card.medianCents > 0
+      ) {
+        basePriceCents = card.medianCents;
+      } else if (priceSource === "highest") {
+        setStatus(`读取求购最高 ${index + 1}/${candidates.length}: ${card.name}`);
+        try {
+          basePriceCents = await fetchHighestBuyPrice(card.marketHashName);
+        } catch (error) {
+          log(
+            `  ${info.gameName} · ${card.name}: ${error?.message || error}，已跳过`,
+            "warn"
+          );
+        }
+      }
+      if (basePriceCents == null) {
+        skipped.missingPrice++;
+        continue;
+      }
+
+      const adjustedPrice = basePriceCents + adjustmentCents;
+      const unitPriceCents = Math.max(minimumCents, adjustedPrice);
+      if (unitPriceCents !== adjustedPrice) skipped.clamped++;
+      plan.push({
+        appid: info.appid,
+        gameName: info.gameName,
+        cardName: card.name,
+        marketHashName: card.marketHashName,
+        quantity,
+        reservedQuantity,
+        targetQuantity,
+        basePriceCents,
+        unitPriceCents,
+        totalPriceCents: unitPriceCents * quantity,
       });
-    });
+    }
 
     return { plan, skipped, priceSource, adjustmentCents, minimumCents };
   }
@@ -2304,7 +2398,7 @@
           <div class="sbc-order-summary">
             游戏 <b>${plannedGameCount}</b>/${selectedGameCount} 个 · 卡牌种类 <b>${plan.length}</b> ·
             数量 <b>${totalQuantity}</b> 张 · 新增最高占用 <b>¥${formatCNY(totalCents)}</b><br>
-            价格基准 <b>${priceSource === "median" ? "median_price" : "lowest_price"}</b> ·
+            价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> ·
             买价调整 <b>${adjustmentText}</b>
           </div>
           <div class="sbc-order-list"></div>
@@ -2417,10 +2511,10 @@
     try {
       setStatus("读取现有订购单");
       const activeOrders = await loadActiveBuyOrders();
-      const planData = buildBuyOrderPlan(selected, activeOrders);
+      const planData = await buildBuyOrderPlan(selected, activeOrders);
       if (planData.plan.length === 0) {
         log(
-          `无需提交订购单：已有订单已覆盖，或没有可用的 ${planData.priceSource}_price`,
+          `无需提交订购单：已有订单已覆盖，或没有可用的${getOrderPriceSourceLabel(planData.priceSource)}`,
           "warn"
         );
         return;
