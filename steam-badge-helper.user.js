@@ -85,9 +85,10 @@
   }
 
   function getProfileUrl() {
-    if (unsafeWindow.g_strProfileURL) return unsafeWindow.g_strProfileURL;
-    const a = document.querySelector("#global_actions a.user_avatar");
-    return a ? a.href.replace(/\/$/, "") : null;
+    const url = unsafeWindow.g_strProfileURL
+      || document.querySelector("#global_actions a.user_avatar")?.href
+      || null;
+    return url ? url.replace(/\/$/, "") : null;
   }
 
   function formatCNY(cents) {
@@ -738,7 +739,7 @@
     }
     .sbc-tab:hover { color: #fff; background: rgba(103,193,245,0.1); }
     .sbc-tab.active { color: #fff; background: #1b2838; border: 1px solid #45556b; border-bottom-color: #1b2838; }
-    .sbc-tab-disabled { color: #555; cursor: not-allowed; opacity: 0.5; }
+    .sbc-tab-disabled { color: #555; cursor: not-allowed; opacity: 0.5; pointer-events: none; }
     .sbc-tab-right { margin-left: auto; }
     .sbc-tab-content { display: none; }
     .sbc-tab-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -995,13 +996,13 @@
     });
 
     // Tab switching
-    modal.querySelectorAll(".sbc-tab").forEach(tab => {
+    modal.querySelectorAll(".sbc-tab[data-tab]").forEach(tab => {
       tab.addEventListener("click", () => {
         modal.querySelectorAll(".sbc-tab").forEach(t => t.classList.remove("active"));
         tab.classList.add("active");
         const tabName = tab.dataset.tab;
         modal.querySelectorAll(".sbc-tab-content").forEach(c => c.classList.remove("active"));
-        document.getElementById(`sbc-tab-${tabName}`).classList.add("active");
+        document.getElementById(`sbc-tab-${tabName}`)?.classList.add("active");
         if (tabName === "blacklist") renderBlacklist();
       });
     });
@@ -1162,6 +1163,11 @@
       state.stopRequested = true;
       state.queue?.stop();
     }
+    if (_stopTimeout) {
+      clearTimeout(_stopTimeout);
+      _stopTimeout = null;
+    }
+    setStatus(null);
     document.getElementById("sbc-backdrop")?.remove();
     modalEl?.remove();
     modalEl = null;
@@ -1262,9 +1268,9 @@
       state.scanning = false;
       state.queue = null;
       hideProgress();
-      document.getElementById("sbc-scan-btn").classList.remove("disabled");
-      document.getElementById("sbc-skip-btn").classList.add("disabled");
-      document.getElementById("sbc-stop-btn").classList.add("disabled");
+      document.getElementById("sbc-scan-btn")?.classList.remove("disabled");
+      document.getElementById("sbc-skip-btn")?.classList.add("disabled");
+      document.getElementById("sbc-stop-btn")?.classList.add("disabled");
       return;
     }
 
@@ -1378,11 +1384,15 @@
           const setsTo5 = Math.max(0, 5 - info.level);
           let allPriced = true;
           let thresholdSkip = false;
+          let cancelledCurrent = false;
           const noPriceCards = [];
           let failedPriceCount = 0;
 
           for (const card of info.cards) {
-            if (state.stopRequested || state.skipCurrent) break;
+            if (state.stopRequested || state.skipCurrent) {
+              cancelledCurrent = true;
+              break;
+            }
             if (!card.marketHashName) {
               log(`  ⚠ 卡牌 "${card.name}" 无 market hash name, 跳过此游戏`, "warn");
               allPriced = false;
@@ -1456,6 +1466,19 @@
                 thresholdSkip = true;
                 break;
               }
+            }
+          }
+
+          if (cancelledCurrent) {
+            if (state.skipCurrent) {
+              state.skipCurrent = false;
+              log(`[${b.appid}] ${info.gameName}: 已跳过当前徽章`, "warn");
+              skipped++;
+              continue;
+            }
+            if (state.stopRequested) {
+              log("已手动停止", "warn");
+              break;
             }
           }
 
@@ -1549,9 +1572,9 @@
       state.queue = null;
       hideProgress();
       setStatus(null);
-      document.getElementById("sbc-scan-btn").classList.remove("disabled");
-      document.getElementById("sbc-skip-btn").classList.add("disabled");
-      document.getElementById("sbc-stop-btn").classList.add("disabled");
+      document.getElementById("sbc-scan-btn")?.classList.remove("disabled");
+      document.getElementById("sbc-skip-btn")?.classList.add("disabled");
+      document.getElementById("sbc-stop-btn")?.classList.add("disabled");
     }
   }
 
