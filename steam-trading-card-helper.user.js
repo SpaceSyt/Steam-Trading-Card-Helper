@@ -1,15 +1,15 @@
 // ==UserScript==
-// @name         Steam Badge Helper
-// @name:zh-CN   Steam 徽章助手
-// @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.4.2-rc.2
-// @description  Scan Steam badges, batch query card prices, estimate full set costs
-// @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
+// @name         Steam Trading Card Helper
+// @name:zh-CN   Steam 卡牌助手
+// @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
+// @version      1.4.3
+// @description  Scan Steam trading cards, estimate badge costs, and streamline purchases
+// @description:zh-CN 扫描 Steam 卡牌价格、估算徽章成本并辅助批量购买
 // @author       SpaceSyt
-// @homepageURL  https://github.com/SpaceSyt/Steam-Badge-Helper
-// @supportURL   https://github.com/SpaceSyt/Steam-Badge-Helper/issues
-// @downloadURL  https://github.com/SpaceSyt/Steam-Badge-Helper/raw/master/steam-badge-helper.user.js
-// @updateURL    https://github.com/SpaceSyt/Steam-Badge-Helper/raw/master/steam-badge-helper.user.js
+// @homepageURL  https://github.com/SpaceSyt/Steam-Trading-Card-Helper
+// @supportURL   https://github.com/SpaceSyt/Steam-Trading-Card-Helper/issues
+// @downloadURL  https://github.com/SpaceSyt/Steam-Trading-Card-Helper/raw/master/steam-trading-card-helper.user.js
+// @updateURL    https://github.com/SpaceSyt/Steam-Trading-Card-Helper/raw/master/steam-trading-card-helper.user.js
 // @match        *://steamcommunity.com/*/badges*
 // @match        *://steamcommunity.com/id/*/badges*
 // @match        *://steamcommunity.com/profiles/*/badges*
@@ -26,7 +26,7 @@
 
   const $J = unsafeWindow.jQuery || unsafeWindow.$;
   if (!$J) {
-    console.warn("[SBC] jQuery not found");
+    console.warn("[STCH] jQuery not found");
     return;
   }
 
@@ -34,12 +34,12 @@
   // Constants
   // ============================================================
   const DEFAULT_CONFIG = {
-    configVersion: 3,
+    configVersion: 4,
     threshold: 5,
     scanInterval: 0,
-    requestInterval: 450,
+    requestInterval: 330,
     batchSize: 20,
-    batchPause: 45000,
+    batchPause: 53000,
     includeDrops: false,
     maxBadgePages: 1,
     blacklist: "",
@@ -61,36 +61,19 @@
   function loadConfig() {
     const defaults = { ...DEFAULT_CONFIG };
     try {
-      const raw = GM_getValue("sbc_config", null);
+      const raw = GM_getValue("stch_config", null);
       if (raw) {
         const saved = JSON.parse(raw);
-        let migrated = false;
-        if (!saved.configVersion || saved.configVersion < 2) {
-          saved.scanInterval = DEFAULT_CONFIG.scanInterval;
-          saved.requestInterval = DEFAULT_CONFIG.requestInterval;
-          saved.batchPause = DEFAULT_CONFIG.batchPause;
-          migrated = true;
-        }
-        if (!saved.configVersion || saved.configVersion < 3) {
-          saved.orderPriceSource = "lowest";
-          saved.priceAdjustment = Number.isFinite(saved.buffer) ? saved.buffer : 0;
-          delete saved.buffer;
-          migrated = true;
-        }
-        if (migrated) {
-          saved.configVersion = DEFAULT_CONFIG.configVersion;
-          saveConfig(saved);
-        }
         return { ...defaults, ...saved };
       }
     } catch (e) {
-      console.warn("[SBC] Config load failed:", e);
+      console.warn("[STCH] Config load failed:", e);
     }
     return defaults;
   }
 
   function saveConfig(cfg) {
-    GM_setValue("sbc_config", JSON.stringify(cfg));
+    GM_setValue("stch_config", JSON.stringify(cfg));
   }
 
   function getProfileUrl() {
@@ -116,10 +99,19 @@
   // Request Queue
   // ============================================================
   class RequestQueue {
-    constructor(interval = 300, batchSize = 18, batchPause = 3500, state = null, onStatus = null, onLog = null) {
+    constructor(
+      interval = 330,
+      batchSize = 20,
+      batchPause = 53000,
+      state = null,
+      onStatus = null,
+      onLog = null,
+      otherInterval = 0
+    ) {
       this.interval = interval;
       this.batchSize = batchSize;
       this.batchPause = batchPause;
+      this.otherInterval = otherInterval;
       this.state = state;
       this.onStatus = onStatus;
       this.onLog = onLog;
@@ -139,12 +131,31 @@
       });
     }
 
+    async _sleep(ms) {
+      const endAt = Date.now() + Math.max(0, ms);
+      while (Date.now() < endAt) {
+        if (
+          this.stopped
+          || this.state?.stopRequested
+          || this.state?.skipCurrent
+        ) {
+          return false;
+        }
+        await new Promise(resolve =>
+          setTimeout(resolve, Math.min(250, endAt - Date.now()))
+        );
+      }
+      return true;
+    }
+
     async _run() {
       if (this.running) return;
       this.running = true;
       try {
         while (this.queue.length > 0 && !this.stopped) {
           const job = this.queue.shift();
+          const isPriceOverview = job.url.includes("/market/priceoverview/");
+          const requestStartedAt = Date.now();
           try {
             const res = await window.fetch(job.url, {
               credentials: "include",
@@ -153,19 +164,15 @@
 
             if (res.status === 429) {
               this._consecutive429++;
+              this._reqCount = 0;
               const pauseMs = this.batchPause;
               if (this.onStatus) this.onStatus(`限流冷却中 (第${this._consecutive429}次, ${(pauseMs/1000).toFixed(0)}s)`, true);
               if (this._consecutive429 >= 5 && !this._429Warned && this.onLog) {
                 this._429Warned = true;
                 this.onLog("Steam 可能暂时限制了此 IP 访问价格 API，建议更换 IP 或等候几小时", "warn-ip");
               }
-              for (let tick = 0; tick < pauseMs / 500; tick++) {
-                await new Promise(r => setTimeout(r, 500));
-                if (this.stopped) break;
-                if (this.state?.skipCurrent || this.state?.stopRequested) break;
-              }
+              await this._sleep(pauseMs);
               if (this.state?.skipCurrent) {
-                this.state.skipCurrent = false;
                 job.reject({ status: 429, error: "skipped by user" });
                 continue;
               }
@@ -177,10 +184,12 @@
               continue;
             }
             this._consecutive429 = 0;
-            if (this.onStatus) this.onStatus("扫描卡牌价格中", true);
+            if (isPriceOverview && this.onStatus) {
+              this.onStatus("扫描卡牌价格中", true);
+            }
 
             if (res.status >= 500) {
-              await new Promise(r => setTimeout(r, this.interval * 3));
+              await this._sleep(this.interval * 3);
             }
 
             const text = await res.text();
@@ -197,16 +206,21 @@
           }
 
           // Only priceoverview calls count toward the proactive market API cooldown.
-          if (job.url.includes("/market/priceoverview/")) {
+          if (isPriceOverview) {
             this._reqCount++;
             if (this._reqCount >= this.batchSize) {
               this._reqCount = 0;
               if (this.onStatus) this.onStatus(`主动冷却中 (${(this.batchPause/1000).toFixed(0)}s)`, true);
-              await new Promise(r => setTimeout(r, this.batchPause));
+              await this._sleep(this.batchPause);
               continue;
             }
           }
-          await new Promise(r => setTimeout(r, this.interval));
+
+          const targetInterval = isPriceOverview
+            ? this.interval
+            : this.otherInterval;
+          const elapsed = Date.now() - requestStartedAt;
+          await this._sleep(Math.max(0, targetInterval - elapsed));
         }
       } finally {
         this.running = false;
@@ -516,7 +530,7 @@
   // CSS
   // ============================================================
   GM_addStyle(`
-    .sbc-btn-entry {
+    .stch-btn-entry {
       display: inline-block;
       padding: 6px 12px;
       margin-left: 10px;
@@ -526,16 +540,16 @@
       cursor: pointer;
       font-size: 13px;
     }
-    .sbc-btn-entry:hover { background: rgba(87, 157, 199, 1); }
+    .stch-btn-entry:hover { background: rgba(87, 157, 199, 1); }
 
-    #sbc-backdrop {
+    #stch-backdrop {
       position: fixed;
       inset: 0;
       background: rgba(0,0,0,0.6);
       z-index: 10000;
       display: none;
     }
-    #sbc-modal {
+    #stch-modal {
       position: fixed;
       left: 50%; top: 20px;
       transform: translateX(-50%);
@@ -552,26 +566,26 @@
       font-size: 14px;
       box-shadow: 0 0 30px rgba(0,0,0,0.6);
     }
-    #sbc-modal .sbc-header {
+    #stch-modal .stch-header {
       padding: 10px 16px;
       border-bottom: 1px solid #45556b;
       display: flex;
       align-items: center;
       background: #171a21;
     }
-    #sbc-modal .sbc-header h2 {
+    #stch-modal .stch-header h2 {
       margin: 0; font-size: 20px; flex: 1; color: #fff;
     }
-    #sbc-modal .sbc-close {
+    #stch-modal .stch-close {
       cursor: pointer; font-size: 22px; color: #8f98a0;
     }
-    #sbc-modal .sbc-close:hover { color: #fff; }
-    #sbc-modal .sbc-body {
+    #stch-modal .stch-close:hover { color: #fff; }
+    #stch-modal .stch-body {
       flex: 1; overflow-y: hidden; padding: 12px 16px;
       display: flex; flex-direction: column;
       min-height: 0;
     }
-    #sbc-modal .sbc-footer {
+    #stch-modal .stch-footer {
       padding: 10px 16px;
       background: #171a21;
       border-top: 1px solid #45556b;
@@ -581,7 +595,7 @@
       flex-wrap: wrap;
       font-size: 13px;
     }
-    .sbc-input {
+    .stch-input {
       background: #0e1621;
       color: #fff;
       border: 1px solid #45556b;
@@ -590,9 +604,9 @@
       width: 80px;
       font-size: 14px;
     }
-    .sbc-input:focus { border-color: #66c0f4; outline: none; }
-    .sbc-label { font-size: 14px; color: #8f98a0; }
-    .sbc-btn {
+    .stch-input:focus { border-color: #66c0f4; outline: none; }
+    .stch-label { font-size: 14px; color: #8f98a0; }
+    .stch-btn {
       padding: 8px 16px;
       background: linear-gradient(to bottom, #75b022 5%, #588a1b 95%);
       color: #fff;
@@ -601,34 +615,34 @@
       font-size: 15px;
       user-select: none;
     }
-    .sbc-btn:hover { background: linear-gradient(to bottom, #8ed629 5%, #6aa621 95%); }
-    .sbc-btn.disabled {
+    .stch-btn:hover { background: linear-gradient(to bottom, #8ed629 5%, #6aa621 95%); }
+    .stch-btn.disabled {
       background: #2a3f5a;
       color: #667;
       cursor: not-allowed;
       opacity: 0.6;
     }
-    .sbc-btn.alt {
+    .stch-btn.alt {
       background: linear-gradient(to bottom, #67c1f5 5%, #417a9b 95%);
     }
-    .sbc-btn.alt:hover {
+    .stch-btn.alt:hover {
       background: linear-gradient(to bottom, #8ed8ff 5%, #5297b7 95%);
     }
-    .sbc-btn.sbc-btn-danger {
+    .stch-btn.stch-btn-danger {
       background: linear-gradient(to bottom, #c04040 5%, #8b2020 95%);
     }
-    .sbc-btn.sbc-btn-danger:hover {
+    .stch-btn.stch-btn-danger:hover {
       background: linear-gradient(to bottom, #e05050 5%, #a03030 95%);
     }
 
-    .sbc-game-list {
+    .stch-game-list {
       max-height: 30vh;
       overflow-y: auto;
       border: 1px solid #2a3f5a;
       border-radius: 3px;
       background: rgba(0,0,0,0.2);
     }
-    .sbc-game-row {
+    .stch-game-row {
       padding: 6px 14px;
       border-bottom: 1px solid rgba(69,85,107,0.4);
       display: flex;
@@ -637,7 +651,7 @@
       font-size: 14px;
       line-height: 1.4;
     }
-    .sbc-row-header {
+    .stch-row-header {
       color: #8f98a0;
       font-size: 12px;
       font-weight: bold;
@@ -645,8 +659,8 @@
       padding-bottom: 6px;
       margin-bottom: 2px;
     }
-    .sbc-game-row:hover { background: rgba(103,193,245,0.08); }
-    .sbc-game-row .sbc-appid {
+    .stch-game-row:hover { background: rgba(103,193,245,0.08); }
+    .stch-game-row .stch-appid {
       width: 56px;
       flex-shrink: 0;
       color: #66c0f4;
@@ -654,7 +668,7 @@
       font-size: 12px;
       text-align: center;
     }
-    .sbc-game-row .sbc-name {
+    .stch-game-row .stch-name {
       flex: 1;
       color: #e2e2e2;
       font-size: 13px;
@@ -663,21 +677,21 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .sbc-game-row .sbc-level {
+    .stch-game-row .stch-level {
       width: 42px;
       flex-shrink: 0;
       color: #a1b053;
       font-size: 12px;
       text-align: center;
     }
-    .sbc-game-row .sbc-cards {
+    .stch-game-row .stch-cards {
       width: 36px;
       flex-shrink: 0;
       color: #c6d4df;
       font-size: 12px;
       text-align: center;
     }
-    .sbc-game-row .sbc-cost {
+    .stch-game-row .stch-cost {
       width: 68px;
       flex-shrink: 0;
       color: #75b022;
@@ -685,56 +699,56 @@
       font-size: 13px;
       text-align: center;
     }
-    .sbc-game-row .sbc-full {
+    .stch-game-row .stch-full {
       width: 68px;
       flex-shrink: 0;
       color: #ffc902;
       font-size: 12px;
       text-align: center;
     }
-    .sbc-game-row .sbc-lv5 {
+    .stch-game-row .stch-lv5 {
       width: 84px;
       flex-shrink: 0;
       color: #e74c3c;
       font-size: 12px;
       text-align: center;
     }
-    .sbc-game-row .sbc-drops {
+    .stch-game-row .stch-drops {
       width: 36px;
       flex-shrink: 0;
       color: #8db7d7;
       font-size: 12px;
       text-align: center;
     }
-    .sbc-game-row .sbc-buy {
+    .stch-game-row .stch-buy {
       width: 60px;
       flex-shrink: 0;
       text-align: center;
     }
-    .sbc-game-row .sbc-check {
+    .stch-game-row .stch-check {
       width: 24px;
       flex-shrink: 0;
       text-align: center;
     }
-    .sbc-game-list:not(.sbc-show-drops) .sbc-drops { display: none; }
-    .sbc-result-cb {
+    .stch-game-list:not(.stch-show-drops) .stch-drops { display: none; }
+    .stch-result-cb {
       margin: 0;
       cursor: pointer;
       accent-color: #75b022;
     }
-    .sbc-scan-actions {
+    .stch-scan-actions {
       display: flex;
       align-items: center;
       gap: 10px;
       margin-bottom: 8px;
     }
-    .sbc-bulk-actions {
+    .stch-bulk-actions {
       display: flex;
       align-items: center;
       gap: 10px;
       margin-left: auto;
     }
-    .sbc-selected-count {
+    .stch-selected-count {
       color: #8f98a0;
       margin-left: auto;
       width: 24px;
@@ -744,18 +758,18 @@
       justify-content: center;
       white-space: nowrap;
     }
-    .sbc-help {
+    .stch-help {
       cursor: help;
       color: #8f98a0;
       font-size: 12px;
     }
-    .sbc-sortable {
+    .stch-sortable {
       cursor: pointer;
       user-select: none;
     }
-    .sbc-sortable:hover { color: #fff; }
-    .sbc-sort-arrow { font-size: 10px; }
-    .sbc-toolbar {
+    .stch-sortable:hover { color: #fff; }
+    .stch-sort-arrow { font-size: 10px; }
+    .stch-toolbar {
       display: flex;
       gap: 14px;
       align-items: center;
@@ -764,18 +778,18 @@
       font-size: 14px;
       color: #8f98a0;
     }
-    .sbc-toolbar label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
-    .sbc-primary-label { color: #fff !important; font-weight: bold; }
+    .stch-toolbar label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+    .stch-primary-label { color: #fff !important; font-weight: bold; }
 
-    .sbc-status-text { color: #8db7d7; font-size: 13px; padding: 6px 0; min-height: 20px; }
+    .stch-status-text { color: #8db7d7; font-size: 13px; padding: 6px 0; min-height: 20px; }
 
-    .sbc-tabs {
+    .stch-tabs {
       display: flex;
       gap: 2px;
       margin-bottom: 10px;
       border-bottom: 1px solid #45556b;
     }
-    .sbc-tab {
+    .stch-tab {
       padding: 6px 16px;
       background: rgba(0,0,0,0.3);
       color: #8f98a0;
@@ -784,21 +798,67 @@
       font-size: 14px;
       user-select: none;
     }
-    .sbc-tab:hover { color: #fff; background: rgba(103,193,245,0.1); }
-    .sbc-tab.active { color: #fff; background: #1b2838; border: 1px solid #45556b; border-bottom-color: #1b2838; }
-    .sbc-tab-disabled { color: #555; cursor: not-allowed; opacity: 0.5; pointer-events: none; }
-    .sbc-tab-right { margin-left: auto; }
-    .sbc-tab-content { display: none; }
-    .sbc-tab-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    .stch-tab:hover { color: #fff; background: rgba(103,193,245,0.1); }
+    .stch-tab.active { color: #fff; background: #1b2838; border: 1px solid #45556b; border-bottom-color: #1b2838; }
+    .stch-tab-disabled { color: #555; cursor: not-allowed; opacity: 0.5; pointer-events: none; }
+    .stch-tab-right { margin-left: auto; }
+    .stch-tab-content { display: none; position: relative; }
+    .stch-tab-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
-    .sbc-bl-form {
+    .stch-onboarding {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      background: #1b2838;
+      padding: 24px 28px;
+    }
+    .stch-onboarding h3 {
+      margin: 0 0 8px;
+      color: #fff;
+      font-size: 22px;
+    }
+    .stch-onboarding-intro {
+      margin: 0 0 20px;
+      color: #8db7d7;
+      line-height: 1.7;
+    }
+    .stch-onboarding-step {
+      padding: 12px 0;
+      border-top: 1px solid #2a3f5a;
+      line-height: 1.65;
+    }
+    .stch-onboarding-step b {
+      display: block;
+      margin-bottom: 2px;
+      color: #fff;
+      font-size: 15px;
+    }
+    .stch-onboarding-note {
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-left: 3px solid #ffc902;
+      background: rgba(0,0,0,0.2);
+      color: #c6d4df;
+      line-height: 1.6;
+    }
+    .stch-onboarding-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: auto;
+      padding-top: 20px;
+    }
+
+    .stch-bl-form {
       display: flex;
       gap: 10px;
       align-items: center;
       margin-bottom: 10px;
       flex-wrap: wrap;
     }
-    .sbc-bl-list {
+    .stch-bl-list {
       flex: 1;
       min-height: 0;
       overflow-y: auto;
@@ -806,7 +866,7 @@
       border-radius: 3px;
       background: rgba(0,0,0,0.2);
     }
-    .sbc-bl-row {
+    .stch-bl-row {
       padding: 6px 14px;
       border-bottom: 1px solid rgba(69,85,107,0.4);
       display: flex;
@@ -814,21 +874,21 @@
       gap: 12px;
       font-size: 14px;
     }
-    .sbc-bl-row:hover { background: rgba(103,193,245,0.08); }
-    .sbc-bl-row .sbc-bl-id { width: 70px; color: #66c0f4; font-family: monospace; }
-    .sbc-bl-row .sbc-bl-name { flex: 1; color: #e2e2e2; }
-    .sbc-bl-row .sbc-bl-source { width: 50px; color: #8f98a0; font-size: 12px; text-align: center; }
-    .sbc-bl-row .sbc-bl-fixed-col { width: 40px; color: #75b022; font-size: 12px; text-align: center; }
-    .sbc-bl-row .sbc-bl-days { width: 45px; color: #8f98a0; font-size: 12px; text-align: center; }
-    .sbc-bl-row .sbc-bl-cb-hd { width: 24px; flex-shrink: 0; text-align: center; }
-    .sbc-bl-cb { cursor: pointer; accent-color: #75b022; }
-    .sbc-bl-count { color: #8f98a0; font-size: 12px; margin-top: 6px; }
-    .sbc-bl-sep { color: #45556b; font-size: 12px; margin: 4px 0; padding-left: 8px; }
-    .sbc-bl-fixed { color: #75b022; }
+    .stch-bl-row:hover { background: rgba(103,193,245,0.08); }
+    .stch-bl-row .stch-bl-id { width: 70px; color: #66c0f4; font-family: monospace; }
+    .stch-bl-row .stch-bl-name { flex: 1; color: #e2e2e2; }
+    .stch-bl-row .stch-bl-source { width: 50px; color: #8f98a0; font-size: 12px; text-align: center; }
+    .stch-bl-row .stch-bl-fixed-col { width: 40px; color: #75b022; font-size: 12px; text-align: center; }
+    .stch-bl-row .stch-bl-days { width: 45px; color: #8f98a0; font-size: 12px; text-align: center; }
+    .stch-bl-row .stch-bl-cb-hd { width: 24px; flex-shrink: 0; text-align: center; }
+    .stch-bl-cb { cursor: pointer; accent-color: #75b022; }
+    .stch-bl-count { color: #8f98a0; font-size: 12px; margin-top: 6px; }
+    .stch-bl-sep { color: #45556b; font-size: 12px; margin: 4px 0; padding-left: 8px; }
+    .stch-bl-fixed { color: #75b022; }
 
-    .sbc-bl-result { color: #75b022; font-size: 14px; }
+    .stch-bl-result { color: #75b022; font-size: 14px; }
 
-    #sbc-log {
+    #stch-log {
       margin-top: 10px;
       flex: 1;
       min-height: 0;
@@ -843,13 +903,13 @@
       white-space: pre-wrap;
       word-break: break-all;
     }
-    #sbc-log .ok { color: #75b022; }
-    #sbc-log .warn { color: #ffc902; }
-    #sbc-log .warn-ip { color: #fff; }
-    #sbc-log .err { color: #c04040; }
-    #sbc-log .info { color: #67c1f5; }
+    #stch-log .ok { color: #75b022; }
+    #stch-log .warn { color: #ffc902; }
+    #stch-log .warn-ip { color: #fff; }
+    #stch-log .err { color: #c04040; }
+    #stch-log .info { color: #67c1f5; }
 
-    .sbc-progress {
+    .stch-progress {
       height: 20px;
       background: #0e1621;
       border-radius: 2px;
@@ -857,12 +917,12 @@
       margin: 8px 0;
       position: relative;
     }
-    .sbc-progress-bar {
+    .stch-progress-bar {
       height: 100%;
       background: linear-gradient(to right, #75b022, #8ed629);
       transition: width 0.2s;
     }
-    .sbc-progress-text {
+    .stch-progress-text {
       position: absolute;
       inset: 0;
       text-align: center;
@@ -871,7 +931,7 @@
       color: #fff;
     }
 
-    .sbc-summary {
+    .stch-summary {
       font-size: 14px;
       color: #8f98a0;
       margin: 8px 0;
@@ -879,10 +939,10 @@
       align-items: center;
       gap: 12px;
     }
-    .sbc-summary-text { min-width: 0; }
-    .sbc-summary b { color: #fff; }
+    .stch-summary-text { min-width: 0; }
+    .stch-summary b { color: #fff; }
 
-    #sbc-order-dialog-backdrop {
+    #stch-order-dialog-backdrop {
       position: fixed;
       inset: 0;
       z-index: 10020;
@@ -891,7 +951,7 @@
       align-items: center;
       justify-content: center;
     }
-    .sbc-order-dialog {
+    .stch-order-dialog {
       width: 620px;
       max-width: 92vw;
       max-height: 82vh;
@@ -903,26 +963,26 @@
       box-shadow: 0 12px 40px rgba(0,0,0,0.7);
       color: #c6d4df;
     }
-    .sbc-order-dialog h3 {
+    .stch-order-dialog h3 {
       margin: 0;
       padding: 14px 16px;
       color: #fff;
       font-size: 18px;
       border-bottom: 1px solid #45556b;
     }
-    .sbc-order-summary {
+    .stch-order-summary {
       padding: 12px 16px;
       line-height: 1.7;
     }
-    .sbc-order-summary b { color: #fff; }
-    .sbc-order-list {
+    .stch-order-summary b { color: #fff; }
+    .stch-order-list {
       margin: 0 16px;
       max-height: 42vh;
       overflow-y: auto;
       border: 1px solid #2a3f5a;
       background: #0e1621;
     }
-    .sbc-order-item {
+    .stch-order-item {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 55px 70px;
       gap: 10px;
@@ -930,17 +990,17 @@
       border-bottom: 1px solid rgba(69,85,107,0.4);
       font-size: 12px;
     }
-    .sbc-order-item span:first-child {
+    .stch-order-item span:first-child {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .sbc-order-note {
+    .stch-order-note {
       padding: 10px 16px;
       color: #ffc902;
       font-size: 12px;
     }
-    .sbc-order-dialog-actions {
+    .stch-order-dialog-actions {
       display: flex;
       justify-content: flex-end;
       gap: 10px;
@@ -952,14 +1012,16 @@
   // ============================================================
   // UI
   // ============================================================
+  const ONBOARDING_SEEN_KEY = "stch_onboarding_seen";
+
   function injectEntryBtn() {
     const target = document.querySelector(".profile_xp_block")
       || document.querySelector(".badges_header")
       || document.body;
 
     const btn = document.createElement("span");
-    btn.className = "sbc-btn-entry";
-    btn.textContent = "Steam Badge Helper";
+    btn.className = "stch-btn-entry";
+    btn.textContent = "Steam Trading Card Helper";
     btn.addEventListener("click", openModal);
 
     if (target.classList.contains("profile_xp_block")) {
@@ -992,232 +1054,280 @@
 
   function buildModal() {
     const backdrop = document.createElement("div");
-    backdrop.id = "sbc-backdrop";
+    backdrop.id = "stch-backdrop";
     backdrop.style.display = "block";
     backdrop.addEventListener("click", closeModal);
     document.body.appendChild(backdrop);
 
     const modal = document.createElement("div");
-    modal.id = "sbc-modal";
+    modal.id = "stch-modal";
     modal.addEventListener("click", e => e.stopPropagation());
     modal.innerHTML = `
-      <div class="sbc-header">
-        <h2>Steam 徽章助手</h2>
-        <span class="sbc-close" title="关闭">✕</span>
+      <div class="stch-header">
+        <h2>Steam 卡牌助手</h2>
+        <span class="stch-close" title="关闭">✕</span>
       </div>
-      <div class="sbc-body">
-        <div class="sbc-tabs">
-          <span class="sbc-tab active" data-tab="scan">价格扫描</span>
-          <span class="sbc-tab sbc-tab-disabled" title="未实现">闪卡价格扫描</span>
-          <span class="sbc-tab" data-tab="blacklist">黑名单</span>
-          <span class="sbc-tab sbc-tab-disabled" title="未实现">多余卡牌检测</span>
-          <span class="sbc-tab sbc-tab-right" data-tab="settings">设置</span>
+      <div class="stch-body">
+        <div class="stch-tabs">
+          <span class="stch-tab active" data-tab="scan">价格扫描</span>
+          <span class="stch-tab stch-tab-disabled" title="未实现">闪卡价格扫描</span>
+          <span class="stch-tab" data-tab="blacklist">黑名单</span>
+          <span class="stch-tab stch-tab-disabled" title="未实现">多余卡牌检测</span>
+          <span class="stch-tab stch-tab-right" data-tab="settings">设置</span>
         </div>
-        <div class="sbc-tab-content active" id="sbc-tab-scan">
-          <div class="sbc-toolbar">
-            <label class="sbc-primary-label">单套卡牌价格上限 ¥ <input id="sbc-threshold" class="sbc-input" type="number" min="0" step="0.5" value="${state.cfg.threshold}"></label>
-            <label class="sbc-primary-label">购买卡牌逻辑 <select id="sbc-buy-mode" class="sbc-input" style="width:110px">
+        <div class="stch-tab-content active" id="stch-tab-scan">
+          <div class="stch-onboarding" id="stch-onboarding" style="display:none">
+            <h3>欢迎使用 Steam 卡牌助手</h3>
+            <p class="stch-onboarding-intro">扫描未完成的徽章，比较卡牌成本，并更快地完成购买。</p>
+            <div class="stch-onboarding-step">
+              <b>1. 设置并扫描</b>
+              设置单套价格上限和购买逻辑后开始扫描。价格预测会在明显超出上限时提前跳过，减少请求和等待。
+            </div>
+            <div class="stch-onboarding-step">
+              <b>2. 选择购买方式</b>
+              “手动购买”会打开 Steam multibuy 并自动填写数量和价格；勾选结果后也可以批量提交长期订购单。
+            </div>
+            <div class="stch-onboarding-step">
+              <b>3. 理解购买价格</b>
+              在售最低通常更快成交，平均价格用于参考，求购最高通常需要等待卖家成交。买价调整可正可负。
+            </div>
+            <div class="stch-onboarding-note">
+              市场价格和满级成本均可能变化。提交前请检查数量、单价和总金额；长期订购单会保留到成交或手动取消。
+            </div>
+            <div class="stch-onboarding-actions">
+              <div class="stch-btn" id="stch-onboarding-close">关闭</div>
+            </div>
+          </div>
+          <div class="stch-toolbar">
+            <label class="stch-primary-label">单套卡牌价格上限 ¥ <input id="stch-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.threshold}"></label>
+            <label class="stch-primary-label">购买卡牌逻辑 <select id="stch-buy-mode" class="stch-input" style="width:110px">
               <option value="complete1" ${state.cfg.buyMode === "complete1" ? "selected" : ""}>补全单套</option>
               <option value="complete5" ${state.cfg.buyMode === "complete5" ? "selected" : ""}>补至五级</option>
               <option value="buy1" ${state.cfg.buyMode === "buy1" ? "selected" : ""}>购买单套</option>
               <option value="buy5" ${state.cfg.buyMode === "buy5" ? "selected" : ""}>购买五套</option>
             </select></label>
-            <label>最大徽章页数 <input id="sbc-max-pages" class="sbc-input" type="number" min="1" max="20" value="${state.cfg.maxBadgePages}"></label>
+            <label>最大徽章页数 <input id="stch-max-pages" class="stch-input" type="number" min="1" max="20" value="${state.cfg.maxBadgePages}"></label>
             <label>
-              <input id="sbc-include-drops" type="checkbox" ${state.cfg.includeDrops ? "checked" : ""}>
+              <input id="stch-include-drops" type="checkbox" ${state.cfg.includeDrops ? "checked" : ""}>
               包含有掉落卡牌的游戏
             </label>
           </div>
-          <div class="sbc-toolbar">
-            <label class="sbc-primary-label">购买价格
-              <span class="sbc-help" title="在售最低：当前最低卖单价格，通常可立即成交&#10;平均价格：Steam 返回的 median_price，用作市场参考价&#10;求购最高：当前最高买单价格，通常需要等待卖家成交&#10;仅用于自动提交长期订购单；手动购买仍使用在售最低">?</span>
-              <select id="sbc-order-price-source" class="sbc-input" style="width:118px">
+          <div class="stch-toolbar">
+            <label class="stch-primary-label">购买价格
+              <span class="stch-help" title="在售最低：当前最低卖单价格，通常可立即成交&#10;平均价格：Steam 返回的 median_price，用作市场参考价&#10;求购最高：当前最高买单价格，通常需要等待卖家成交&#10;仅用于自动提交长期订购单；手动购买仍使用在售最低">?</span>
+              <select id="stch-order-price-source" class="stch-input" style="width:118px">
                 <option value="lowest" ${state.cfg.orderPriceSource === "lowest" ? "selected" : ""}>在售最低</option>
                 <option value="median" ${state.cfg.orderPriceSource === "median" ? "selected" : ""}>平均价格</option>
                 <option value="highest" ${state.cfg.orderPriceSource === "highest" ? "selected" : ""}>求购最高</option>
               </select>
             </label>
-            <label class="sbc-primary-label">买价调整 ¥ <input id="sbc-price-adjustment" class="sbc-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
+            <label class="stch-primary-label">买价调整 ¥ <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
           </div>
-          <div class="sbc-scan-actions">
-            <div class="sbc-btn" id="sbc-scan-btn">开始扫描</div>
-            <div class="sbc-btn alt disabled" id="sbc-stop-btn">停止</div>
-            <div class="sbc-btn alt disabled" id="sbc-skip-btn" title="跳过当前徽章">跳过当前</div>
-            <div class="sbc-bulk-actions">
-              <div class="sbc-btn alt disabled" id="sbc-recalculate-btn">重新计算</div>
-              <div class="sbc-btn disabled" id="sbc-submit-orders-btn">提交订购单</div>
+          <div class="stch-scan-actions">
+            <div class="stch-btn" id="stch-scan-btn">开始扫描</div>
+            <div class="stch-btn alt disabled" id="stch-stop-btn">停止</div>
+            <div class="stch-btn alt disabled" id="stch-skip-btn" title="跳过当前徽章">跳过当前</div>
+            <div class="stch-bulk-actions">
+              <div class="stch-btn alt disabled" id="stch-recalculate-btn">重新计算</div>
+              <div class="stch-btn disabled" id="stch-submit-orders-btn">提交订购单</div>
             </div>
           </div>
-          <div class="sbc-progress" id="sbc-progress-wrap" style="display:none">
-            <div class="sbc-progress-bar" id="sbc-progress-bar" style="width:0"></div>
-            <div class="sbc-progress-text" id="sbc-progress-text">0/0</div>
+          <div class="stch-progress" id="stch-progress-wrap" style="display:none">
+            <div class="stch-progress-bar" id="stch-progress-bar" style="width:0"></div>
+            <div class="stch-progress-text" id="stch-progress-text">0/0</div>
           </div>
-          <div class="sbc-summary" id="sbc-summary-row" style="display:none">
-            <span class="sbc-summary-text" id="sbc-summary"></span>
-            <span class="sbc-selected-count" id="sbc-selected-count">已选择 0 项</span>
+          <div class="stch-summary" id="stch-summary-row" style="display:none">
+            <span class="stch-summary-text" id="stch-summary"></span>
+            <span class="stch-selected-count" id="stch-selected-count">已选择 0 项</span>
           </div>
-          <div class="sbc-status-text" id="sbc-status"></div>
-          <div class="sbc-game-list" id="sbc-list"></div>
-          <div id="sbc-log"></div>
+          <div class="stch-status-text" id="stch-status"></div>
+          <div class="stch-game-list" id="stch-list"></div>
+          <div id="stch-log"></div>
         </div>
-        <div class="sbc-tab-content" id="sbc-tab-blacklist">
-          <div class="sbc-bl-form">
-            <label>输入游戏 AppID <input id="sbc-bl-appid" class="sbc-input" type="text" style="width:100px" placeholder="例如: 1144400"></label>
-            <div class="sbc-btn alt" id="sbc-bl-lookup">查询游戏</div>
-            <div class="sbc-btn" id="sbc-bl-add" style="display:none;">加入黑名单</div>
-            <div class="sbc-btn" id="sbc-bl-add-fixed" style="display:none;">加入固定黑名单</div>
-            <div class="sbc-btn alt sbc-btn-danger disabled" id="sbc-bl-del-sel" style="display:none;">删除选中项</div>
-            <div class="sbc-btn alt disabled" id="sbc-bl-fix-sel" style="display:none;">加入固定黑名单</div>
-            <div class="sbc-btn alt disabled" id="sbc-bl-unfix-sel" style="display:none;">移除固定黑名单</div>
-            <div class="sbc-btn alt disabled" id="sbc-bl-cleanup">一键清理过期</div>
-            <span class="sbc-bl-result" id="sbc-bl-result"></span>
+        <div class="stch-tab-content" id="stch-tab-blacklist">
+          <div class="stch-bl-form">
+            <label>输入游戏 AppID <input id="stch-bl-appid" class="stch-input" type="text" style="width:100px" placeholder="例如: 1144400"></label>
+            <div class="stch-btn alt" id="stch-bl-lookup">查询游戏</div>
+            <div class="stch-btn" id="stch-bl-add" style="display:none;">加入黑名单</div>
+            <div class="stch-btn" id="stch-bl-add-fixed" style="display:none;">加入固定黑名单</div>
+            <div class="stch-btn alt stch-btn-danger disabled" id="stch-bl-del-sel" style="display:none;">删除选中项</div>
+            <div class="stch-btn alt disabled" id="stch-bl-fix-sel" style="display:none;">加入固定黑名单</div>
+            <div class="stch-btn alt disabled" id="stch-bl-unfix-sel" style="display:none;">移除固定黑名单</div>
+            <div class="stch-btn alt disabled" id="stch-bl-cleanup">一键清理过期</div>
+            <span class="stch-bl-result" id="stch-bl-result"></span>
           </div>
-          <div class="sbc-bl-form">
+          <div class="stch-bl-form">
             <label>
-              <input id="sbc-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
+              <input id="stch-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
               启用自动黑名单
             </label>
-            <label class="sbc-primary-label">价格上限 ¥ <input id="sbc-auto-bl-threshold" class="sbc-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
+            <label class="stch-primary-label">价格上限 ¥ <input id="stch-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
             <span style="color:#8f98a0;font-size:12px;">扫描时超过此价格的游戏自动加入黑名单</span>
           </div>
-          <div class="sbc-bl-list" id="sbc-bl-list"></div>
-          <div class="sbc-bl-list" id="sbc-bl-list-fixed" style="max-height:100px;margin-top:8px;"></div>
-          <div class="sbc-bl-count" id="sbc-bl-count"></div>
+          <div class="stch-bl-list" id="stch-bl-list"></div>
+          <div class="stch-bl-list" id="stch-bl-list-fixed" style="max-height:100px;margin-top:8px;"></div>
+          <div class="stch-bl-count" id="stch-bl-count"></div>
         </div>
-        <div class="sbc-tab-content" id="sbc-tab-settings">
+        <div class="stch-tab-content" id="stch-tab-settings">
           <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">价格扫描</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
-          <div class="sbc-toolbar">
-            <label>priceoverview请求间隔 <input id="sbc-req-interval" class="sbc-input" type="number" min="100" step="100" value="${state.cfg.requestInterval}" style="width:70px"> ms</label>
-            <label>gamecard请求间隔 <input id="sbc-scan-interval" class="sbc-input" type="number" min="0" step="100" value="${state.cfg.scanInterval}"> ms</label>
+          <div class="stch-toolbar">
+            <label>priceoverview请求间隔 <input id="stch-req-interval" class="stch-input" type="number" min="100" step="10" value="${state.cfg.requestInterval}" style="width:70px"> ms</label>
+            <label>gamecard请求间隔 <input id="stch-scan-interval" class="stch-input" type="number" min="0" step="100" value="${state.cfg.scanInterval}"> ms</label>
           </div>
-          <div class="sbc-toolbar">
-            <label>每 <input id="sbc-batch-size" class="sbc-input" type="number" min="5" step="1" value="${state.cfg.batchSize}" style="width:55px"> 次priceoverview请求后暂停</label>
-            <label><input id="sbc-batch-pause" class="sbc-input" type="number" min="500" step="500" value="${state.cfg.batchPause}" style="width:75px"> ms</label>
+          <div class="stch-toolbar">
+            <label>每 <input id="stch-batch-size" class="stch-input" type="number" min="5" step="1" value="${state.cfg.batchSize}" style="width:55px"> 次priceoverview请求后暂停</label>
+            <label><input id="stch-batch-pause" class="stch-input" type="number" min="500" step="500" value="${state.cfg.batchPause}" style="width:75px"> ms</label>
           </div>
-          <div class="sbc-toolbar">
-            <label><input id="sbc-early-price-prediction" type="checkbox" ${state.cfg.earlyPricePrediction ? "checked" : ""}> 价格预测提早跳过</label>
+          <div class="stch-toolbar">
+            <label><input id="stch-early-price-prediction" type="checkbox" ${state.cfg.earlyPricePrediction ? "checked" : ""}> 价格预测提早跳过</label>
             <span style="color:#8f98a0;font-size:12px;">扫描部分卡牌后保守预测全套价格，超过上限时提前跳过</span>
           </div>
-          <div style="color:#8f98a0;font-size:12px;margin-top:4px;">默认值为作者测试最优稳定配置 (450ms / 45s)。如遇 429 可调高 100ms / 5s。gamecard 通常不需要调整，保持 0 即可。</div>
+          <div style="color:#8f98a0;font-size:12px;margin-top:4px;">默认值为作者测试稳定配置 (330ms / 53s)。如遇 429 可调高 100ms / 5s。gamecard 通常不需要调整，保持 0 即可。</div>
+          <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">使用说明</div>
+          <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+          <div class="stch-toolbar">
+            <div class="stch-btn alt" id="stch-onboarding-open">重新查看使用说明</div>
+          </div>
         </div>
       </div>
-      <div class="sbc-footer">
-        <span class="sbc-label">V1.4.2-rc.2 · 默认货币：人民币(CNY)</span>
+      <div class="stch-footer">
+        <span class="stch-label">V1.4.3 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
     modalEl = modal;
 
-    modal.querySelector(".sbc-close").addEventListener("click", closeModal);
+    modal.querySelector(".stch-close").addEventListener("click", closeModal);
 
-    const cfgIds = ["sbc-threshold", "sbc-scan-interval",
-      "sbc-req-interval", "sbc-max-pages", "sbc-include-drops",
-      "sbc-batch-size", "sbc-batch-pause", "sbc-buy-mode",
-      "sbc-order-price-source", "sbc-price-adjustment",
-      "sbc-early-price-prediction"];
+    const cfgIds = ["stch-threshold", "stch-scan-interval",
+      "stch-req-interval", "stch-max-pages", "stch-include-drops",
+      "stch-batch-size", "stch-batch-pause", "stch-buy-mode",
+      "stch-order-price-source", "stch-price-adjustment",
+      "stch-early-price-prediction"];
     cfgIds.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.addEventListener("change", () => {
-        state.cfg.threshold = parseFloat(document.getElementById("sbc-threshold").value) || 0;
-        state.cfg.scanInterval = parseInt(document.getElementById("sbc-scan-interval").value, 10) || 0;
-        state.cfg.requestInterval = parseInt(document.getElementById("sbc-req-interval").value, 10) || 450;
-        state.cfg.maxBadgePages = parseInt(document.getElementById("sbc-max-pages").value, 10) || 5;
-        state.cfg.includeDrops = document.getElementById("sbc-include-drops").checked;
-        state.cfg.batchSize = parseInt(document.getElementById("sbc-batch-size").value, 10) || 18;
-        state.cfg.batchPause = parseInt(document.getElementById("sbc-batch-pause").value, 10) || 45000;
-        state.cfg.buyMode = document.getElementById("sbc-buy-mode").value;
-        state.cfg.orderPriceSource = document.getElementById("sbc-order-price-source").value;
-        const adjustment = parseFloat(document.getElementById("sbc-price-adjustment").value);
+        state.cfg.threshold = parseFloat(document.getElementById("stch-threshold").value) || 0;
+        state.cfg.scanInterval = parseInt(document.getElementById("stch-scan-interval").value, 10) || 0;
+        state.cfg.requestInterval = parseInt(document.getElementById("stch-req-interval").value, 10) || DEFAULT_CONFIG.requestInterval;
+        state.cfg.maxBadgePages = parseInt(document.getElementById("stch-max-pages").value, 10) || DEFAULT_CONFIG.maxBadgePages;
+        state.cfg.includeDrops = document.getElementById("stch-include-drops").checked;
+        state.cfg.batchSize = parseInt(document.getElementById("stch-batch-size").value, 10) || DEFAULT_CONFIG.batchSize;
+        state.cfg.batchPause = parseInt(document.getElementById("stch-batch-pause").value, 10) || DEFAULT_CONFIG.batchPause;
+        state.cfg.buyMode = document.getElementById("stch-buy-mode").value;
+        state.cfg.orderPriceSource = document.getElementById("stch-order-price-source").value;
+        const adjustment = parseFloat(document.getElementById("stch-price-adjustment").value);
         state.cfg.priceAdjustment = Number.isFinite(adjustment) ? adjustment : 0;
-        state.cfg.earlyPricePrediction = document.getElementById("sbc-early-price-prediction").checked;
+        state.cfg.earlyPricePrediction = document.getElementById("stch-early-price-prediction").checked;
         saveConfig(state.cfg);
         updateResultColumns();
       });
     });
-    document.getElementById("sbc-price-adjustment").addEventListener("input", event => {
+    document.getElementById("stch-price-adjustment").addEventListener("input", event => {
       const adjustment = parseFloat(event.target.value);
       state.cfg.priceAdjustment = Number.isFinite(adjustment) ? adjustment : 0;
       saveConfig(state.cfg);
     });
 
+    const activateTab = tabName => {
+      modal.querySelectorAll(".stch-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.dataset.tab === tabName);
+      });
+      modal.querySelectorAll(".stch-tab-content").forEach(content => {
+        content.classList.toggle("active", content.id === `stch-tab-${tabName}`);
+      });
+      if (tabName === "blacklist") renderBlacklist();
+    };
+    const showOnboarding = () => {
+      GM_setValue(ONBOARDING_SEEN_KEY, true);
+      activateTab("scan");
+      const onboarding = document.getElementById("stch-onboarding");
+      if (onboarding) onboarding.style.display = "flex";
+    };
+    const closeOnboarding = () => {
+      const onboarding = document.getElementById("stch-onboarding");
+      if (onboarding) onboarding.style.display = "none";
+    };
+
     // Tab switching
-    modal.querySelectorAll(".sbc-tab[data-tab]").forEach(tab => {
+    modal.querySelectorAll(".stch-tab[data-tab]").forEach(tab => {
       tab.addEventListener("click", () => {
-        modal.querySelectorAll(".sbc-tab").forEach(t => t.classList.remove("active"));
-        tab.classList.add("active");
-        const tabName = tab.dataset.tab;
-        modal.querySelectorAll(".sbc-tab-content").forEach(c => c.classList.remove("active"));
-        document.getElementById(`sbc-tab-${tabName}`)?.classList.add("active");
-        if (tabName === "blacklist") renderBlacklist();
+        activateTab(tab.dataset.tab);
       });
     });
 
-    document.getElementById("sbc-scan-btn").addEventListener("click", startScan);
-    document.getElementById("sbc-stop-btn").addEventListener("click", requestStop);
-    document.getElementById("sbc-skip-btn").addEventListener("click", skipCurrentBadge);
-    document.getElementById("sbc-recalculate-btn").addEventListener("click", recalculateSelectedResults);
-    document.getElementById("sbc-submit-orders-btn").addEventListener("click", submitSelectedBuyOrders);
+    document.getElementById("stch-onboarding-close").addEventListener("click", closeOnboarding);
+    document.getElementById("stch-onboarding-open").addEventListener("click", showOnboarding);
+    document.getElementById("stch-scan-btn").addEventListener("click", startScan);
+    document.getElementById("stch-stop-btn").addEventListener("click", requestStop);
+    document.getElementById("stch-skip-btn").addEventListener("click", skipCurrentBadge);
+    document.getElementById("stch-recalculate-btn").addEventListener("click", recalculateSelectedResults);
+    document.getElementById("stch-submit-orders-btn").addEventListener("click", submitSelectedBuyOrders);
 
     // Auto blacklist threshold
-    document.getElementById("sbc-auto-bl-threshold").addEventListener("change", () => {
-      state.cfg.autoBlackThreshold = parseFloat(document.getElementById("sbc-auto-bl-threshold").value) || 0;
+    document.getElementById("stch-auto-bl-threshold").addEventListener("change", () => {
+      state.cfg.autoBlackThreshold = parseFloat(document.getElementById("stch-auto-bl-threshold").value) || 0;
       saveConfig(state.cfg);
     });
-    document.getElementById("sbc-auto-bl-enabled").addEventListener("change", () => {
-      state.cfg.autoBlackEnabled = document.getElementById("sbc-auto-bl-enabled").checked;
+    document.getElementById("stch-auto-bl-enabled").addEventListener("change", () => {
+      state.cfg.autoBlackEnabled = document.getElementById("stch-auto-bl-enabled").checked;
       saveConfig(state.cfg);
     });
+
+    if (!GM_getValue(ONBOARDING_SEEN_KEY, false)) {
+      showOnboarding();
+    }
 
     // Blacklist tab
     // Source: 0 = 手动 (manual query+add), 1 = 自动 (auto threshold during scan)
     // Fixed:  0 = 普通黑名单,           1 = 固定黑名单 (permanent, ignored by cleanup)
     // Days:   computed from stored Date.now() timestamp, 0 = today
 
-    document.getElementById("sbc-bl-lookup").addEventListener("click", () => {
-      const appid = document.getElementById("sbc-bl-appid").value.trim();
+    document.getElementById("stch-bl-lookup").addEventListener("click", () => {
+      const appid = document.getElementById("stch-bl-appid").value.trim();
       if (!appid || !/^\d+$/.test(appid)) {
-        document.getElementById("sbc-bl-result").textContent = "请输入有效的 AppID";
+        document.getElementById("stch-bl-result").textContent = "请输入有效的 AppID";
         return;
       }
-      document.getElementById("sbc-bl-result").textContent = "查询中...";
+      document.getElementById("stch-bl-result").textContent = "查询中...";
       lookupGameName(appid).then(name => {
         blLookupAppid = appid;
         blLookupName = name;
-        document.getElementById("sbc-bl-result").textContent = name ? `${appid} — ${name}` : "未找到该游戏";
+        document.getElementById("stch-bl-result").textContent = name ? `${appid} — ${name}` : "未找到该游戏";
         updateBlRow();
       });
     });
 
-    document.getElementById("sbc-bl-add").addEventListener("click", () => {
+    document.getElementById("stch-bl-add").addEventListener("click", () => {
       if (!blLookupAppid || !blLookupName) return;
       addToBlacklist(blLookupAppid, blLookupName, 0, 0);
-      document.getElementById("sbc-bl-result").textContent = `${blLookupName} 已加入黑名单`;
-      document.getElementById("sbc-bl-appid").value = "";
+      document.getElementById("stch-bl-result").textContent = `${blLookupName} 已加入黑名单`;
+      document.getElementById("stch-bl-appid").value = "";
       blLookupAppid = "";
       blLookupName = "";
       updateBlRow();
       renderBlacklist();
     });
 
-    document.getElementById("sbc-bl-add-fixed").addEventListener("click", () => {
+    document.getElementById("stch-bl-add-fixed").addEventListener("click", () => {
       if (!blLookupAppid || !blLookupName) return;
       addToBlacklist(blLookupAppid, blLookupName, 0, 1);
-      document.getElementById("sbc-bl-result").textContent = `${blLookupName} 已加入固定黑名单`;
-      document.getElementById("sbc-bl-appid").value = "";
+      document.getElementById("stch-bl-result").textContent = `${blLookupName} 已加入固定黑名单`;
+      document.getElementById("stch-bl-appid").value = "";
       blLookupAppid = "";
       blLookupName = "";
       updateBlRow();
       renderBlacklist();
     });
 
-    document.getElementById("sbc-bl-del-sel").addEventListener("click", () => {
-      const list = document.getElementById("sbc-bl-list");
-      const listFixed = document.getElementById("sbc-bl-list-fixed");
+    document.getElementById("stch-bl-del-sel").addEventListener("click", () => {
+      const list = document.getElementById("stch-bl-list");
+      const listFixed = document.getElementById("stch-bl-list-fixed");
       if (!list) return;
-      const allCbs = [...list.querySelectorAll(".sbc-bl-cb:checked")];
-      if (listFixed) allCbs.push(...listFixed.querySelectorAll(".sbc-bl-cb:checked"));
+      const allCbs = [...list.querySelectorAll(".stch-bl-cb:checked")];
+      if (listFixed) allCbs.push(...listFixed.querySelectorAll(".stch-bl-cb:checked"));
       if (allCbs.length === 0) return;
       const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
       let n, s, d, f;
@@ -1241,12 +1351,12 @@
       renderBlacklist();
     });
 
-    document.getElementById("sbc-bl-fix-sel").addEventListener("click", () => {
-      const list = document.getElementById("sbc-bl-list");
-      const listFixed = document.getElementById("sbc-bl-list-fixed");
+    document.getElementById("stch-bl-fix-sel").addEventListener("click", () => {
+      const list = document.getElementById("stch-bl-list");
+      const listFixed = document.getElementById("stch-bl-list-fixed");
       if (!list) return;
-      const allCbs = [...list.querySelectorAll(".sbc-bl-cb:checked")];
-      if (listFixed) allCbs.push(...listFixed.querySelectorAll(".sbc-bl-cb:checked"));
+      const allCbs = [...list.querySelectorAll(".stch-bl-cb:checked")];
+      if (listFixed) allCbs.push(...listFixed.querySelectorAll(".stch-bl-cb:checked"));
       if (allCbs.length === 0) return;
       let f = {};
       try { f = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { f = {}; }
@@ -1257,12 +1367,12 @@
       renderBlacklist();
     });
 
-    document.getElementById("sbc-bl-unfix-sel").addEventListener("click", () => {
-      const list = document.getElementById("sbc-bl-list");
-      const listFixed = document.getElementById("sbc-bl-list-fixed");
+    document.getElementById("stch-bl-unfix-sel").addEventListener("click", () => {
+      const list = document.getElementById("stch-bl-list");
+      const listFixed = document.getElementById("stch-bl-list-fixed");
       if (!list) return;
-      const allCbs = [...list.querySelectorAll(".sbc-bl-cb:checked")];
-      if (listFixed) allCbs.push(...listFixed.querySelectorAll(".sbc-bl-cb:checked"));
+      const allCbs = [...list.querySelectorAll(".stch-bl-cb:checked")];
+      if (listFixed) allCbs.push(...listFixed.querySelectorAll(".stch-bl-cb:checked"));
       if (allCbs.length === 0) return;
       let f = {};
       try { f = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { f = {}; }
@@ -1273,7 +1383,7 @@
       renderBlacklist();
     });
 
-    document.getElementById("sbc-bl-cleanup").addEventListener("click", () => {
+    document.getElementById("stch-bl-cleanup").addEventListener("click", () => {
       const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
       let n, s, d, f;
       try { n = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) { n = {}; }
@@ -1283,7 +1393,7 @@
       const now = Date.now();
       const expired = bl.filter(a => !f[a] && d[a] && (now - d[a] > 7 * 86400000));
       if (expired.length === 0) {
-        document.getElementById("sbc-bl-result").textContent = "没有可清理的过期项";
+        document.getElementById("stch-bl-result").textContent = "没有可清理的过期项";
         return;
       }
       if (!confirm(`将清理 ${expired.length} 项过期（>7天）黑名单，确定？`)) return;
@@ -1295,7 +1405,7 @@
       state.cfg.blacklistDates = JSON.stringify(d);
       state.cfg.blacklistFixed = JSON.stringify(f);
       saveConfig(state.cfg);
-      document.getElementById("sbc-bl-result").textContent = `已清理 ${expired.length} 项`;
+      document.getElementById("stch-bl-result").textContent = `已清理 ${expired.length} 项`;
       renderBlacklist();
     });
 
@@ -1318,7 +1428,7 @@
       _stopTimeout = null;
     }
     setStatus(null);
-    document.getElementById("sbc-backdrop")?.remove();
+    document.getElementById("stch-backdrop")?.remove();
     modalEl?.remove();
     modalEl = null;
   }
@@ -1327,8 +1437,8 @@
   // Logging / Progress
   // ============================================================
   function log(msg, type = "") {
-    const box = document.getElementById("sbc-log");
-    if (!box) { console.log("[SBC]", msg); return; }
+    const box = document.getElementById("stch-log");
+    if (!box) { console.log("[STCH]", msg); return; }
     const line = document.createElement("div");
     if (type) line.className = type;
     line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
@@ -1337,9 +1447,9 @@
   }
 
   function setProgress(done, total, text = "") {
-    const wrap = document.getElementById("sbc-progress-wrap");
-    const bar = document.getElementById("sbc-progress-bar");
-    const ptxt = document.getElementById("sbc-progress-text");
+    const wrap = document.getElementById("stch-progress-wrap");
+    const bar = document.getElementById("stch-progress-bar");
+    const ptxt = document.getElementById("stch-progress-text");
     if (!wrap) return;
     wrap.style.display = "";
     const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
@@ -1348,17 +1458,17 @@
   }
 
   function hideProgress() {
-    const wrap = document.getElementById("sbc-progress-wrap");
+    const wrap = document.getElementById("stch-progress-wrap");
     if (wrap) wrap.style.display = "none";
   }
 
   function setSummary(html) {
-    const el = document.getElementById("sbc-summary");
+    const el = document.getElementById("stch-summary");
     if (el) el.innerHTML = html;
   }
 
   function setSummaryVisibility(visible) {
-    const row = document.getElementById("sbc-summary-row");
+    const row = document.getElementById("stch-summary-row");
     if (row) row.style.display = visible ? "" : "none";
   }
 
@@ -1367,7 +1477,7 @@
   // ============================================================
   let statusTimer = null;
   function setStatus(text, animate = true) {
-    const el = document.getElementById("sbc-status");
+    const el = document.getElementById("stch-status");
     if (!el) return;
     if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
     if (!text) { el.textContent = ""; el.style.display = "none"; return; }
@@ -1385,7 +1495,7 @@
   // Scan flow
   // ============================================================
   function setScanPhase(phase) {
-    const btn = document.getElementById("sbc-scan-btn");
+    const btn = document.getElementById("stch-scan-btn");
     if (!btn) return;
     btn.textContent = "开始扫描";
     switch (phase) {
@@ -1407,14 +1517,14 @@
 
   function updateBulkActionState() {
     const selectedCount = getSelectedResults().length;
-    const countEl = document.getElementById("sbc-selected-count");
+    const countEl = document.getElementById("stch-selected-count");
     if (countEl) countEl.textContent = `已选择 ${selectedCount} 项`;
 
     const disabled = selectedCount === 0 || state.scanning || state.bulkActionRunning;
-    document.getElementById("sbc-recalculate-btn")?.classList.toggle("disabled", disabled);
-    document.getElementById("sbc-submit-orders-btn")?.classList.toggle("disabled", disabled);
+    document.getElementById("stch-recalculate-btn")?.classList.toggle("disabled", disabled);
+    document.getElementById("stch-submit-orders-btn")?.classList.toggle("disabled", disabled);
 
-    const selectAll = document.getElementById("sbc-result-select-all");
+    const selectAll = document.getElementById("stch-result-select-all");
     if (selectAll) {
       selectAll.checked = state.results.length > 0 && selectedCount === state.results.length;
       selectAll.indeterminate = selectedCount > 0 && selectedCount < state.results.length;
@@ -1424,7 +1534,7 @@
   function updateResultColumns() {
     const showDrops = state.cfg.includeDrops
       && state.results.some(info => Number(info.dropsRemaining) > 0);
-    document.getElementById("sbc-list")?.classList.toggle("sbc-show-drops", showDrops);
+    document.getElementById("stch-list")?.classList.toggle("stch-show-drops", showDrops);
   }
 
   async function refreshResultInfo(existing, queue) {
@@ -1538,7 +1648,8 @@
       cfg.batchPause,
       state,
       setStatus,
-      log
+      log,
+      cfg.scanInterval
     );
 
     let refreshed = 0;
@@ -1594,17 +1705,25 @@
     state.selectedResults.clear();
     setSummary("");
     setSummaryVisibility(false);
-    document.getElementById("sbc-list").innerHTML = "";
-    document.getElementById("sbc-log").innerHTML = "";
-    document.getElementById("sbc-scan-btn").classList.add("disabled");
-    document.getElementById("sbc-skip-btn").classList.remove("disabled");
-    document.getElementById("sbc-stop-btn").classList.remove("disabled");
+    document.getElementById("stch-list").innerHTML = "";
+    document.getElementById("stch-log").innerHTML = "";
+    document.getElementById("stch-scan-btn").classList.add("disabled");
+    document.getElementById("stch-skip-btn").classList.remove("disabled");
+    document.getElementById("stch-stop-btn").classList.remove("disabled");
     updateBulkActionState();
     setScanPhase("scanning");
     setStatus("正在扫描徽章页");
 
     const cfg = state.cfg;
-    const queue = new RequestQueue(cfg.requestInterval, cfg.batchSize, cfg.batchPause, state, setStatus, log);
+    const queue = new RequestQueue(
+      cfg.requestInterval,
+      cfg.batchSize,
+      cfg.batchPause,
+      state,
+      setStatus,
+      log,
+      cfg.scanInterval
+    );
 
 
     state.queue = queue;
@@ -1614,9 +1733,9 @@
       state.scanning = false;
       state.queue = null;
       hideProgress();
-      document.getElementById("sbc-scan-btn")?.classList.remove("disabled");
-      document.getElementById("sbc-skip-btn")?.classList.add("disabled");
-      document.getElementById("sbc-stop-btn")?.classList.add("disabled");
+      document.getElementById("stch-scan-btn")?.classList.remove("disabled");
+      document.getElementById("stch-skip-btn")?.classList.add("disabled");
+      document.getElementById("stch-stop-btn")?.classList.add("disabled");
       return;
     }
 
@@ -1919,9 +2038,9 @@
       state.queue = null;
       hideProgress();
       setStatus(null);
-      document.getElementById("sbc-scan-btn")?.classList.remove("disabled");
-      document.getElementById("sbc-skip-btn")?.classList.add("disabled");
-      document.getElementById("sbc-stop-btn")?.classList.add("disabled");
+      document.getElementById("stch-scan-btn")?.classList.remove("disabled");
+      document.getElementById("stch-skip-btn")?.classList.add("disabled");
+      document.getElementById("stch-stop-btn")?.classList.add("disabled");
       updateBulkActionState();
     }
   }
@@ -1936,23 +2055,23 @@
 
   function renderHeader(list) {
     const hdr = document.createElement("div");
-    hdr.className = "sbc-game-row sbc-row-header";
+    hdr.className = "stch-game-row stch-row-header";
     hdr.innerHTML = `
-      <span class="sbc-appid sbc-sortable" data-sort="appid">游戏ID<span class="sbc-sort-arrow">${sortArrow("appid")}</span></span>
-      <span class="sbc-name sbc-sortable" data-sort="name">游戏名<span class="sbc-sort-arrow">${sortArrow("name")}</span></span>
-      <span class="sbc-level sbc-sortable" data-sort="level">等级<span class="sbc-sort-arrow">${sortArrow("level")}</span></span>
-      <span class="sbc-cards sbc-sortable" data-sort="cards">卡牌<span class="sbc-sort-arrow">${sortArrow("cards")}</span></span>
-      <span class="sbc-cost sbc-sortable" data-sort="cost">单套补全<span class="sbc-sort-arrow">${sortArrow("cost")}</span></span>
-      <span class="sbc-full sbc-sortable" data-sort="full">单套最低<span class="sbc-sort-arrow">${sortArrow("full")}</span></span>
-      <span class="sbc-lv5 sbc-sortable" data-sort="lv5">满级估算 <span class="sbc-sort-arrow">${sortArrow("lv5")}</span><span style="cursor:help;color:#8f98a0;font-size:11px;" title="绿色:近期成交>1，参考性较强&#10;灰色:近期成交=1，参考性不强&#10;红色:近期成交=0，参考性较弱&#10;黄色:Steam返回信息不全，采用 median_price 或公式估算，结果可能偏低">?</span></span>
-      <span class="sbc-drops sbc-sortable" data-sort="drops">掉落<span class="sbc-sort-arrow">${sortArrow("drops")}</span></span>
-      <span class="sbc-buy">手动购买</span>
-      <span class="sbc-check"><input id="sbc-result-select-all" class="sbc-result-cb" type="checkbox" title="全选"></span>
+      <span class="stch-appid stch-sortable" data-sort="appid">游戏ID<span class="stch-sort-arrow">${sortArrow("appid")}</span></span>
+      <span class="stch-name stch-sortable" data-sort="name">游戏名<span class="stch-sort-arrow">${sortArrow("name")}</span></span>
+      <span class="stch-level stch-sortable" data-sort="level">等级<span class="stch-sort-arrow">${sortArrow("level")}</span></span>
+      <span class="stch-cards stch-sortable" data-sort="cards">卡牌<span class="stch-sort-arrow">${sortArrow("cards")}</span></span>
+      <span class="stch-cost stch-sortable" data-sort="cost">单套补全<span class="stch-sort-arrow">${sortArrow("cost")}</span></span>
+      <span class="stch-full stch-sortable" data-sort="full">单套最低<span class="stch-sort-arrow">${sortArrow("full")}</span></span>
+      <span class="stch-lv5 stch-sortable" data-sort="lv5">满级估算 <span class="stch-sort-arrow">${sortArrow("lv5")}</span><span style="cursor:help;color:#8f98a0;font-size:11px;" title="绿色:近期成交>1，参考性较强&#10;灰色:近期成交=1，参考性不强&#10;红色:近期成交=0，参考性较弱&#10;黄色:Steam返回信息不全，采用 median_price 或公式估算，结果可能偏低">?</span></span>
+      <span class="stch-drops stch-sortable" data-sort="drops">掉落<span class="stch-sort-arrow">${sortArrow("drops")}</span></span>
+      <span class="stch-buy">手动购买</span>
+      <span class="stch-check"><input id="stch-result-select-all" class="stch-result-cb" type="checkbox" title="全选"></span>
     `;
-    hdr.querySelectorAll(".sbc-sortable").forEach(sp => {
+    hdr.querySelectorAll(".stch-sortable").forEach(sp => {
       sp.addEventListener("click", () => sortAndRender(sp.dataset.sort));
     });
-    hdr.querySelector("#sbc-result-select-all").addEventListener("click", e => {
+    hdr.querySelector("#stch-result-select-all").addEventListener("click", e => {
       e.stopPropagation();
       if (e.target.checked) {
         state.results.forEach(info => state.selectedResults.add(getResultKey(info)));
@@ -1990,7 +2109,7 @@
   }
 
   function renderResults() {
-    const list = document.getElementById("sbc-list");
+    const list = document.getElementById("stch-list");
     if (!list) return;
     list.innerHTML = "";
     if (state.results.length === 0) {
@@ -2017,7 +2136,7 @@
 
   function renderDataRow(list, info) {
     const row = document.createElement("div");
-    row.className = "sbc-game-row";
+    row.className = "stch-game-row";
     row.dataset.appid = info.appid;
     row.dataset.foil = info.isFoil ? 1 : 0;
     const ownedCards = info.cards.reduce((sum, c) => sum + Math.min(c.owned, 1), 0);
@@ -2046,35 +2165,35 @@
         : minVol === 1
           ? "近期成交=1，参考性不强"
           : "近期成交=0，参考性较弱";
-    row.appendChild(createTextSpan("sbc-appid", `${info.appid}${info.isFoil ? "(箔)" : ""}`));
-    row.appendChild(createTextSpan("sbc-name", info.gameName || "(未知)"));
-    row.appendChild(createTextSpan("sbc-level", `Lv${info.level}/5`));
-    row.appendChild(createTextSpan("sbc-cards", `${ownedCards}/${info.totalInSet}`));
-    row.appendChild(createTextSpan("sbc-cost", `¥${info.cheapestSetCNY}`));
-    row.appendChild(createTextSpan("sbc-full", `¥${info.fullSetCNY}`));
-    const lv5 = createTextSpan("sbc-lv5", `¥${info.level5CNY}`);
+    row.appendChild(createTextSpan("stch-appid", `${info.appid}${info.isFoil ? "(箔)" : ""}`));
+    row.appendChild(createTextSpan("stch-name", info.gameName || "(未知)"));
+    row.appendChild(createTextSpan("stch-level", `Lv${info.level}/5`));
+    row.appendChild(createTextSpan("stch-cards", `${ownedCards}/${info.totalInSet}`));
+    row.appendChild(createTextSpan("stch-cost", `¥${info.cheapestSetCNY}`));
+    row.appendChild(createTextSpan("stch-full", `¥${info.fullSetCNY}`));
+    const lv5 = createTextSpan("stch-lv5", `¥${info.level5CNY}`);
     lv5.style.cssText = lv5Color;
     lv5.title = lv5Title;
     row.appendChild(lv5);
-    row.appendChild(createTextSpan("sbc-drops", info.dropsRemaining));
+    row.appendChild(createTextSpan("stch-drops", info.dropsRemaining));
 
     const buyCell = document.createElement("span");
-    buyCell.className = "sbc-buy";
+    buyCell.className = "stch-buy";
     const buyLink = document.createElement("a");
     buyLink.href = "javascript:void(0)";
-    buyLink.className = "sbc-buy-link";
+    buyLink.className = "stch-buy-link";
     buyLink.dataset.appid = info.appid;
     buyLink.style.cssText = "text-decoration:underline;color:#66c0f4;cursor:pointer;";
     buyLink.textContent = "购买";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
-    checkbox.className = "sbc-result-cb";
+    checkbox.className = "stch-result-cb";
     checkbox.checked = state.selectedResults.has(getResultKey(info));
     checkbox.title = "选择此游戏进行重新计算或提交订购单";
     buyCell.appendChild(buyLink);
     row.appendChild(buyCell);
     const checkboxCell = document.createElement("span");
-    checkboxCell.className = "sbc-check";
+    checkboxCell.className = "stch-check";
     checkboxCell.appendChild(checkbox);
     row.appendChild(checkboxCell);
 
@@ -2093,7 +2212,7 @@
       updateBulkActionState();
     });
     row.addEventListener("click", (e) => {
-      if (e.target.closest(".sbc-buy-link, .sbc-result-cb")) return;
+      if (e.target.closest(".stch-buy-link, .stch-result-cb")) return;
       const pUrl = getProfileUrl();
       if (pUrl) window.open(`${pUrl}/gamecards/${info.appid}/`, "_blank");
     });
@@ -2102,7 +2221,7 @@
   }
 
   function renderGameRow(info) {
-    const list = document.getElementById("sbc-list");
+    const list = document.getElementById("stch-list");
     if (list.children.length === 0) renderHeader(list);
     renderDataRow(list, info);
     updateBulkActionState();
@@ -2110,7 +2229,7 @@
   }
 
   function updateSummary() {
-    const summary = document.getElementById("sbc-summary");
+    const summary = document.getElementById("stch-summary");
     if (!summary) return;
     const count = state.results.length;
     const totalCNY = (state.results.reduce((s, r) => s + r.cheapestSetCostCents, 0) / 100).toFixed(2);
@@ -2124,7 +2243,7 @@
   // ============================================================
   // Multibuy
   // ============================================================
-  const MULTIBUY_DATA_KEY = "sbc_multibuy_data";
+  const MULTIBUY_DATA_KEY = "stch_multibuy_data";
   const MULTIBUY_DATA_TTL = 5 * 60 * 1000;
   const MULTIBUY_FILL_TIMEOUT = 30000;
 
@@ -2334,13 +2453,13 @@
 
   async function buildBuyOrderPlan(selected, activeOrders) {
     const configuredPriceSource =
-      document.getElementById("sbc-order-price-source")?.value
+      document.getElementById("stch-order-price-source")?.value
       || state.cfg.orderPriceSource
       || "lowest";
     const priceSource = ["lowest", "median", "highest"].includes(configuredPriceSource)
       ? configuredPriceSource
       : "lowest";
-    const adjustmentInput = document.getElementById("sbc-price-adjustment");
+    const adjustmentInput = document.getElementById("stch-price-adjustment");
     const adjustmentValue = adjustmentInput
       ? parseFloat(adjustmentInput.value)
       : state.cfg.priceAdjustment;
@@ -2446,34 +2565,34 @@
     return new Promise(resolve => {
       const { plan, skipped, priceSource, adjustmentCents, minimumCents } = planData;
       const backdrop = document.createElement("div");
-      backdrop.id = "sbc-order-dialog-backdrop";
+      backdrop.id = "stch-order-dialog-backdrop";
       const totalQuantity = plan.reduce((sum, item) => sum + item.quantity, 0);
       const totalCents = plan.reduce((sum, item) => sum + item.totalPriceCents, 0);
       const plannedGameCount = new Set(plan.map(item => `${item.appid}:${item.gameName}`)).size;
       const adjustmentText = `${adjustmentCents >= 0 ? "+" : "-"}¥${formatCNY(Math.abs(adjustmentCents))}`;
 
       backdrop.innerHTML = `
-        <div class="sbc-order-dialog">
+        <div class="stch-order-dialog">
           <h3>确认提交长期订购单</h3>
-          <div class="sbc-order-summary">
+          <div class="stch-order-summary">
             游戏 <b>${plannedGameCount}</b>/${selectedGameCount} 个 · 卡牌种类 <b>${plan.length}</b> ·
             数量 <b>${totalQuantity}</b> 张 · 新增最高占用 <b>¥${formatCNY(totalCents)}</b><br>
             价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> ·
             买价调整 <b>${adjustmentText}</b>
           </div>
-          <div class="sbc-order-list"></div>
-          <div class="sbc-order-note"></div>
-          <div class="sbc-order-dialog-actions">
-            <div class="sbc-btn alt" data-action="cancel">取消</div>
-            <div class="sbc-btn" data-action="confirm">提交订购单</div>
+          <div class="stch-order-list"></div>
+          <div class="stch-order-note"></div>
+          <div class="stch-order-dialog-actions">
+            <div class="stch-btn alt" data-action="cancel">取消</div>
+            <div class="stch-btn" data-action="confirm">提交订购单</div>
           </div>
         </div>
       `;
 
-      const list = backdrop.querySelector(".sbc-order-list");
+      const list = backdrop.querySelector(".stch-order-list");
       plan.forEach(item => {
         const row = document.createElement("div");
-        row.className = "sbc-order-item";
+        row.className = "stch-order-item";
         row.title = `${item.gameName} · ${item.marketHashName}`;
         row.appendChild(createTextSpan("", `${item.gameName} · ${item.cardName}`));
         row.appendChild(createTextSpan("", `${item.quantity} 张`));
@@ -2488,7 +2607,7 @@
       if (skipped.clamped) {
         notes.push(`${skipped.clamped} 种卡牌低于 Steam 最低价，已调整为 ¥${formatCNY(minimumCents)}`);
       }
-      backdrop.querySelector(".sbc-order-note").textContent =
+      backdrop.querySelector(".stch-order-note").textContent =
         `${notes.join("；") || "未发现需跳过的卡牌"}。` +
         "订单将长期保留，直到成交或手动取消；提交即表示同意 Steam 订户协议。";
 
@@ -2760,7 +2879,7 @@
       params.set("steamdb_return_to", `${profileUrl}/gamecards/${info.appid}/`);
     }
 
-    const adjustmentInput = document.getElementById("sbc-price-adjustment");
+    const adjustmentInput = document.getElementById("stch-price-adjustment");
     const adjustmentValue = adjustmentInput
       ? parseFloat(adjustmentInput.value)
       : state.cfg.priceAdjustment;
@@ -2811,7 +2930,7 @@
       && Date.now() - data.createdAt <= MULTIBUY_DATA_TTL;
 
     if (!data || !Array.isArray(data.cards) || data.cards.length === 0 || !sameItems || !isFresh) {
-      console.warn("[SBC] Ignoring stale or mismatched multibuy data", {
+      console.warn("[STCH] Ignoring stale or mismatched multibuy data", {
         currentItems,
         storedItems,
         isFresh,
@@ -2825,9 +2944,9 @@
     // Inject "恢复默认价格" button next to Steam's title
     const injectResetBtn = () => {
       const heading = document.querySelector("h2, h1, .market_multibuy_header, .pageheader");
-      if (heading && !document.getElementById("sbc-reset-btn")) {
+      if (heading && !document.getElementById("stch-reset-btn")) {
         const btn = document.createElement("span");
-        btn.id = "sbc-reset-btn";
+        btn.id = "stch-reset-btn";
         btn.textContent = "恢复默认价格";
         btn.style.cssText = "margin-left:12px;padding:4px 12px;background:rgba(67,137,179,0.85);color:#fff;border-radius:3px;cursor:pointer;font-size:13px;";
         btn.addEventListener("click", () => { location.reload(); });
@@ -2869,7 +2988,7 @@
         if (!price) {
           if (!warnedCards.has(marketHashName)) {
             warnedCards.add(marketHashName);
-            console.warn(`[SBC] Price input not found for ${marketHashName}`);
+            console.warn(`[STCH] Price input not found for ${marketHashName}`);
           }
           return;
         }
@@ -2993,17 +3112,17 @@
   let blLookupName = "";
 
   function updateBlRow() {
-    const add = document.getElementById("sbc-bl-add");
-    const addF = document.getElementById("sbc-bl-add-fixed");
-    const del = document.getElementById("sbc-bl-del-sel");
-    const fix = document.getElementById("sbc-bl-fix-sel");
-    const unfix = document.getElementById("sbc-bl-unfix-sel");
+    const add = document.getElementById("stch-bl-add");
+    const addF = document.getElementById("stch-bl-add-fixed");
+    const del = document.getElementById("stch-bl-del-sel");
+    const fix = document.getElementById("stch-bl-fix-sel");
+    const unfix = document.getElementById("stch-bl-unfix-sel");
     if (!add) return;
 
-    const list = document.getElementById("sbc-bl-list");
-    const listFixed = document.getElementById("sbc-bl-list-fixed");
-    const cbs = [...(list ? list.querySelectorAll(".sbc-bl-cb:checked") : [])];
-    if (listFixed) cbs.push(...listFixed.querySelectorAll(".sbc-bl-cb:checked"));
+    const list = document.getElementById("stch-bl-list");
+    const listFixed = document.getElementById("stch-bl-list-fixed");
+    const cbs = [...(list ? list.querySelectorAll(".stch-bl-cb:checked") : [])];
+    if (listFixed) cbs.push(...listFixed.querySelectorAll(".stch-bl-cb:checked"));
 
     const anyChecked = cbs.length > 0;
     const hasNormal = cbs.some(cb => {
@@ -3023,16 +3142,16 @@
     fix.style.display = (anyChecked && hasNormal) ? "" : "none";
     unfix.style.display = (anyChecked && hasFixed) ? "" : "none";
 
-    if (anyChecked) { del.classList.remove("disabled"); del.classList.add("sbc-btn-danger"); }
+    if (anyChecked) { del.classList.remove("disabled"); del.classList.add("stch-btn-danger"); }
     if (fix.style.display !== "none") fix.classList.remove("disabled");
     if (unfix.style.display !== "none") unfix.classList.remove("disabled");
-    if (anyChecked) document.getElementById("sbc-bl-result").textContent = "";
+    if (anyChecked) document.getElementById("stch-bl-result").textContent = "";
   }
 
   function renderBlacklist() {
-    const list = document.getElementById("sbc-bl-list");
-    const listFixed = document.getElementById("sbc-bl-list-fixed");
-    const countEl = document.getElementById("sbc-bl-count");
+    const list = document.getElementById("stch-bl-list");
+    const listFixed = document.getElementById("stch-bl-list-fixed");
+    const countEl = document.getElementById("stch-bl-count");
     if (!list) return;
     const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
     let names = {};
@@ -3055,19 +3174,19 @@
 
     const createHeader = () => {
       const header = document.createElement("div");
-      header.className = "sbc-bl-row sbc-row-header";
-      header.appendChild(createTextSpan("sbc-bl-id", "游戏ID"));
-      header.appendChild(createTextSpan("sbc-bl-name", "游戏名"));
-      header.appendChild(createTextSpan("sbc-bl-fixed-col", ""));
-      header.appendChild(createTextSpan("sbc-bl-source", "来源"));
-      header.appendChild(createTextSpan("sbc-bl-days", "天数"));
-      header.appendChild(createTextSpan("sbc-bl-cb-hd", ""));
+      header.className = "stch-bl-row stch-row-header";
+      header.appendChild(createTextSpan("stch-bl-id", "游戏ID"));
+      header.appendChild(createTextSpan("stch-bl-name", "游戏名"));
+      header.appendChild(createTextSpan("stch-bl-fixed-col", ""));
+      header.appendChild(createTextSpan("stch-bl-source", "来源"));
+      header.appendChild(createTextSpan("stch-bl-days", "天数"));
+      header.appendChild(createTextSpan("stch-bl-cb-hd", ""));
       return header;
     };
 
     const createPlaceholder = (text) => {
       const row = document.createElement("div");
-      row.className = "sbc-bl-row";
+      row.className = "stch-bl-row";
       const span = createTextSpan("", text);
       span.style.color = "#8f98a0";
       row.appendChild(span);
@@ -3077,18 +3196,18 @@
     const appendItems = (target, items) => {
       for (const appid of items) {
         const row = document.createElement("div");
-        row.className = "sbc-bl-row";
-        row.appendChild(createTextSpan("sbc-bl-id", appid));
-        row.appendChild(createTextSpan("sbc-bl-name", names[appid] || "—"));
-        row.appendChild(createTextSpan("sbc-bl-fixed-col", fixed[appid] ? "固定" : ""));
-        row.appendChild(createTextSpan("sbc-bl-source", sourceLabels[sources[appid]] || "—"));
-        row.appendChild(createTextSpan("sbc-bl-days", dates[appid] ? formatDays(dates[appid]) : "—"));
+        row.className = "stch-bl-row";
+        row.appendChild(createTextSpan("stch-bl-id", appid));
+        row.appendChild(createTextSpan("stch-bl-name", names[appid] || "—"));
+        row.appendChild(createTextSpan("stch-bl-fixed-col", fixed[appid] ? "固定" : ""));
+        row.appendChild(createTextSpan("stch-bl-source", sourceLabels[sources[appid]] || "—"));
+        row.appendChild(createTextSpan("stch-bl-days", dates[appid] ? formatDays(dates[appid]) : "—"));
 
         const checkboxCell = document.createElement("span");
-        checkboxCell.className = "sbc-bl-cb-hd";
+        checkboxCell.className = "stch-bl-cb-hd";
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
-        checkbox.className = "sbc-bl-cb";
+        checkbox.className = "stch-bl-cb";
         checkbox.dataset.appid = appid;
         checkboxCell.appendChild(checkbox);
         row.appendChild(checkboxCell);
@@ -3110,26 +3229,26 @@
     }
 
     if (listFixed && fixedList.length > 0) {
-      const separator = createTextSpan("sbc-bl-sep", "固定黑名单");
+      const separator = createTextSpan("stch-bl-sep", "固定黑名单");
       listFixed.appendChild(separator);
       appendItems(listFixed, fixedList);
     }
 
-    const delBtn = document.getElementById("sbc-bl-del-sel");
-    if (delBtn) { delBtn.classList.add("disabled"); delBtn.classList.remove("sbc-btn-danger"); }
-    const cleanupBtn = document.getElementById("sbc-bl-cleanup");
-    if (cleanupBtn) { cleanupBtn.classList.add("disabled"); cleanupBtn.classList.remove("sbc-btn-danger"); }
+    const delBtn = document.getElementById("stch-bl-del-sel");
+    if (delBtn) { delBtn.classList.add("disabled"); delBtn.classList.remove("stch-btn-danger"); }
+    const cleanupBtn = document.getElementById("stch-bl-cleanup");
+    if (cleanupBtn) { cleanupBtn.classList.add("disabled"); cleanupBtn.classList.remove("stch-btn-danger"); }
 
-    const allCbs = [...list.querySelectorAll(".sbc-bl-cb")];
-    if (listFixed) allCbs.push(...listFixed.querySelectorAll(".sbc-bl-cb"));
+    const allCbs = [...list.querySelectorAll(".stch-bl-cb")];
+    if (listFixed) allCbs.push(...listFixed.querySelectorAll(".stch-bl-cb"));
     allCbs.forEach(cb => {
       cb.addEventListener("change", () => {
-        const delBtn2 = document.getElementById("sbc-bl-del-sel");
-        const anyChecked = [...list.querySelectorAll(".sbc-bl-cb:checked")].length > 0
-          || (listFixed && [...listFixed.querySelectorAll(".sbc-bl-cb:checked")].length > 0);
+        const delBtn2 = document.getElementById("stch-bl-del-sel");
+        const anyChecked = [...list.querySelectorAll(".stch-bl-cb:checked")].length > 0
+          || (listFixed && [...listFixed.querySelectorAll(".stch-bl-cb:checked")].length > 0);
         if (delBtn2) {
-          if (anyChecked) { delBtn2.classList.remove("disabled"); delBtn2.classList.add("sbc-btn-danger"); }
-          else { delBtn2.classList.add("disabled"); delBtn2.classList.remove("sbc-btn-danger"); }
+          if (anyChecked) { delBtn2.classList.remove("disabled"); delBtn2.classList.add("stch-btn-danger"); }
+          else { delBtn2.classList.add("disabled"); delBtn2.classList.remove("stch-btn-danger"); }
         }
         updateBlRow();
       });
@@ -3137,7 +3256,7 @@
 
     if (cleanupBtn) {
       const hasExpired = bl.some(a => !fixed[a] && dates[a] && (Date.now() - dates[a] > 7 * 86400000));
-      if (hasExpired) { cleanupBtn.classList.remove("disabled"); cleanupBtn.classList.add("sbc-btn-danger"); }
+      if (hasExpired) { cleanupBtn.classList.remove("disabled"); cleanupBtn.classList.add("stch-btn-danger"); }
     }
   }
 
@@ -3158,9 +3277,9 @@
             state.queue = null;
           }
           hideProgress();
-          document.getElementById("sbc-scan-btn").classList.remove("disabled");
-          document.getElementById("sbc-skip-btn").classList.add("disabled");
-          document.getElementById("sbc-stop-btn").classList.add("disabled");
+          document.getElementById("stch-scan-btn").classList.remove("disabled");
+          document.getElementById("stch-skip-btn").classList.add("disabled");
+          document.getElementById("stch-stop-btn").classList.add("disabled");
           setScanPhase("done");
         }
       }, 5000);
