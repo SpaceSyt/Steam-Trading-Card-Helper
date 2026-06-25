@@ -2,7 +2,7 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      2.0.0-alpha.1
+// @version      1.5.0
 // @description  Scan Steam trading cards, estimate badge costs, and streamline purchases
 // @description:zh-CN 扫描 Steam 卡牌价格、估算徽章成本并辅助批量购买
 // @author       SpaceSyt
@@ -34,7 +34,7 @@
   // Constants
   // ============================================================
   const DEFAULT_CONFIG = {
-    configVersion: 5,
+    configVersion: 6,
     threshold: 5,
     scanInterval: 0,
     requestInterval: 330,
@@ -54,6 +54,7 @@
     priceAdjustment: 0,
     earlyPricePrediction: true,
     craftInterval: 500,
+    craftMode: "step",
   };
 
   // ============================================================
@@ -475,22 +476,25 @@
   function parseCraftableGameCardsHtml(html, candidate) {
     const info = parseGameCardsHtml(html, candidate.appid, candidate.isFoil);
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const hasCraftButton = !!doc.querySelector(
+    const craftButton = doc.querySelector(
       ".gamecard_badge_craftbtn_ctn .badge_craft_button"
     );
+    const multicraftButton = doc.querySelector(
+      ".gamecard_badge_craftbtn_ctn .badge_craft_button.multicraft"
+    );
+    const multicraftOnclick = multicraftButton?.getAttribute("onclick") || "";
+    const multicraftMatch = multicraftOnclick.match(
+      /Profile_CraftGameBadge\([^)]*,\s*(\d+)\s*\)\s*;?\s*$/
+    );
+    const nativeMaxLevels = multicraftMatch
+      ? Math.max(1, parseInt(multicraftMatch[1], 10) || 1)
+      : craftButton
+        ? 1
+        : 0;
     const availableSets = info.cards.length > 0
       ? Math.min(...info.cards.map(card => Math.max(0, Number(card.owned) || 0)))
       : 0;
-
-    const isUncapped = !candidate.isFoil && info.level >= 5 && hasCraftButton;
-    const remainingLevels = candidate.isFoil
-      ? Math.max(0, 1 - info.level)
-      : isUncapped
-        ? availableSets
-        : Math.max(0, 5 - info.level);
-    const maxCraftable = hasCraftButton
-      ? Math.min(availableSets, remainingLevels)
-      : 0;
+    const maxCraftable = Math.min(availableSets, nativeMaxLevels);
 
     return {
       ...candidate,
@@ -499,10 +503,10 @@
       cards: info.cards,
       totalInSet: info.totalInSet,
       availableSets,
+      nativeMaxLevels,
       maxCraftable,
       craftCount: maxCraftable,
       selected: maxCraftable > 0,
-      isUncapped,
       status: maxCraftable > 0 ? "待合成" : "不可合成",
     };
   }
@@ -1273,6 +1277,12 @@
         </div>
         <div class="stch-tab-content" id="stch-tab-craft">
           <div class="stch-toolbar">
+            <label class="stch-primary-label">合成模式
+              <select id="stch-craft-mode" class="stch-input" style="width:100px">
+                <option value="step" ${state.cfg.craftMode === "step" ? "selected" : ""}>逐级升级</option>
+                <option value="max" ${state.cfg.craftMode === "max" ? "selected" : ""}>一次升满</option>
+              </select>
+            </label>
             <label>最大徽章页数 <input id="stch-craft-max-pages" class="stch-input" type="number" min="1" max="20" value="${state.cfg.maxBadgePages}"></label>
             <span style="color:#8f98a0;font-size:12px;">扫描“进行中”页面里已经收集齐全、可立即合成的徽章</span>
           </div>
@@ -1341,7 +1351,7 @@
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
             <label>每次合成请求间隔 <input id="stch-craft-interval" class="stch-input" type="number" min="200" step="100" value="${state.cfg.craftInterval}" style="width:70px"> ms</label>
-            <span style="color:#8f98a0;font-size:12px;">始终逐级串行合成，不会把大于 1 的数量直接交给 Steam</span>
+            <span style="color:#8f98a0;font-size:12px;">逐级升级按每一级等待；一次升满按每个徽章等待</span>
           </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">使用说明</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
@@ -1351,7 +1361,7 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.0.0-alpha.1 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.5.0 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -1363,7 +1373,8 @@
       "stch-req-interval", "stch-max-pages", "stch-include-drops",
       "stch-batch-size", "stch-batch-pause", "stch-buy-mode",
       "stch-order-price-source", "stch-price-adjustment",
-      "stch-early-price-prediction", "stch-craft-interval"];
+      "stch-early-price-prediction", "stch-craft-interval",
+      "stch-craft-mode"];
     cfgIds.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -1385,10 +1396,12 @@
           parseInt(document.getElementById("stch-craft-interval").value, 10)
             || DEFAULT_CONFIG.craftInterval
         );
+        state.cfg.craftMode = document.getElementById("stch-craft-mode").value;
         saveConfig(state.cfg);
         const craftMaxPages = document.getElementById("stch-craft-max-pages");
         if (craftMaxPages) craftMaxPages.value = String(state.cfg.maxBadgePages);
         updateResultColumns();
+        if (id === "stch-craft-mode") renderCraftResults();
       });
     });
     document.getElementById("stch-price-adjustment").addEventListener("input", event => {
@@ -1734,10 +1747,12 @@
       .filter(result => result.selected && result.maxCraftable > 0)
       .map(result => ({
         result,
-        count: Math.max(
-          0,
-          Math.min(result.maxCraftable, parseInt(result.craftCount, 10) || 0)
-        ),
+        count: state.cfg.craftMode === "max"
+          ? result.maxCraftable
+          : Math.max(
+            0,
+            Math.min(result.maxCraftable, parseInt(result.craftCount, 10) || 0)
+          ),
       }))
       .filter(item => item.count > 0);
   }
@@ -1782,9 +1797,11 @@
     );
     ["stch-craft-one-btn", "stch-craft-max-btn", "stch-craft-clear-btn"]
       .forEach(id => {
+        const modeDisabled = id === "stch-craft-one-btn"
+          && state.cfg.craftMode === "max";
         document.getElementById(id)?.classList.toggle(
           "disabled",
-          !hasResults || craftBusy || otherBusy
+          !hasResults || craftBusy || otherBusy || modeDisabled
         );
       });
     document.getElementById("stch-craft-submit-btn")?.classList.toggle(
@@ -1865,11 +1882,16 @@
       countInput.min = "0";
       countInput.max = String(result.maxCraftable);
       countInput.step = "1";
-      countInput.value = String(
-        Math.max(0, Math.min(result.maxCraftable, result.craftCount || 0))
-      );
+      const displayedCraftCount = state.cfg.craftMode === "max"
+        ? result.maxCraftable
+        : Math.max(0, Math.min(result.maxCraftable, result.craftCount || 0));
+      countInput.value = String(displayedCraftCount);
+      countInput.title = state.cfg.craftMode === "max"
+        ? "一次升满使用 Steam 页面给出的原生最大次数"
+        : "输入本次要逐级合成的次数";
       countInput.disabled = state.craftScanning
         || state.craftActionRunning
+        || state.cfg.craftMode === "max"
         || result.maxCraftable <= 0;
       countCell.appendChild(countInput);
 
@@ -1936,6 +1958,7 @@
     ) {
       return;
     }
+    if (mode === "one" && state.cfg.craftMode === "max") return;
 
     state.craftResults.forEach(result => {
       if (mode === "clear") {
@@ -2122,6 +2145,9 @@
   function showCraftConfirmation(plan) {
     return new Promise(resolve => {
       const totalLevels = plan.reduce((sum, item) => sum + item.count, 0);
+      const craftModeLabel = state.cfg.craftMode === "max"
+        ? "一次升满"
+        : "逐级升级";
       const backdrop = document.createElement("div");
       backdrop.id = "stch-order-dialog-backdrop";
       backdrop.innerHTML = `
@@ -2129,11 +2155,15 @@
           <h3>确认批量合成徽章</h3>
           <div class="stch-order-summary">
             游戏 <b>${plan.length}</b> 个 · 合成 <b>${totalLevels}</b> 次 ·
-            预计增加 <b>${totalLevels * 100}</b> XP
+            预计增加 <b>${totalLevels * 100}</b> XP ·
+            模式 <b>${craftModeLabel}</b>
           </div>
           <div class="stch-order-list"></div>
           <div class="stch-order-note">
-            每一级都会独立提交一次请求。若请求结果不确定，脚本会立即停止且不会自动重试，请重新扫描后再继续。
+            ${state.cfg.craftMode === "max"
+              ? "每个徽章会按所选次数提交一次合成请求。"
+              : "每一级都会独立提交一次合成请求。"}
+            若请求结果不确定，脚本会立即停止且不会自动重试，请重新扫描后再继续。
           </div>
           <div class="stch-order-dialog-actions">
             <div class="stch-btn alt" data-action="cancel">取消</div>
@@ -2170,17 +2200,22 @@
     });
   }
 
-  async function createBadgeCraftRequest(result) {
+  async function createBadgeCraftRequest(result, levels = 1) {
     const profileUrl = getProfileUrl();
     const sessionId = getSessionId();
     if (!profileUrl) throw new Error("未找到 Steam 个人资料地址");
     if (!sessionId) throw new Error("未找到 Steam sessionid");
 
+    const requestedLevels = Math.max(1, parseInt(levels, 10) || 1);
+    if (requestedLevels > result.maxCraftable) {
+      throw new Error("合成次数超过 Steam 当前允许的最大值");
+    }
+
     const body = new URLSearchParams({
       appid: String(result.appid),
       series: "1",
       border_color: result.isFoil ? "1" : "0",
-      levels: "1",
+      levels: String(requestedLevels),
       sessionid: sessionId,
     });
 
@@ -2264,25 +2299,34 @@
         result.statusType = "warn";
         renderCraftResults();
 
-        for (let levelIndex = 0; levelIndex < item.count; levelIndex++) {
+        while (itemCompleted < item.count) {
           if (state.craftStopRequested) break;
+          const requestLevels = state.cfg.craftMode === "max"
+            ? item.count - itemCompleted
+            : 1;
           setCraftStatus(
-            `合成 ${completedLevels + 1}/${totalLevels}: ${result.gameName}`
+            `合成 ${Math.min(totalLevels, completedLevels + requestLevels)}/${totalLevels}: ${result.gameName}`
           );
           try {
-            const data = await createBadgeCraftRequest(result);
-            completedLevels++;
-            itemCompleted++;
-            result.level++;
-            result.availableSets = Math.max(0, result.availableSets - 1);
-            result.maxCraftable = Math.max(0, result.maxCraftable - 1);
+            const data = await createBadgeCraftRequest(result, requestLevels);
+            completedLevels += requestLevels;
+            itemCompleted += requestLevels;
+            result.level += requestLevels;
+            result.availableSets = Math.max(
+              0,
+              result.availableSets - requestLevels
+            );
+            result.maxCraftable = Math.max(
+              0,
+              result.maxCraftable - requestLevels
+            );
             result.craftCount = Math.max(0, item.count - itemCompleted);
 
             const rewards = (data.rgDroppedItems || [])
               .map(reward => reward.title)
               .filter(Boolean);
             craftLog(
-              `✓ ${result.gameName}: 已合成至 Lv${result.level}` +
+              `✓ ${result.gameName}: 已合成 ${requestLevels} 次，至 Lv${result.level}` +
               `${rewards.length ? `，获得 ${rewards.join("、")}` : ""}`,
               "ok"
             );
