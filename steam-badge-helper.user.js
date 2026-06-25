@@ -2,7 +2,7 @@
 // @name         Steam Badge Helper
 // @name:zh-CN   Steam 徽章助手
 // @namespace    https://github.com/SpaceSyt/Steam-Badge-Helper
-// @version      1.4.2
+// @version      1.4.2-rc.1
 // @description  Scan Steam badges, batch query card prices, estimate full set costs
 // @description:zh-CN 扫描 Steam 徽章，批量查询卡牌价格，估算全套成本
 // @author       SpaceSyt
@@ -1099,11 +1099,11 @@
             <label><input id="sbc-early-price-prediction" type="checkbox" ${state.cfg.earlyPricePrediction ? "checked" : ""}> 价格预测提早跳过</label>
             <span style="color:#8f98a0;font-size:12px;">扫描部分卡牌后保守预测全套价格，超过上限时提前跳过</span>
           </div>
-          <div style="color:#8f98a0;font-size:12px;margin-top:4px;">默认值为作者测试最优稳定配置 (450ms / 45s)。如遇 429 可调高 100ms / 5s</div>
+          <div style="color:#8f98a0;font-size:12px;margin-top:4px;">默认值为作者测试最优稳定配置 (450ms / 45s)。如遇 429 可调高 100ms / 5s。gamecard 通常不需要调整，保持 0 即可。</div>
         </div>
       </div>
       <div class="sbc-footer">
-        <span class="sbc-label">V1.4.2 · 默认货币：人民币(CNY)</span>
+        <span class="sbc-label">V1.4.2-rc.1 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
