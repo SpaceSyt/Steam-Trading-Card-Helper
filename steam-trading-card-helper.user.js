@@ -2,14 +2,14 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.4.3
-// @description  Scan Steam trading cards, estimate badge costs, and streamline purchases
-// @description:zh-CN 扫描 Steam 卡牌价格、估算徽章成本并辅助批量购买
+// @version      1.5.0
+// @description  Scan card prices, estimate badge costs, streamline purchases, and craft badges in bulk
+// @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买并自动合成徽章
 // @author       SpaceSyt
 // @homepageURL  https://github.com/SpaceSyt/Steam-Trading-Card-Helper
 // @supportURL   https://github.com/SpaceSyt/Steam-Trading-Card-Helper/issues
-// @downloadURL  https://github.com/SpaceSyt/Steam-Trading-Card-Helper/raw/master/steam-trading-card-helper.user.js
-// @updateURL    https://github.com/SpaceSyt/Steam-Trading-Card-Helper/raw/master/steam-trading-card-helper.user.js
+// @downloadURL  https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper.user.js
+// @updateURL    https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper.user.js
 // @match        *://steamcommunity.com/*/badges*
 // @match        *://steamcommunity.com/id/*/badges*
 // @match        *://steamcommunity.com/profiles/*/badges*
@@ -34,7 +34,7 @@
   // Constants
   // ============================================================
   const DEFAULT_CONFIG = {
-    configVersion: 4,
+    configVersion: 6,
     threshold: 5,
     scanInterval: 0,
     requestInterval: 330,
@@ -53,6 +53,8 @@
     orderPriceSource: "lowest",
     priceAdjustment: 0,
     earlyPricePrediction: true,
+    craftInterval: 500,
+    craftMode: "step",
   };
 
   // ============================================================
@@ -439,6 +441,76 @@
       setsToLevel5,
     };
   }
+
+  function parseCraftCandidatesHtml(html) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const candidates = [];
+    const seen = new Set();
+
+    doc.querySelectorAll(".badge_row").forEach(row => {
+      const craftLink = row.querySelector(
+        ".badge_progress_info a.badge_craft_button[href*='/gamecards/']"
+      );
+      if (!craftLink) return;
+
+      const href = craftLink.getAttribute("href") || "";
+      const match = href.match(/\/gamecards\/(\d+)\/?/);
+      if (!match) return;
+
+      const appid = match[1];
+      const isFoil = /[?&]border=1(?:&|$)/.test(href);
+      const key = `${appid}_${isFoil ? 1 : 0}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const titleEl = row.querySelector(".badge_title");
+      const gameName = (titleEl?.textContent || "")
+        .replace(/(?:View details|查看详情|[\u200B\u200C\u200D\ufeff])/gi, "")
+        .trim();
+      candidates.push({ appid, isFoil, gameName, href });
+    });
+
+    return candidates;
+  }
+
+  function parseCraftableGameCardsHtml(html, candidate) {
+    const info = parseGameCardsHtml(html, candidate.appid, candidate.isFoil);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const craftButton = doc.querySelector(
+      ".gamecard_badge_craftbtn_ctn .badge_craft_button"
+    );
+    const multicraftButton = doc.querySelector(
+      ".gamecard_badge_craftbtn_ctn .badge_craft_button.multicraft"
+    );
+    const multicraftOnclick = multicraftButton?.getAttribute("onclick") || "";
+    const multicraftMatch = multicraftOnclick.match(
+      /Profile_CraftGameBadge\([^)]*,\s*(\d+)\s*\)\s*;?\s*$/
+    );
+    const nativeMaxLevels = multicraftMatch
+      ? Math.max(1, parseInt(multicraftMatch[1], 10) || 1)
+      : craftButton
+        ? 1
+        : 0;
+    const availableSets = info.cards.length > 0
+      ? Math.min(...info.cards.map(card => Math.max(0, Number(card.owned) || 0)))
+      : 0;
+    const maxCraftable = Math.min(availableSets, nativeMaxLevels);
+
+    return {
+      ...candidate,
+      gameName: candidate.gameName || info.gameName || "",
+      level: info.level,
+      cards: info.cards,
+      totalInSet: info.totalInSet,
+      availableSets,
+      nativeMaxLevels,
+      maxCraftable,
+      craftCount: maxCraftable,
+      selected: maxCraftable > 0,
+      status: maxCraftable > 0 ? "待合成" : "不可合成",
+    };
+  }
+
   // ============================================================
   function parsePrice(str) {
     if (!str) return 0;
@@ -736,6 +808,52 @@
       cursor: pointer;
       accent-color: #75b022;
     }
+    .stch-craft-list {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+    }
+    .stch-craft-row .stch-craft-available {
+      width: 64px;
+      flex-shrink: 0;
+      text-align: center;
+      color: #ffc902;
+      font-size: 12px;
+    }
+    .stch-craft-row .stch-craft-count {
+      width: 74px;
+      flex-shrink: 0;
+      text-align: center;
+    }
+    .stch-craft-row .stch-craft-count input {
+      width: 48px;
+      box-sizing: border-box;
+      text-align: center;
+      padding: 4px;
+    }
+    .stch-craft-row .stch-craft-target {
+      width: 54px;
+      flex-shrink: 0;
+      text-align: center;
+      color: #a1b053;
+      font-size: 12px;
+    }
+    .stch-craft-row .stch-craft-status {
+      width: 72px;
+      flex-shrink: 0;
+      text-align: center;
+      color: #8f98a0;
+      font-size: 12px;
+    }
+    .stch-craft-row .stch-craft-status.ok { color: #75b022; }
+    .stch-craft-row .stch-craft-status.warn { color: #ffc902; }
+    .stch-craft-row .stch-craft-status.err { color: #c04040; }
+    .stch-craft-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: auto;
+    }
     .stch-scan-actions {
       display: flex;
       align-items: center;
@@ -888,7 +1006,8 @@
 
     .stch-bl-result { color: #75b022; font-size: 14px; }
 
-    #stch-log {
+    #stch-log,
+    #stch-craft-log {
       margin-top: 10px;
       flex: 1;
       min-height: 0;
@@ -903,11 +1022,14 @@
       white-space: pre-wrap;
       word-break: break-all;
     }
-    #stch-log .ok { color: #75b022; }
-    #stch-log .warn { color: #ffc902; }
-    #stch-log .warn-ip { color: #fff; }
-    #stch-log .err { color: #c04040; }
-    #stch-log .info { color: #67c1f5; }
+    #stch-craft-log {
+      flex: 0 0 19vh;
+    }
+    #stch-log .ok, #stch-craft-log .ok { color: #75b022; }
+    #stch-log .warn, #stch-craft-log .warn { color: #ffc902; }
+    #stch-log .warn-ip, #stch-craft-log .warn-ip { color: #fff; }
+    #stch-log .err, #stch-craft-log .err { color: #c04040; }
+    #stch-log .info, #stch-craft-log .info { color: #67c1f5; }
 
     .stch-progress {
       height: 20px;
@@ -995,6 +1117,9 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .stch-craft-dialog-item {
+      grid-template-columns: minmax(0, 1fr) 70px 70px 70px;
+    }
     .stch-order-note {
       padding: 10px 16px;
       color: #ffc902;
@@ -1045,6 +1170,11 @@
     bulkActionRunning: false,
     pendingOrderQuantities: new Map(),
     highestBuyPrices: new Map(),
+    craftResults: [],
+    craftScanning: false,
+    craftActionRunning: false,
+    craftStopRequested: false,
+    craftQueue: null,
   };
 
   function openModal() {
@@ -1071,6 +1201,7 @@
         <div class="stch-tabs">
           <span class="stch-tab active" data-tab="scan">价格扫描</span>
           <span class="stch-tab stch-tab-disabled" title="未实现">闪卡价格扫描</span>
+          <span class="stch-tab" data-tab="craft">徽章合成</span>
           <span class="stch-tab" data-tab="blacklist">黑名单</span>
           <span class="stch-tab stch-tab-disabled" title="未实现">多余卡牌检测</span>
           <span class="stch-tab stch-tab-right" data-tab="settings">设置</span>
@@ -1078,7 +1209,7 @@
         <div class="stch-tab-content active" id="stch-tab-scan">
           <div class="stch-onboarding" id="stch-onboarding" style="display:none">
             <h3>欢迎使用 Steam 卡牌助手</h3>
-            <p class="stch-onboarding-intro">扫描未完成的徽章，比较卡牌成本，并更快地完成购买。</p>
+            <p class="stch-onboarding-intro">扫描未完成的徽章，比较卡牌成本，更快地完成购买和徽章合成。</p>
             <div class="stch-onboarding-step">
               <b>1. 设置并扫描</b>
               设置单套价格上限和购买逻辑后开始扫描。价格预测会在明显超出上限时提前跳过，减少请求和等待。
@@ -1091,8 +1222,12 @@
               <b>3. 理解购买价格</b>
               在售最低通常更快成交，平均价格用于参考，求购最高通常需要等待卖家成交。买价调整可正可负。
             </div>
+            <div class="stch-onboarding-step">
+              <b>4. 批量合成徽章</b>
+              在“徽章合成”页扫描已经收集齐全的卡组，可逐级升级或使用 Steam 原生的一次升满。
+            </div>
             <div class="stch-onboarding-note">
-              市场价格和满级成本均可能变化。提交前请检查数量、单价和总金额；长期订购单会保留到成交或手动取消。
+              市场价格和满级成本均可能变化。提交购买、订购单或合成前，请检查数量和目标等级。
             </div>
             <div class="stch-onboarding-actions">
               <div class="stch-btn" id="stch-onboarding-close">关闭</div>
@@ -1144,6 +1279,38 @@
           <div class="stch-game-list" id="stch-list"></div>
           <div id="stch-log"></div>
         </div>
+        <div class="stch-tab-content" id="stch-tab-craft">
+          <div class="stch-toolbar">
+            <label class="stch-primary-label">合成模式
+              <select id="stch-craft-mode" class="stch-input" style="width:100px">
+                <option value="step" ${state.cfg.craftMode === "step" ? "selected" : ""}>逐级升级</option>
+                <option value="max" ${state.cfg.craftMode === "max" ? "selected" : ""}>一次升满</option>
+              </select>
+            </label>
+            <label>最大徽章页数 <input id="stch-craft-max-pages" class="stch-input" type="number" min="1" max="20" value="${state.cfg.maxBadgePages}"></label>
+            <span style="color:#8f98a0;font-size:12px;">扫描“进行中”页面里已经收集齐全、可立即合成的徽章</span>
+          </div>
+          <div class="stch-scan-actions">
+            <div class="stch-btn" id="stch-craft-scan-btn">扫描可合成徽章</div>
+            <div class="stch-btn alt disabled" id="stch-craft-stop-btn">停止</div>
+            <div class="stch-craft-actions">
+              <div class="stch-btn alt disabled" id="stch-craft-one-btn">全部 1 次</div>
+              <div class="stch-btn alt disabled" id="stch-craft-max-btn">全部最大</div>
+              <div class="stch-btn alt disabled" id="stch-craft-clear-btn">全部清零</div>
+              <div class="stch-btn disabled" id="stch-craft-submit-btn">确认合成</div>
+            </div>
+          </div>
+          <div class="stch-progress" id="stch-craft-progress-wrap" style="display:none">
+            <div class="stch-progress-bar" id="stch-craft-progress-bar" style="width:0"></div>
+            <div class="stch-progress-text" id="stch-craft-progress-text">0/0</div>
+          </div>
+          <div class="stch-summary" id="stch-craft-summary-row" style="display:none">
+            <span class="stch-summary-text" id="stch-craft-summary"></span>
+          </div>
+          <div class="stch-status-text" id="stch-craft-status"></div>
+          <div class="stch-game-list stch-craft-list" id="stch-craft-list"></div>
+          <div id="stch-craft-log"></div>
+        </div>
         <div class="stch-tab-content" id="stch-tab-blacklist">
           <div class="stch-bl-form">
             <label>输入游戏 AppID <input id="stch-bl-appid" class="stch-input" type="text" style="width:100px" placeholder="例如: 1144400"></label>
@@ -1184,6 +1351,12 @@
             <span style="color:#8f98a0;font-size:12px;">扫描部分卡牌后保守预测全套价格，超过上限时提前跳过</span>
           </div>
           <div style="color:#8f98a0;font-size:12px;margin-top:4px;">默认值为作者测试稳定配置 (330ms / 53s)。如遇 429 可调高 100ms / 5s。gamecard 通常不需要调整，保持 0 即可。</div>
+          <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">徽章合成</div>
+          <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+          <div class="stch-toolbar">
+            <label>每次合成请求间隔 <input id="stch-craft-interval" class="stch-input" type="number" min="200" step="100" value="${state.cfg.craftInterval}" style="width:70px"> ms</label>
+            <span style="color:#8f98a0;font-size:12px;">逐级升级按每一级等待；一次升满按每个徽章等待</span>
+          </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">使用说明</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
@@ -1192,7 +1365,7 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.4.3 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.5.0 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -1204,7 +1377,8 @@
       "stch-req-interval", "stch-max-pages", "stch-include-drops",
       "stch-batch-size", "stch-batch-pause", "stch-buy-mode",
       "stch-order-price-source", "stch-price-adjustment",
-      "stch-early-price-prediction"];
+      "stch-early-price-prediction", "stch-craft-interval",
+      "stch-craft-mode"];
     cfgIds.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -1221,8 +1395,17 @@
         const adjustment = parseFloat(document.getElementById("stch-price-adjustment").value);
         state.cfg.priceAdjustment = Number.isFinite(adjustment) ? adjustment : 0;
         state.cfg.earlyPricePrediction = document.getElementById("stch-early-price-prediction").checked;
+        state.cfg.craftInterval = Math.max(
+          200,
+          parseInt(document.getElementById("stch-craft-interval").value, 10)
+            || DEFAULT_CONFIG.craftInterval
+        );
+        state.cfg.craftMode = document.getElementById("stch-craft-mode").value;
         saveConfig(state.cfg);
+        const craftMaxPages = document.getElementById("stch-craft-max-pages");
+        if (craftMaxPages) craftMaxPages.value = String(state.cfg.maxBadgePages);
         updateResultColumns();
+        if (id === "stch-craft-mode") renderCraftResults();
       });
     });
     document.getElementById("stch-price-adjustment").addEventListener("input", event => {
@@ -1265,6 +1448,21 @@
     document.getElementById("stch-skip-btn").addEventListener("click", skipCurrentBadge);
     document.getElementById("stch-recalculate-btn").addEventListener("click", recalculateSelectedResults);
     document.getElementById("stch-submit-orders-btn").addEventListener("click", submitSelectedBuyOrders);
+    document.getElementById("stch-craft-scan-btn").addEventListener("click", startCraftScan);
+    document.getElementById("stch-craft-stop-btn").addEventListener("click", requestCraftStop);
+    document.getElementById("stch-craft-one-btn").addEventListener("click", () => setAllCraftCounts("one"));
+    document.getElementById("stch-craft-max-btn").addEventListener("click", () => setAllCraftCounts("max"));
+    document.getElementById("stch-craft-clear-btn").addEventListener("click", () => setAllCraftCounts("clear"));
+    document.getElementById("stch-craft-submit-btn").addEventListener("click", submitCraftPlan);
+    document.getElementById("stch-craft-max-pages").addEventListener("change", event => {
+      state.cfg.maxBadgePages = Math.max(
+        1,
+        parseInt(event.target.value, 10) || DEFAULT_CONFIG.maxBadgePages
+      );
+      const scanMaxPages = document.getElementById("stch-max-pages");
+      if (scanMaxPages) scanMaxPages.value = String(state.cfg.maxBadgePages);
+      saveConfig(state.cfg);
+    });
 
     // Auto blacklist threshold
     document.getElementById("stch-auto-bl-threshold").addEventListener("change", () => {
@@ -1418,10 +1616,14 @@
   }
 
   function closeModal() {
-    if (state.bulkActionRunning) return;
+    if (state.bulkActionRunning || state.craftActionRunning) return;
     if (state.scanning) {
       state.stopRequested = true;
       state.queue?.stop();
+    }
+    if (state.craftScanning) {
+      state.craftStopRequested = true;
+      state.craftQueue?.stop();
     }
     if (_stopTimeout) {
       clearTimeout(_stopTimeout);
@@ -1492,6 +1694,751 @@
   }
 
   // ============================================================
+  // Badge crafting
+  // ============================================================
+  let craftStatusTimer = null;
+
+  function craftLog(msg, type = "") {
+    const box = document.getElementById("stch-craft-log");
+    if (!box) { console.log("[STCH Craft]", msg); return; }
+    const line = document.createElement("div");
+    if (type) line.className = type;
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function setCraftStatus(text, animate = true) {
+    const el = document.getElementById("stch-craft-status");
+    if (!el) return;
+    if (craftStatusTimer) {
+      clearInterval(craftStatusTimer);
+      craftStatusTimer = null;
+    }
+    if (!text) {
+      el.textContent = "";
+      el.style.display = "none";
+      return;
+    }
+    el.style.display = "";
+    el.textContent = text;
+    if (!animate) return;
+    let dots = 0;
+    craftStatusTimer = setInterval(() => {
+      dots = (dots + 1) % 4;
+      el.textContent = text + " " + ".".repeat(dots);
+    }, 500);
+  }
+
+  function setCraftProgress(done, total, text = "") {
+    const wrap = document.getElementById("stch-craft-progress-wrap");
+    const bar = document.getElementById("stch-craft-progress-bar");
+    const label = document.getElementById("stch-craft-progress-text");
+    if (!wrap || !bar || !label) return;
+    wrap.style.display = "";
+    const pct = total > 0 ? Math.min(100, done / total * 100) : 0;
+    bar.style.width = `${pct}%`;
+    label.textContent = text || `${done}/${total}`;
+  }
+
+  function hideCraftProgress() {
+    const wrap = document.getElementById("stch-craft-progress-wrap");
+    if (wrap) wrap.style.display = "none";
+  }
+
+  function getCraftPlan() {
+    return state.craftResults
+      .filter(result => result.selected && result.maxCraftable > 0)
+      .map(result => ({
+        result,
+        count: state.cfg.craftMode === "max"
+          ? result.maxCraftable
+          : Math.max(
+            0,
+            Math.min(result.maxCraftable, parseInt(result.craftCount, 10) || 0)
+          ),
+      }))
+      .filter(item => item.count > 0);
+  }
+
+  function updateCraftSummary() {
+    const row = document.getElementById("stch-craft-summary-row");
+    const summary = document.getElementById("stch-craft-summary");
+    if (!row || !summary) return;
+
+    if (state.craftResults.length === 0) {
+      row.style.display = "none";
+      summary.textContent = "";
+      return;
+    }
+
+    const plan = getCraftPlan();
+    const totalLevels = plan.reduce((sum, item) => sum + item.count, 0);
+    const totalAvailable = state.craftResults.reduce(
+      (sum, result) => sum + result.maxCraftable,
+      0
+    );
+    summary.innerHTML =
+      `共 <b>${state.craftResults.length}</b> 个可合成徽章 · ` +
+      `可合成 <b>${totalAvailable}</b> 次 · ` +
+      `已选择 <b>${plan.length}</b> 个 / <b>${totalLevels}</b> 次`;
+    row.style.display = "";
+  }
+
+  function updateCraftActionState() {
+    const craftBusy = state.craftScanning || state.craftActionRunning;
+    const otherBusy = state.scanning || state.bulkActionRunning;
+    const hasResults = state.craftResults.length > 0;
+    const hasPlan = getCraftPlan().length > 0;
+
+    document.getElementById("stch-craft-scan-btn")?.classList.toggle(
+      "disabled",
+      craftBusy || otherBusy
+    );
+    document.getElementById("stch-craft-stop-btn")?.classList.toggle(
+      "disabled",
+      !craftBusy
+    );
+    ["stch-craft-one-btn", "stch-craft-max-btn", "stch-craft-clear-btn"]
+      .forEach(id => {
+        const modeDisabled = id === "stch-craft-one-btn"
+          && state.cfg.craftMode === "max";
+        document.getElementById(id)?.classList.toggle(
+          "disabled",
+          !hasResults || craftBusy || otherBusy || modeDisabled
+        );
+      });
+    document.getElementById("stch-craft-submit-btn")?.classList.toggle(
+      "disabled",
+      !hasPlan || craftBusy || otherBusy
+    );
+    const craftMode = document.getElementById("stch-craft-mode");
+    const craftMaxPages = document.getElementById("stch-craft-max-pages");
+    if (craftMode) craftMode.disabled = craftBusy || otherBusy;
+    if (craftMaxPages) craftMaxPages.disabled = craftBusy || otherBusy;
+  }
+
+  function renderCraftResults() {
+    const list = document.getElementById("stch-craft-list");
+    if (!list) return;
+    list.innerHTML = "";
+
+    if (state.craftResults.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "stch-game-row";
+      empty.textContent = state.craftScanning
+        ? "正在读取可合成徽章..."
+        : "尚未扫描可合成徽章";
+      list.appendChild(empty);
+      updateCraftSummary();
+      updateCraftActionState();
+      return;
+    }
+
+    const header = document.createElement("div");
+    header.className = "stch-game-row stch-craft-row stch-row-header";
+    header.innerHTML = `
+      <span class="stch-appid">游戏ID</span>
+      <span class="stch-name">游戏名</span>
+      <span class="stch-level">当前</span>
+      <span class="stch-craft-available">可合成</span>
+      <span class="stch-craft-count">本次</span>
+      <span class="stch-craft-target">目标</span>
+      <span class="stch-craft-status">状态</span>
+      <span class="stch-check"><input class="stch-result-cb" id="stch-craft-select-all" type="checkbox" title="全选"></span>
+    `;
+    list.appendChild(header);
+
+    const selectAll = header.querySelector("#stch-craft-select-all");
+    const selectedCount = state.craftResults.filter(result => result.selected).length;
+    selectAll.checked = selectedCount === state.craftResults.length;
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < state.craftResults.length;
+    selectAll.disabled = state.craftScanning || state.craftActionRunning;
+    selectAll.addEventListener("change", event => {
+      state.craftResults.forEach(result => {
+        if (result.maxCraftable <= 0) return;
+        result.selected = event.target.checked;
+        if (event.target.checked && result.craftCount <= 0) {
+          result.craftCount = result.maxCraftable;
+        }
+      });
+      renderCraftResults();
+    });
+
+    state.craftResults.forEach(result => {
+      const row = document.createElement("div");
+      row.className = "stch-game-row stch-craft-row";
+      row.dataset.key = getResultKey(result);
+
+      const appid = createTextSpan("stch-appid", result.appid);
+      const name = createTextSpan(
+        "stch-name",
+        `${result.gameName}${result.isFoil ? "（闪亮）" : ""}`
+      );
+      name.title = result.gameName;
+      const level = createTextSpan("stch-level", `Lv${result.level}`);
+      const available = createTextSpan(
+        "stch-craft-available",
+        `${result.maxCraftable} 次`
+      );
+
+      const countCell = document.createElement("span");
+      countCell.className = "stch-craft-count";
+      const countInput = document.createElement("input");
+      countInput.className = "stch-input";
+      countInput.type = "number";
+      countInput.min = "0";
+      countInput.max = String(result.maxCraftable);
+      countInput.step = "1";
+      const displayedCraftCount = state.cfg.craftMode === "max"
+        ? result.maxCraftable
+        : Math.max(0, Math.min(result.maxCraftable, result.craftCount || 0));
+      countInput.value = String(displayedCraftCount);
+      countInput.title = state.cfg.craftMode === "max"
+        ? "一次升满使用 Steam 页面给出的原生最大次数"
+        : "输入本次要逐级合成的次数";
+      countInput.disabled = state.craftScanning
+        || state.craftActionRunning
+        || state.cfg.craftMode === "max"
+        || result.maxCraftable <= 0;
+      countCell.appendChild(countInput);
+
+      const target = createTextSpan(
+        "stch-craft-target",
+        `Lv${result.level + (parseInt(countInput.value, 10) || 0)}`
+      );
+      const status = createTextSpan(
+        `stch-craft-status ${result.statusType || ""}`.trim(),
+        result.status || "待合成"
+      );
+      const checkCell = document.createElement("span");
+      checkCell.className = "stch-check";
+      const checkbox = document.createElement("input");
+      checkbox.className = "stch-result-cb";
+      checkbox.type = "checkbox";
+      checkbox.checked = !!result.selected;
+      checkbox.disabled = state.craftScanning
+        || state.craftActionRunning
+        || result.maxCraftable <= 0;
+      checkCell.appendChild(checkbox);
+
+      checkbox.addEventListener("change", () => {
+        result.selected = checkbox.checked;
+        if (result.selected && result.craftCount <= 0) {
+          result.craftCount = result.maxCraftable;
+          countInput.value = String(result.craftCount);
+          target.textContent = `Lv${result.level + result.craftCount}`;
+        }
+        updateCraftSummary();
+        updateCraftActionState();
+      });
+
+      countInput.addEventListener("input", () => {
+        const value = Math.max(
+          0,
+          Math.min(result.maxCraftable, parseInt(countInput.value, 10) || 0)
+        );
+        result.craftCount = value;
+        result.selected = value > 0;
+        checkbox.checked = result.selected;
+        target.textContent = `Lv${result.level + value}`;
+        updateCraftSummary();
+        updateCraftActionState();
+      });
+      countInput.addEventListener("change", () => {
+        countInput.value = String(result.craftCount);
+      });
+
+      row.append(appid, name, level, available, countCell, target, status, checkCell);
+      list.appendChild(row);
+    });
+
+    updateCraftSummary();
+    updateCraftActionState();
+  }
+
+  function setAllCraftCounts(mode) {
+    if (
+      state.craftScanning
+      || state.craftActionRunning
+      || state.scanning
+      || state.bulkActionRunning
+    ) {
+      return;
+    }
+    if (mode === "one" && state.cfg.craftMode === "max") return;
+
+    state.craftResults.forEach(result => {
+      if (mode === "clear") {
+        result.craftCount = 0;
+        result.selected = false;
+      } else if (result.maxCraftable > 0) {
+        result.craftCount = mode === "one" ? 1 : result.maxCraftable;
+        result.selected = true;
+      }
+    });
+    renderCraftResults();
+  }
+
+  async function startCraftScan() {
+    if (
+      state.craftScanning
+      || state.craftActionRunning
+      || state.scanning
+      || state.bulkActionRunning
+    ) {
+      return;
+    }
+
+    const profileUrl = getProfileUrl();
+    if (!profileUrl) {
+      craftLog("未找到 Steam 个人资料地址", "err");
+      return;
+    }
+
+    state.craftScanning = true;
+    state.craftStopRequested = false;
+    state.craftResults = [];
+    const logBox = document.getElementById("stch-craft-log");
+    if (logBox) logBox.innerHTML = "";
+    renderCraftResults();
+    updateCraftActionState();
+    updateBulkActionState();
+    setCraftStatus("扫描可合成徽章");
+
+    const cfg = state.cfg;
+    const queue = new RequestQueue(
+      cfg.requestInterval,
+      cfg.batchSize,
+      cfg.batchPause,
+      null,
+      null,
+      craftLog,
+      cfg.scanInterval
+    );
+    state.craftQueue = queue;
+
+    const maxPages = Math.max(
+      1,
+      parseInt(
+        document.getElementById("stch-craft-max-pages")?.value,
+        10
+      ) || cfg.maxBadgePages
+    );
+    const candidates = [];
+    const seen = new Set();
+    const blacklist = new Set(
+      (cfg.blacklist || "").split(",").map(value => value.trim()).filter(Boolean)
+    );
+
+    try {
+      for (let page = 1; page <= maxPages; page++) {
+        if (state.craftStopRequested) break;
+        setCraftProgress(page - 1, maxPages, `读取徽章页 ${page}/${maxPages}`);
+        const response = await queue.fetch(
+          `${profileUrl}/badges/?sort=p&p=${page}`
+        );
+        const pageCandidates = parseCraftCandidatesHtml(response.text || "");
+
+        for (const candidate of pageCandidates) {
+          const key = getResultKey(candidate);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          if (blacklist.has(String(candidate.appid))) {
+            craftLog(
+              `[${candidate.appid}] ${candidate.gameName}: 位于黑名单，跳过`,
+              "info"
+            );
+            continue;
+          }
+          candidates.push(candidate);
+        }
+
+        craftLog(
+          `徽章页 ${page}: 找到 ${pageCandidates.length} 个可合成入口`,
+          "info"
+        );
+        const doc = new DOMParser().parseFromString(
+          response.text || "",
+          "text/html"
+        );
+        const nextLink = doc.querySelector(
+          `a.pagebtn[href*="p=${page + 1}"]`
+        );
+        if (!nextLink) break;
+      }
+
+      if (state.craftStopRequested) {
+        craftLog("已停止扫描", "warn");
+        return;
+      }
+      if (candidates.length === 0) {
+        craftLog("没有找到可立即合成的徽章", "warn");
+        return;
+      }
+
+      craftLog(`找到 ${candidates.length} 个候选徽章，开始读取卡组数量`);
+      for (let index = 0; index < candidates.length; index++) {
+        if (state.craftStopRequested) break;
+        const candidate = candidates[index];
+        setCraftProgress(
+          index,
+          candidates.length,
+          `读取卡组 ${index + 1}/${candidates.length} · ${candidate.gameName}`
+        );
+        setCraftStatus(`读取卡组: ${candidate.gameName}`);
+        try {
+          const suffix = candidate.isFoil ? "?border=1" : "";
+          const response = await queue.fetch(
+            `${profileUrl}/gamecards/${candidate.appid}/${suffix}`
+          );
+          const result = parseCraftableGameCardsHtml(
+            response.text || "",
+            candidate
+          );
+          if (result.maxCraftable <= 0) {
+            craftLog(
+              `[${candidate.appid}] ${candidate.gameName}: 页面已不可合成，跳过`,
+              "warn"
+            );
+            continue;
+          }
+          state.craftResults.push(result);
+          craftLog(
+            `[${result.appid}] ${result.gameName}: Lv${result.level}，可合成 ${result.maxCraftable} 次`,
+            "ok"
+          );
+        } catch (error) {
+          if (state.craftStopRequested) break;
+          craftLog(
+            `[${candidate.appid}] ${candidate.gameName}: 读取失败 ${error?.message || error?.status || error}`,
+            "err"
+          );
+        }
+      }
+
+      state.craftResults.sort((left, right) =>
+        left.gameName.localeCompare(right.gameName, "zh-CN")
+      );
+      renderCraftResults();
+      if (state.craftStopRequested) {
+        craftLog("已停止扫描", "warn");
+      } else {
+        const total = state.craftResults.reduce(
+          (sum, result) => sum + result.maxCraftable,
+          0
+        );
+        craftLog(
+          `扫描完成：${state.craftResults.length} 个徽章，可合成 ${total} 次`,
+          "ok"
+        );
+      }
+    } catch (error) {
+      if (!state.craftStopRequested) {
+        craftLog(`扫描中断: ${error?.message || error?.status || error}`, "err");
+      }
+    } finally {
+      queue.stop();
+      state.craftQueue = null;
+      state.craftScanning = false;
+      state.craftStopRequested = false;
+      hideCraftProgress();
+      setCraftStatus(null);
+      renderCraftResults();
+      updateCraftActionState();
+      updateBulkActionState();
+    }
+  }
+
+  function showCraftConfirmation(plan, craftMode) {
+    return new Promise(resolve => {
+      const totalLevels = plan.reduce((sum, item) => sum + item.count, 0);
+      const craftModeLabel = craftMode === "max"
+        ? "一次升满"
+        : "逐级升级";
+      const backdrop = document.createElement("div");
+      backdrop.id = "stch-order-dialog-backdrop";
+      backdrop.innerHTML = `
+        <div class="stch-order-dialog">
+          <h3>确认批量合成徽章</h3>
+          <div class="stch-order-summary">
+            游戏 <b>${plan.length}</b> 个 · 合成 <b>${totalLevels}</b> 次 ·
+            预计增加 <b>${totalLevels * 100}</b> XP ·
+            模式 <b>${craftModeLabel}</b>
+          </div>
+          <div class="stch-order-list"></div>
+          <div class="stch-order-note">
+            ${craftMode === "max"
+              ? "每个徽章会按所选次数提交一次合成请求。"
+              : "每一级都会独立提交一次合成请求。"}
+            若请求结果不确定，脚本会立即停止且不会自动重试，请重新扫描后再继续。
+          </div>
+          <div class="stch-order-dialog-actions">
+            <div class="stch-btn alt" data-action="cancel">取消</div>
+            <div class="stch-btn" data-action="confirm">开始合成</div>
+          </div>
+        </div>
+      `;
+
+      const list = backdrop.querySelector(".stch-order-list");
+      plan.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "stch-order-item stch-craft-dialog-item";
+        row.appendChild(createTextSpan("", item.result.gameName));
+        row.appendChild(createTextSpan("", `Lv${item.result.level}`));
+        row.appendChild(createTextSpan("", `${item.count} 次`));
+        row.appendChild(
+          createTextSpan("", `Lv${item.result.level + item.count}`)
+        );
+        list.appendChild(row);
+      });
+
+      const finish = confirmed => {
+        backdrop.remove();
+        resolve(confirmed);
+      };
+      backdrop.querySelector('[data-action="cancel"]')
+        .addEventListener("click", () => finish(false));
+      backdrop.querySelector('[data-action="confirm"]')
+        .addEventListener("click", () => finish(true));
+      backdrop.addEventListener("click", event => {
+        if (event.target === backdrop) finish(false);
+      });
+      document.body.appendChild(backdrop);
+    });
+  }
+
+  async function createBadgeCraftRequest(result, levels = 1) {
+    const profileUrl = getProfileUrl();
+    const sessionId = getSessionId();
+    if (!profileUrl) throw new Error("未找到 Steam 个人资料地址");
+    if (!sessionId) throw new Error("未找到 Steam sessionid");
+
+    const requestedLevels = Math.max(1, parseInt(levels, 10) || 1);
+    if (requestedLevels > result.maxCraftable) {
+      throw new Error("合成次数超过 Steam 当前允许的最大值");
+    }
+
+    const body = new URLSearchParams({
+      appid: String(result.appid),
+      series: "1",
+      border_color: result.isFoil ? "1" : "0",
+      levels: String(requestedLevels),
+      sessionid: sessionId,
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    let response;
+    try {
+      response = await window.fetch(`${profileUrl}/ajaxcraftbadge/`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: body.toString(),
+        signal: controller.signal,
+      });
+    } catch (cause) {
+      clearTimeout(timeoutId);
+      const message = cause?.name === "AbortError"
+        ? "请求超时"
+        : `网络错误: ${cause?.message || cause}`;
+      const error = new Error(message);
+      error.uncertain = true;
+      throw error;
+    }
+
+    let text;
+    try {
+      text = await response.text();
+    } catch (cause) {
+      const error = new Error(`响应读取失败: ${cause?.message || cause}`);
+      error.uncertain = true;
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    let data = null;
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      const error = new Error(`Steam 返回了无法识别的响应 (${response.status})`);
+      error.status = response.status;
+      error.uncertain = response.ok || response.status >= 500;
+      throw error;
+    }
+
+    if (response.ok && data?.success === 1) return data;
+
+    const error = new Error(
+      data?.message || `合成失败 (${response.status || "unknown"})`
+    );
+    error.status = response.status;
+    error.uncertain = response.status >= 500;
+    throw error;
+  }
+
+  async function submitCraftPlan() {
+    if (
+      state.craftScanning
+      || state.craftActionRunning
+      || state.scanning
+      || state.bulkActionRunning
+    ) {
+      return;
+    }
+
+    const plan = getCraftPlan();
+    if (plan.length === 0) return;
+    const craftMode = state.cfg.craftMode === "max" ? "max" : "step";
+    const confirmed = await showCraftConfirmation(plan, craftMode);
+    if (!confirmed) return;
+
+    state.craftActionRunning = true;
+    state.craftStopRequested = false;
+    updateCraftActionState();
+    updateBulkActionState();
+    renderCraftResults();
+
+    const totalLevels = plan.reduce((sum, item) => sum + item.count, 0);
+    let completedLevels = 0;
+    let failedGames = 0;
+    let uncertain = false;
+
+    try {
+      for (const item of plan) {
+        if (state.craftStopRequested || uncertain) break;
+        const result = item.result;
+        let itemCompleted = 0;
+        result.status = "合成中";
+        result.statusType = "warn";
+        renderCraftResults();
+
+        while (itemCompleted < item.count) {
+          if (state.craftStopRequested) break;
+          const requestLevels = craftMode === "max"
+            ? item.count - itemCompleted
+            : 1;
+          setCraftStatus(
+            `合成 ${Math.min(totalLevels, completedLevels + requestLevels)}/${totalLevels}: ${result.gameName}`
+          );
+          try {
+            const data = await createBadgeCraftRequest(result, requestLevels);
+            completedLevels += requestLevels;
+            itemCompleted += requestLevels;
+            result.level += requestLevels;
+            result.availableSets = Math.max(
+              0,
+              result.availableSets - requestLevels
+            );
+            result.maxCraftable = Math.max(
+              0,
+              result.maxCraftable - requestLevels
+            );
+            result.craftCount = Math.max(0, item.count - itemCompleted);
+
+            const rewards = (data.rgDroppedItems || [])
+              .map(reward => reward.title)
+              .filter(Boolean);
+            craftLog(
+              `✓ ${result.gameName}: 已合成 ${requestLevels} 次，至 Lv${result.level}` +
+              `${rewards.length ? `，获得 ${rewards.join("、")}` : ""}`,
+              "ok"
+            );
+            setCraftProgress(
+              completedLevels,
+              totalLevels,
+              `已合成 ${completedLevels}/${totalLevels} 次`
+            );
+          } catch (error) {
+            failedGames++;
+            result.status = error.uncertain ? "结果不确定" : "失败";
+            result.statusType = "err";
+            craftLog(
+              `✗ ${result.gameName}: ${error?.message || error}`,
+              "err"
+            );
+            if (error.uncertain) {
+              uncertain = true;
+              state.craftStopRequested = true;
+              craftLog(
+                "请求可能已经被 Steam 执行，已停止后续合成；请刷新或重新扫描确认实际等级",
+                "warn"
+              );
+            } else if (error.status === 429) {
+              state.craftStopRequested = true;
+              craftLog(
+                "Steam 返回 429，已停止后续合成；请稍后重新扫描再继续",
+                "warn"
+              );
+            }
+            break;
+          }
+
+          if (
+            completedLevels < totalLevels
+            && !state.craftStopRequested
+            && !uncertain
+          ) {
+            await new Promise(resolve =>
+              setTimeout(resolve, Math.max(200, state.cfg.craftInterval))
+            );
+          }
+        }
+
+        result.selected = false;
+        result.craftCount = 0;
+        if (!result.statusType || result.statusType !== "err") {
+          if (itemCompleted === item.count) {
+            result.status = "已完成";
+            result.statusType = "ok";
+          } else if (itemCompleted > 0) {
+            result.status = "部分完成";
+            result.statusType = "warn";
+          } else if (state.craftStopRequested) {
+            result.status = "已停止";
+            result.statusType = "warn";
+          }
+        }
+        renderCraftResults();
+      }
+
+      if (state.craftStopRequested && !uncertain) {
+        craftLog("已按请求停止后续合成", "warn");
+      }
+      craftLog(
+        `批量合成结束：成功 ${completedLevels}/${totalLevels} 次，失败 ${failedGames} 个游戏`,
+        failedGames || state.craftStopRequested ? "warn" : "ok"
+      );
+    } finally {
+      state.craftActionRunning = false;
+      state.craftStopRequested = false;
+      hideCraftProgress();
+      setCraftStatus(null);
+      renderCraftResults();
+      updateCraftActionState();
+      updateBulkActionState();
+    }
+  }
+
+  function requestCraftStop() {
+    if (!state.craftScanning && !state.craftActionRunning) return;
+    state.craftStopRequested = true;
+    state.craftQueue?.stop();
+    craftLog(
+      state.craftActionRunning
+        ? "已请求停止，将在当前合成请求结束后停止"
+        : "已请求停止扫描",
+      "warn"
+    );
+    updateCraftActionState();
+  }
+
+  // ============================================================
   // Scan flow
   // ============================================================
   function setScanPhase(phase) {
@@ -1520,9 +2467,20 @@
     const countEl = document.getElementById("stch-selected-count");
     if (countEl) countEl.textContent = `已选择 ${selectedCount} 项`;
 
-    const disabled = selectedCount === 0 || state.scanning || state.bulkActionRunning;
+    const disabled = selectedCount === 0
+      || state.scanning
+      || state.bulkActionRunning
+      || state.craftScanning
+      || state.craftActionRunning;
     document.getElementById("stch-recalculate-btn")?.classList.toggle("disabled", disabled);
     document.getElementById("stch-submit-orders-btn")?.classList.toggle("disabled", disabled);
+    document.getElementById("stch-scan-btn")?.classList.toggle(
+      "disabled",
+      state.scanning
+        || state.bulkActionRunning
+        || state.craftScanning
+        || state.craftActionRunning
+    );
 
     const selectAll = document.getElementById("stch-result-select-all");
     if (selectAll) {
@@ -1637,10 +2595,19 @@
 
   async function recalculateSelectedResults() {
     const selected = getSelectedResults();
-    if (selected.length === 0 || state.scanning || state.bulkActionRunning) return;
+    if (
+      selected.length === 0
+      || state.scanning
+      || state.bulkActionRunning
+      || state.craftScanning
+      || state.craftActionRunning
+    ) {
+      return;
+    }
 
     state.bulkActionRunning = true;
     updateBulkActionState();
+    updateCraftActionState();
     const cfg = state.cfg;
     const queue = new RequestQueue(
       cfg.requestInterval,
@@ -1691,12 +2658,20 @@
       renderResults();
       updateSummary();
       updateBulkActionState();
+      updateCraftActionState();
       log(`选中项重算结束: 成功 ${refreshed}, 失败 ${failed}`, failed ? "warn" : "ok");
     }
   }
 
   async function startScan() {
-    if (state.scanning) return;
+    if (
+      state.scanning
+      || state.bulkActionRunning
+      || state.craftScanning
+      || state.craftActionRunning
+    ) {
+      return;
+    }
     if (_stopTimeout) { clearTimeout(_stopTimeout); _stopTimeout = null; }
     state.scanning = true;
     state.stopRequested = false;
@@ -1711,6 +2686,7 @@
     document.getElementById("stch-skip-btn").classList.remove("disabled");
     document.getElementById("stch-stop-btn").classList.remove("disabled");
     updateBulkActionState();
+    updateCraftActionState();
     setScanPhase("scanning");
     setStatus("正在扫描徽章页");
 
@@ -2042,6 +3018,7 @@
       document.getElementById("stch-skip-btn")?.classList.add("disabled");
       document.getElementById("stch-stop-btn")?.classList.add("disabled");
       updateBulkActionState();
+      updateCraftActionState();
     }
   }
 
@@ -2681,10 +3658,19 @@
 
   async function submitSelectedBuyOrders() {
     const selected = getSelectedResults();
-    if (selected.length === 0 || state.scanning || state.bulkActionRunning) return;
+    if (
+      selected.length === 0
+      || state.scanning
+      || state.bulkActionRunning
+      || state.craftScanning
+      || state.craftActionRunning
+    ) {
+      return;
+    }
 
     state.bulkActionRunning = true;
     updateBulkActionState();
+    updateCraftActionState();
     let submitted = 0;
     let failed = 0;
     try {
@@ -2733,6 +3719,7 @@
       state.bulkActionRunning = false;
       setStatus(null);
       updateBulkActionState();
+      updateCraftActionState();
     }
   }
 
