@@ -2,9 +2,9 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.5.8
-// @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, and buy seasonal badge levels
-// @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章并购买季节徽章等级
+// @version      1.6.0
+// @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, and find surplus cards
+// @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级并检测多余卡牌
 // @author       SpaceSyt
 // @homepageURL  https://github.com/SpaceSyt/Steam-Trading-Card-Helper
 // @supportURL   https://github.com/SpaceSyt/Steam-Trading-Card-Helper/issues
@@ -13,6 +13,9 @@
 // @match        *://steamcommunity.com/*/badges*
 // @match        *://steamcommunity.com/id/*/badges*
 // @match        *://steamcommunity.com/profiles/*/badges*
+// @match        *://steamcommunity.com/*/inventory*
+// @match        *://steamcommunity.com/id/*/inventory*
+// @match        *://steamcommunity.com/profiles/*/inventory*
 // @match        *://steamcommunity.com/market/multibuy*
 // @match        *://store.steampowered.com/points/shop*
 // @grant        GM_addStyle
@@ -21,6 +24,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @connect      store.steampowered.com
+// @connect      steamcommunity.com
 // @connect      api.steampowered.com
 // @license      MIT
 // ==/UserScript==
@@ -38,7 +42,7 @@
   // Constants
   // ============================================================
   const DEFAULT_CONFIG = {
-    configVersion: 7,
+    configVersion: 8,
     threshold: 5,
     scanInterval: 0,
     requestInterval: 330,
@@ -61,6 +65,7 @@
     craftMode: "step",
     seasonalTargetLevel: 40,
     seasonalInterval: 200,
+    surplusOnlyMaxed: false,
   };
   // Update these manually for each seasonal sale.
   const SEASONAL_BADGE_NAME = "2026 夏季徽章";
@@ -93,8 +98,32 @@
   function getProfileUrl() {
     const url = unsafeWindow.g_strProfileURL
       || document.querySelector("#global_actions a.user_avatar")?.href
+      || document.querySelector(".user_avatar[href*='/id/'], .user_avatar[href*='/profiles/']")?.href
       || null;
     return url ? url.replace(/\/$/, "") : null;
+  }
+
+  function getSteamId() {
+    const direct = String(unsafeWindow.g_steamID || "").trim();
+    if (/^\d{17}$/.test(direct)) return direct;
+
+    const config = document.getElementById("application_config");
+    const userInfoRaw = config?.getAttribute("data-userinfo") || "";
+    if (userInfoRaw) {
+      try {
+        const userInfo = JSON.parse(decodeHtmlEntities(userInfoRaw));
+        if (/^\d{17}$/.test(String(userInfo?.steamid || ""))) {
+          return String(userInfo.steamid);
+        }
+      } catch (_) {}
+    }
+
+    const profileUrl = getProfileUrl() || "";
+    const profileMatch = profileUrl.match(/\/profiles\/(\d{17})(?:\/|$)/);
+    if (profileMatch) return profileMatch[1];
+
+    const htmlMatch = document.documentElement.innerHTML.match(/g_steamID\s*=\s*["'](\d{17})["']/);
+    return htmlMatch ? htmlMatch[1] : "";
   }
 
   function formatCNY(cents) {
@@ -152,6 +181,7 @@
           this.stopped
           || this.state?.stopRequested
           || this.state?.skipCurrent
+          || this.state?.surplusStopRequested
         ) {
           return false;
         }
@@ -391,7 +421,14 @@
       if (qtyNode) {
         name = name.replace(qtyNode.textContent, "").trim();
       }
-      cardList.push({ name, owned, marketHashName: "", idx });
+      let marketHashName = "";
+      const marketLink = el.querySelector('a[href*="/market/listings/"]');
+      const href = marketLink?.getAttribute("href") || "";
+      const marketMatch = href.match(/\/market\/listings\/\d+\/(.+?)(?:\?|#|$)/);
+      if (marketMatch) {
+        try { marketHashName = decodeURIComponent(marketMatch[1]); } catch (_) { marketHashName = marketMatch[1]; }
+      }
+      cardList.push({ name, owned, marketHashName, idx });
     });
 
     // Primary: match market hash names from multibuy URL (has ALL cards, IN ORDER)
@@ -872,6 +909,55 @@
       gap: 10px;
       margin-left: auto;
     }
+    .stch-surplus-list {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+    }
+    .stch-surplus-row .stch-name {
+      flex: 0 0 190px;
+    }
+    .stch-surplus-row .stch-surplus-card {
+      flex: 1;
+      min-width: 120px;
+      color: #e2e2e2;
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .stch-surplus-row .stch-surplus-badge {
+      width: 72px;
+      flex-shrink: 0;
+      text-align: center;
+      color: #a1b053;
+      font-size: 12px;
+    }
+    .stch-surplus-row .stch-surplus-num {
+      width: 48px;
+      flex-shrink: 0;
+      text-align: center;
+      color: #c6d4df;
+      font-size: 12px;
+    }
+    .stch-surplus-row .stch-surplus-extra {
+      width: 70px;
+      flex-shrink: 0;
+      text-align: center;
+      color: #75b022;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .stch-surplus-row .stch-surplus-assets {
+      width: 150px;
+      flex-shrink: 0;
+      color: #8db7d7;
+      font-family: "Courier New", monospace;
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .stch-seasonal-panel {
       border: 1px solid #2a3f5a;
       border-radius: 3px;
@@ -1046,7 +1132,8 @@
 
     #stch-log,
     #stch-craft-log,
-    #stch-seasonal-log {
+    #stch-seasonal-log,
+    #stch-surplus-log {
       margin-top: 10px;
       flex: 1;
       min-height: 0;
@@ -1062,14 +1149,15 @@
       word-break: break-all;
     }
     #stch-craft-log,
-    #stch-seasonal-log {
+    #stch-seasonal-log,
+    #stch-surplus-log {
       flex: 0 0 19vh;
     }
-    #stch-log .ok, #stch-craft-log .ok, #stch-seasonal-log .ok { color: #75b022; }
-    #stch-log .warn, #stch-craft-log .warn, #stch-seasonal-log .warn { color: #ffc902; }
-    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-seasonal-log .warn-ip { color: #fff; }
-    #stch-log .err, #stch-craft-log .err, #stch-seasonal-log .err { color: #c04040; }
-    #stch-log .info, #stch-craft-log .info, #stch-seasonal-log .info { color: #67c1f5; }
+    #stch-log .ok, #stch-craft-log .ok, #stch-seasonal-log .ok, #stch-surplus-log .ok { color: #75b022; }
+    #stch-log .warn, #stch-craft-log .warn, #stch-seasonal-log .warn, #stch-surplus-log .warn { color: #ffc902; }
+    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-seasonal-log .warn-ip, #stch-surplus-log .warn-ip { color: #fff; }
+    #stch-log .err, #stch-craft-log .err, #stch-seasonal-log .err, #stch-surplus-log .err { color: #c04040; }
+    #stch-log .info, #stch-craft-log .info, #stch-seasonal-log .info, #stch-surplus-log .info { color: #67c1f5; }
 
     .stch-progress {
       height: 20px;
@@ -1263,6 +1351,10 @@
     craftQueue: null,
     seasonalActionRunning: false,
     seasonalStopRequested: false,
+    surplusResults: [],
+    surplusScanning: false,
+    surplusStopRequested: false,
+    surplusQueue: null,
   };
 
   function openModal() {
@@ -1294,7 +1386,7 @@
           <span class="stch-tab" data-tab="craft">徽章合成</span>
           <span class="stch-tab ${activeClass("seasonal")}" data-tab="seasonal">季节徽章</span>
           <span class="stch-tab" data-tab="blacklist">黑名单</span>
-          <span class="stch-tab stch-tab-disabled" title="未实现">多余卡牌检测</span>
+          <span class="stch-tab" data-tab="surplus">多余卡牌检测</span>
           <span class="stch-tab stch-tab-right" data-tab="settings">设置</span>
         </div>
         <div class="stch-tab-content ${activeClass("scan")}" id="stch-tab-scan">
@@ -1444,6 +1536,29 @@
           <div class="stch-bl-list" id="stch-bl-list-fixed" style="max-height:100px;margin-top:8px;"></div>
           <div class="stch-bl-count" id="stch-bl-count"></div>
         </div>
+        <div class="stch-tab-content" id="stch-tab-surplus">
+          <div class="stch-toolbar">
+            <label>
+              <input id="stch-surplus-only-maxed" type="checkbox" ${state.cfg.surplusOnlyMaxed ? "checked" : ""}>
+              只显示当前已满级徽章
+            </label>
+            <span style="color:#8f98a0;font-size:12px;">默认计算升满后仍会剩余的卡牌</span>
+          </div>
+          <div class="stch-scan-actions">
+            <div class="stch-btn" id="stch-surplus-scan-btn">开始检测</div>
+            <div class="stch-btn alt disabled" id="stch-surplus-stop-btn">停止</div>
+          </div>
+          <div class="stch-progress" id="stch-surplus-progress-wrap" style="display:none">
+            <div class="stch-progress-bar" id="stch-surplus-progress-bar" style="width:0"></div>
+            <div class="stch-progress-text" id="stch-surplus-progress-text">0/0</div>
+          </div>
+          <div class="stch-summary" id="stch-surplus-summary-row" style="display:none">
+            <span class="stch-summary-text" id="stch-surplus-summary"></span>
+          </div>
+          <div class="stch-status-text" id="stch-surplus-status"></div>
+          <div class="stch-game-list stch-surplus-list" id="stch-surplus-list"></div>
+          <div id="stch-surplus-log"></div>
+        </div>
         <div class="stch-tab-content" id="stch-tab-settings">
           <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">价格扫描</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
@@ -1474,7 +1589,7 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.5.8 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.6.0 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -1487,7 +1602,8 @@
       "stch-batch-size", "stch-batch-pause", "stch-buy-mode",
       "stch-order-price-source", "stch-price-adjustment",
       "stch-early-price-prediction", "stch-craft-interval",
-      "stch-craft-mode", "stch-seasonal-target"];
+      "stch-craft-mode", "stch-seasonal-target",
+      "stch-surplus-only-maxed"];
     cfgIds.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -1504,6 +1620,7 @@
         const adjustment = parseFloat(document.getElementById("stch-price-adjustment").value);
         state.cfg.priceAdjustment = Number.isFinite(adjustment) ? adjustment : 0;
         state.cfg.earlyPricePrediction = document.getElementById("stch-early-price-prediction").checked;
+        state.cfg.surplusOnlyMaxed = document.getElementById("stch-surplus-only-maxed").checked;
         state.cfg.craftInterval = Math.max(
           200,
           parseInt(document.getElementById("stch-craft-interval").value, 10)
@@ -1523,6 +1640,7 @@
         if (craftMaxPages) craftMaxPages.value = String(state.cfg.maxBadgePages);
         updateResultColumns();
         if (id === "stch-craft-mode") renderCraftResults();
+        if (id === "stch-surplus-only-maxed") renderSurplusResults();
         if (id.startsWith("stch-seasonal-")) {
           normalizeSeasonalInputs();
           updateSeasonalSummary();
@@ -1577,6 +1695,8 @@
     document.getElementById("stch-craft-submit-btn").addEventListener("click", submitCraftPlan);
     document.getElementById("stch-seasonal-buy-btn").addEventListener("click", startSeasonalPurchase);
     document.getElementById("stch-seasonal-stop-btn").addEventListener("click", requestSeasonalStop);
+    document.getElementById("stch-surplus-scan-btn").addEventListener("click", startSurplusScan);
+    document.getElementById("stch-surplus-stop-btn").addEventListener("click", requestSurplusStop);
     document.getElementById("stch-craft-max-pages").addEventListener("change", event => {
       state.cfg.maxBadgePages = Math.max(
         1,
@@ -1734,6 +1854,8 @@
     normalizeSeasonalInputs();
     updateSeasonalActionState();
     updateSeasonalSummary();
+    updateSurplusActionState();
+    renderSurplusResults();
   }
 
   function skipCurrentBadge() {
@@ -1757,6 +1879,10 @@
     }
     if (state.seasonalActionRunning) {
       state.seasonalStopRequested = true;
+    }
+    if (state.surplusScanning) {
+      state.surplusStopRequested = true;
+      state.surplusQueue?.stop();
     }
     if (_stopTimeout) {
       clearTimeout(_stopTimeout);
@@ -1939,7 +2065,8 @@
     const otherBusy = state.scanning
       || state.bulkActionRunning
       || state.craftScanning
-      || state.craftActionRunning;
+      || state.craftActionRunning
+      || state.surplusScanning;
     const plan = (() => {
       const targetLevel = clampNumber(
         document.getElementById("stch-seasonal-target")?.value,
@@ -2196,6 +2323,7 @@
       || state.bulkActionRunning
       || state.craftScanning
       || state.craftActionRunning
+      || state.surplusScanning
     ) {
       return;
     }
@@ -2212,6 +2340,7 @@
     updateSeasonalActionState();
     updateBulkActionState();
     updateCraftActionState();
+    updateSurplusActionState();
     setSeasonalStatus("读取 Steam 点数商店");
 
     let completed = 0;
@@ -2287,6 +2416,7 @@
       updateSeasonalActionState();
       updateBulkActionState();
       updateCraftActionState();
+      updateSurplusActionState();
     }
   }
 
@@ -2393,7 +2523,8 @@
     const craftBusy = state.craftScanning || state.craftActionRunning;
     const otherBusy = state.scanning
       || state.bulkActionRunning
-      || state.seasonalActionRunning;
+      || state.seasonalActionRunning
+      || state.surplusScanning;
     const hasResults = state.craftResults.length > 0;
     const hasPlan = getCraftPlan().length > 0;
 
@@ -2461,7 +2592,8 @@
     selectAll.indeterminate = selectedCount > 0 && selectedCount < state.craftResults.length;
     selectAll.disabled = state.craftScanning
       || state.craftActionRunning
-      || state.seasonalActionRunning;
+      || state.seasonalActionRunning
+      || state.surplusScanning;
     selectAll.addEventListener("change", event => {
       state.craftResults.forEach(result => {
         if (result.maxCraftable <= 0) return;
@@ -2508,6 +2640,7 @@
       countInput.disabled = state.craftScanning
         || state.craftActionRunning
         || state.seasonalActionRunning
+        || state.surplusScanning
         || state.cfg.craftMode === "max"
         || result.maxCraftable <= 0;
       countCell.appendChild(countInput);
@@ -2529,6 +2662,7 @@
       checkbox.disabled = state.craftScanning
         || state.craftActionRunning
         || state.seasonalActionRunning
+        || state.surplusScanning
         || result.maxCraftable <= 0;
       checkCell.appendChild(checkbox);
 
@@ -2574,6 +2708,7 @@
       || state.scanning
       || state.bulkActionRunning
       || state.seasonalActionRunning
+      || state.surplusScanning
     ) {
       return;
     }
@@ -2598,6 +2733,7 @@
       || state.scanning
       || state.bulkActionRunning
       || state.seasonalActionRunning
+      || state.surplusScanning
     ) {
       return;
     }
@@ -2616,6 +2752,7 @@
     renderCraftResults();
     updateCraftActionState();
     updateBulkActionState();
+    updateSurplusActionState();
     setCraftStatus("扫描可合成徽章");
 
     const cfg = state.cfg;
@@ -2760,6 +2897,7 @@
       updateCraftActionState();
       updateBulkActionState();
       updateSeasonalActionState();
+      updateSurplusActionState();
     }
   }
 
@@ -2917,6 +3055,7 @@
     updateCraftActionState();
     updateBulkActionState();
     updateSeasonalActionState();
+    updateSurplusActionState();
     renderCraftResults();
 
     const totalLevels = plan.reduce((sum, item) => sum + item.count, 0);
@@ -3038,6 +3177,7 @@
       updateCraftActionState();
       updateBulkActionState();
       updateSeasonalActionState();
+      updateSurplusActionState();
     }
   }
 
@@ -3052,6 +3192,598 @@
       "warn"
     );
     updateCraftActionState();
+  }
+
+  // ============================================================
+  // Surplus card detection
+  // ============================================================
+  let surplusStatusTimer = null;
+
+  function surplusLog(msg, type = "") {
+    const box = document.getElementById("stch-surplus-log");
+    if (!box) { console.log("[STCH Surplus]", msg); return; }
+    const line = document.createElement("div");
+    if (type) line.className = type;
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function setSurplusStatus(text, animate = true) {
+    const el = document.getElementById("stch-surplus-status");
+    if (!el) return;
+    if (surplusStatusTimer) {
+      clearInterval(surplusStatusTimer);
+      surplusStatusTimer = null;
+    }
+    if (!text) {
+      el.textContent = "";
+      el.style.display = "none";
+      return;
+    }
+    el.style.display = "";
+    el.textContent = text;
+    if (!animate) return;
+    let dots = 0;
+    surplusStatusTimer = setInterval(() => {
+      dots = (dots + 1) % 4;
+      el.textContent = text + " " + ".".repeat(dots);
+    }, 500);
+  }
+
+  function setSurplusProgress(done, total, text = "") {
+    const wrap = document.getElementById("stch-surplus-progress-wrap");
+    const bar = document.getElementById("stch-surplus-progress-bar");
+    const label = document.getElementById("stch-surplus-progress-text");
+    if (!wrap || !bar || !label) return;
+    wrap.style.display = "";
+    const pct = total > 0 ? Math.min(100, done / total * 100) : 0;
+    bar.style.width = `${pct}%`;
+    label.textContent = text || `${done}/${total}`;
+  }
+
+  function hideSurplusProgress() {
+    const wrap = document.getElementById("stch-surplus-progress-wrap");
+    if (wrap) wrap.style.display = "none";
+  }
+
+  function getDescriptionKey(item) {
+    return `${item?.classid || ""}_${item?.instanceid || ""}`;
+  }
+
+  function getDescriptionTags(description) {
+    return Array.isArray(description?.tags) ? description.tags : [];
+  }
+
+  function findDescriptionTag(description, category, internalName = null) {
+    return getDescriptionTags(description).find(tag => {
+      if (String(tag?.category || "") !== category) return false;
+      return internalName == null || String(tag?.internal_name || "") === internalName;
+    }) || null;
+  }
+
+  function isTradingCardDescription(description) {
+    return !!findDescriptionTag(description, "item_class", "item_class_2");
+  }
+
+  function getCardGameAppid(description) {
+    const feeApp = String(description?.market_fee_app || "").trim();
+    if (/^\d+$/.test(feeApp)) return feeApp;
+    const gameTag = findDescriptionTag(description, "Game");
+    const match = String(gameTag?.internal_name || "").match(/^app_(\d+)$/);
+    return match ? match[1] : "";
+  }
+
+  function getCardGameName(description) {
+    const gameTag = findDescriptionTag(description, "Game");
+    return String(gameTag?.localized_tag_name || "").trim();
+  }
+
+  function isFoilCardDescription(description) {
+    return !!findDescriptionTag(description, "cardborder", "cardborder_1");
+  }
+
+  function normalizeCardName(name) {
+    return String(name || "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  function getAssetAmount(asset) {
+    return Math.max(1, parseInt(asset?.amount, 10) || 1);
+  }
+
+  function addInventoryCard(groupMap, asset, description) {
+    if (!description || !isTradingCardDescription(description)) return false;
+    const marketHashName = String(description.market_hash_name || "").trim();
+    const appid = getCardGameAppid(description);
+    if (!marketHashName || !appid) return false;
+
+    const isFoil = isFoilCardDescription(description);
+    const badgeKey = `${appid}_${isFoil ? 1 : 0}`;
+    let group = groupMap.get(badgeKey);
+    if (!group) {
+      group = {
+        appid,
+        isFoil,
+        gameName: getCardGameName(description),
+        cardsByHash: new Map(),
+        cardsByName: new Map(),
+        totalCount: 0,
+      };
+      groupMap.set(badgeKey, group);
+    }
+    if (!group.gameName) group.gameName = getCardGameName(description);
+
+    let card = group.cardsByHash.get(marketHashName);
+    if (!card) {
+      card = {
+        appid,
+        isFoil,
+        gameName: group.gameName,
+        name: String(description.name || marketHashName).trim(),
+        marketHashName,
+        totalCount: 0,
+        assets: [],
+      };
+      group.cardsByHash.set(marketHashName, card);
+      const nameKey = normalizeCardName(card.name);
+      if (nameKey && !group.cardsByName.has(nameKey)) {
+        group.cardsByName.set(nameKey, card);
+      }
+    }
+
+    const amount = getAssetAmount(asset);
+    card.totalCount += amount;
+    group.totalCount += amount;
+    card.assets.push({
+      assetid: String(asset.assetid || ""),
+      classid: String(asset.classid || ""),
+      instanceid: String(asset.instanceid || ""),
+      amount,
+      marketable: Number(description.marketable) === 1,
+      tradable: Number(description.tradable) === 1,
+    });
+    return true;
+  }
+
+  async function loadCommunityInventoryCards(steamId, queue) {
+    const groupMap = new Map();
+    const language = unsafeWindow.g_strLanguage || "schinese";
+    let startAssetId = "";
+    let page = 0;
+    let totalInventoryCount = 0;
+    let totalAssetsSeen = 0;
+    let totalCards = 0;
+
+    do {
+      page++;
+      const params = new URLSearchParams({
+        l: language,
+        count: "2000",
+      });
+      if (startAssetId) params.set("start_assetid", startAssetId);
+      const url = `https://steamcommunity.com/inventory/${steamId}/753/6?${params.toString()}`;
+      setSurplusStatus(`读取库存第 ${page} 页`);
+      const response = await queue.fetch(url);
+      const data = response?.data || {};
+      if (data?.success !== 1 && data?.success !== true) {
+        throw new Error(data?.Error || data?.error || "Steam 未返回可用库存数据");
+      }
+
+      totalInventoryCount = Number(data.total_inventory_count || totalInventoryCount) || totalInventoryCount;
+      const descriptions = new Map();
+      (Array.isArray(data.descriptions) ? data.descriptions : []).forEach(description => {
+        descriptions.set(getDescriptionKey(description), description);
+      });
+
+      const assets = Array.isArray(data.assets) ? data.assets : [];
+      totalAssetsSeen += assets.length;
+      for (const asset of assets) {
+        const description = descriptions.get(getDescriptionKey(asset));
+        if (addInventoryCard(groupMap, asset, description)) {
+          totalCards += getAssetAmount(asset);
+        }
+      }
+
+      surplusLog(
+        `库存第 ${page} 页：读取 ${assets.length} 件，累计卡牌 ${totalCards} 张`,
+        "info"
+      );
+      startAssetId = data.more_items && data.last_assetid
+        ? String(data.last_assetid)
+        : "";
+    } while (startAssetId && !state.surplusStopRequested);
+
+    const groups = [...groupMap.values()].sort((left, right) => {
+      const nameCompare = (left.gameName || "").localeCompare(right.gameName || "", "zh-CN");
+      if (nameCompare) return nameCompare;
+      if (left.appid !== right.appid) return Number(left.appid) - Number(right.appid);
+      return Number(left.isFoil) - Number(right.isFoil);
+    });
+
+    return {
+      groups,
+      totalInventoryCount,
+      totalAssetsSeen,
+      totalCards,
+      cardTypeCount: groups.reduce((sum, group) => sum + group.cardsByHash.size, 0),
+    };
+  }
+
+  function findInventoryCardForBadgeCard(group, badgeCard) {
+    if (badgeCard.marketHashName && group.cardsByHash.has(badgeCard.marketHashName)) {
+      return group.cardsByHash.get(badgeCard.marketHashName);
+    }
+    const nameKey = normalizeCardName(badgeCard.name);
+    return nameKey ? group.cardsByName.get(nameKey) || null : null;
+  }
+
+  function selectSurplusAssets(assets, surplusCount) {
+    const sorted = [...assets].sort((left, right) => {
+      const marketCompare = Number(right.marketable) - Number(left.marketable);
+      if (marketCompare) return marketCompare;
+      const tradeCompare = Number(right.tradable) - Number(left.tradable);
+      if (tradeCompare) return tradeCompare;
+      return String(left.assetid).localeCompare(String(right.assetid), "en");
+    });
+    const selected = [];
+    let remaining = surplusCount;
+    for (const asset of sorted) {
+      if (remaining <= 0) break;
+      const amount = Math.min(asset.amount, remaining);
+      selected.push({ ...asset, selectedAmount: amount });
+      remaining -= amount;
+    }
+    return selected;
+  }
+
+  function summarizeAssetIds(assets) {
+    const ids = assets.map(asset =>
+      asset.selectedAmount > 1
+        ? `${asset.assetid}x${asset.selectedAmount}`
+        : asset.assetid
+    );
+    const visible = ids.slice(0, 3).join(", ");
+    return {
+      text: ids.length > 3 ? `${visible} ...` : visible,
+      title: ids.join("\n"),
+    };
+  }
+
+  async function resolveSurplusForBadge(group, profileUrl, queue) {
+    const suffix = group.isFoil ? "?border=1" : "";
+    const response = await queue.fetch(`${profileUrl}/gamecards/${group.appid}/${suffix}`);
+    if (!response?.text?.includes("badge_card_set_card")) {
+      throw new Error("未找到卡牌套组");
+    }
+
+    const info = parseGameCardsHtml(response.text, group.appid, group.isFoil);
+    info.appid = group.appid;
+    info.isFoil = group.isFoil;
+    info.gameName = info.gameName || group.gameName || "";
+
+    const targetLevel = group.isFoil ? 1 : 5;
+    const level = Math.max(0, Number(info.level) || 0);
+    const badgeMaxed = level >= targetLevel;
+    const reservePerCard = Math.max(0, targetLevel - level);
+    const results = [];
+
+    for (const badgeCard of info.cards) {
+      const inventoryCard = findInventoryCardForBadgeCard(group, badgeCard);
+      if (!inventoryCard) continue;
+
+      const surplusCount = Math.max(0, inventoryCard.totalCount - reservePerCard);
+      if (surplusCount <= 0) continue;
+
+      const surplusAssets = selectSurplusAssets(inventoryCard.assets, surplusCount);
+      const marketableCount = surplusAssets.reduce(
+        (sum, asset) => sum + (asset.marketable ? asset.selectedAmount : 0),
+        0
+      );
+      const tradableCount = surplusAssets.reduce(
+        (sum, asset) => sum + (asset.tradable ? asset.selectedAmount : 0),
+        0
+      );
+      const assetSummary = summarizeAssetIds(surplusAssets);
+      results.push({
+        appid: group.appid,
+        isFoil: group.isFoil,
+        gameName: info.gameName || group.gameName || "",
+        level,
+        targetLevel,
+        badgeMaxed,
+        cardName: badgeCard.name || inventoryCard.name,
+        marketHashName: badgeCard.marketHashName || inventoryCard.marketHashName,
+        inventoryCount: inventoryCard.totalCount,
+        reservedCount: reservePerCard,
+        surplusCount,
+        marketableCount,
+        tradableCount,
+        assets: surplusAssets,
+        assetText: assetSummary.text,
+        assetTitle: assetSummary.title,
+      });
+    }
+
+    return results;
+  }
+
+  function getVisibleSurplusResults() {
+    const all = state.surplusResults || [];
+    if (!state.cfg.surplusOnlyMaxed) return all;
+    return all.filter(result => result.badgeMaxed);
+  }
+
+  function updateSurplusSummary() {
+    const row = document.getElementById("stch-surplus-summary-row");
+    const summary = document.getElementById("stch-surplus-summary");
+    if (!row || !summary) return;
+
+    const visible = getVisibleSurplusResults();
+    if (visible.length === 0) {
+      row.style.display = "none";
+      summary.textContent = "";
+      return;
+    }
+
+    const badgeCount = new Set(visible.map(result => `${result.appid}_${result.isFoil ? 1 : 0}`)).size;
+    const surplusTotal = visible.reduce((sum, result) => sum + result.surplusCount, 0);
+    const marketableTotal = visible.reduce((sum, result) => sum + result.marketableCount, 0);
+    const tradableTotal = visible.reduce((sum, result) => sum + result.tradableCount, 0);
+    summary.innerHTML =
+      `共 <b>${badgeCount}</b> 个徽章 · ` +
+      `<b>${visible.length}</b> 种卡牌 · ` +
+      `多余 <b>${surplusTotal}</b> 张 · ` +
+      `可出售 <b>${marketableTotal}</b> 张 · ` +
+      `可交易 <b>${tradableTotal}</b> 张`;
+    row.style.display = "";
+  }
+
+  function updateSurplusActionState() {
+    const surplusBusy = state.surplusScanning;
+    const otherBusy = state.scanning
+      || state.bulkActionRunning
+      || state.craftScanning
+      || state.craftActionRunning
+      || state.seasonalActionRunning;
+    document.getElementById("stch-surplus-scan-btn")?.classList.toggle(
+      "disabled",
+      surplusBusy || otherBusy
+    );
+    document.getElementById("stch-surplus-stop-btn")?.classList.toggle(
+      "disabled",
+      !surplusBusy
+    );
+    const onlyMaxed = document.getElementById("stch-surplus-only-maxed");
+    if (onlyMaxed) onlyMaxed.disabled = surplusBusy || otherBusy;
+  }
+
+  function renderSurplusResults() {
+    const list = document.getElementById("stch-surplus-list");
+    if (!list) return;
+    list.innerHTML = "";
+
+    const visible = getVisibleSurplusResults();
+    if (visible.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "stch-game-row";
+      empty.textContent = state.surplusScanning
+        ? "正在检测多余卡牌..."
+        : state.surplusResults.length > 0
+          ? "当前筛选下没有多余卡牌"
+          : "尚未检测到多余卡牌";
+      list.appendChild(empty);
+      updateSurplusSummary();
+      updateSurplusActionState();
+      return;
+    }
+
+    const header = document.createElement("div");
+    header.className = "stch-game-row stch-surplus-row stch-row-header";
+    header.innerHTML = `
+      <span class="stch-appid">游戏ID</span>
+      <span class="stch-name">游戏名</span>
+      <span class="stch-surplus-badge">徽章</span>
+      <span class="stch-surplus-card">卡牌</span>
+      <span class="stch-surplus-num">库存</span>
+      <span class="stch-surplus-num">预留</span>
+      <span class="stch-surplus-extra">多余</span>
+      <span class="stch-surplus-num">可售</span>
+      <span class="stch-surplus-num">可交易</span>
+      <span class="stch-surplus-assets">资产ID</span>
+    `;
+    list.appendChild(header);
+
+    for (const result of visible) {
+      const row = document.createElement("div");
+      row.className = "stch-game-row stch-surplus-row";
+      row.style.cursor = "pointer";
+      row.dataset.appid = result.appid;
+      row.dataset.foil = result.isFoil ? 1 : 0;
+
+      const appid = createTextSpan("stch-appid", `${result.appid}${result.isFoil ? "(箔)" : ""}`);
+      const gameName = createTextSpan("stch-name", result.gameName || "(未知)");
+      gameName.title = result.gameName || "";
+      const badge = createTextSpan(
+        "stch-surplus-badge",
+        `Lv${result.level}/${result.targetLevel}`
+      );
+      const card = createTextSpan("stch-surplus-card", result.cardName || result.marketHashName);
+      card.title = result.marketHashName || result.cardName || "";
+      const inventory = createTextSpan("stch-surplus-num", result.inventoryCount);
+      const reserved = createTextSpan("stch-surplus-num", result.reservedCount);
+      const surplus = createTextSpan("stch-surplus-extra", result.surplusCount);
+      const marketable = createTextSpan("stch-surplus-num", result.marketableCount);
+      const tradable = createTextSpan("stch-surplus-num", result.tradableCount);
+      const assets = createTextSpan("stch-surplus-assets", result.assetText || "—");
+      assets.title = result.assetTitle || "";
+      row.append(appid, gameName, badge, card, inventory, reserved, surplus, marketable, tradable, assets);
+
+      row.addEventListener("click", event => {
+        if (event.target.closest("a")) return;
+        const profileUrl = getProfileUrl();
+        if (profileUrl) {
+          const suffix = result.isFoil ? "?border=1" : "";
+          window.open(`${profileUrl}/gamecards/${result.appid}/${suffix}`, "_blank");
+        }
+      });
+      list.appendChild(row);
+    }
+
+    updateSurplusSummary();
+    updateSurplusActionState();
+  }
+
+  async function startSurplusScan() {
+    if (
+      state.surplusScanning
+      || state.scanning
+      || state.bulkActionRunning
+      || state.craftScanning
+      || state.craftActionRunning
+      || state.seasonalActionRunning
+    ) {
+      return;
+    }
+
+    if (location.hostname !== "steamcommunity.com") {
+      surplusLog("请在 Steam 社区徽章页或库存页使用多余卡牌检测", "warn");
+      return;
+    }
+
+    const profileUrl = getProfileUrl();
+    const steamId = getSteamId();
+    if (!profileUrl || !steamId) {
+      surplusLog("未找到 Steam 个人资料地址或 SteamID", "err");
+      return;
+    }
+
+    state.surplusScanning = true;
+    state.surplusStopRequested = false;
+    state.surplusResults = [];
+    const logBox = document.getElementById("stch-surplus-log");
+    if (logBox) logBox.innerHTML = "";
+    renderSurplusResults();
+    updateSurplusActionState();
+    updateBulkActionState();
+    updateCraftActionState();
+    updateSeasonalActionState();
+
+    const cfg = state.cfg;
+    const queue = new RequestQueue(
+      cfg.requestInterval,
+      cfg.batchSize,
+      cfg.batchPause,
+      state,
+      setSurplusStatus,
+      surplusLog,
+      cfg.scanInterval
+    );
+    state.surplusQueue = queue;
+
+    try {
+      surplusLog("【阶段 1/2】正在读取 Steam 社区库存");
+      setSurplusProgress(0, 1, "阶段1: 读取库存");
+      const inventory = await loadCommunityInventoryCards(steamId, queue);
+      if (state.surplusStopRequested) {
+        surplusLog("已停止检测", "warn");
+        return;
+      }
+
+      if (inventory.groups.length === 0) {
+        surplusLog("库存中没有检测到集换式卡牌", "warn");
+        renderSurplusResults();
+        return;
+      }
+
+      surplusLog(
+        `库存读取完成：库存 ${inventory.totalInventoryCount || inventory.totalAssetsSeen} 件，` +
+        `卡牌 ${inventory.totalCards} 张，${inventory.cardTypeCount} 种，` +
+        `${inventory.groups.length} 个徽章候选`,
+        "ok"
+      );
+      surplusLog("【阶段 2/2】正在读取徽章等级并计算升满后剩余");
+
+      let scanned = 0;
+      let failed = 0;
+      for (let index = 0; index < inventory.groups.length; index++) {
+        if (state.surplusStopRequested) break;
+        const group = inventory.groups[index];
+        scanned++;
+        const label = `${group.gameName || group.appid}${group.isFoil ? "（闪亮）" : ""}`;
+        setSurplusProgress(
+          index,
+          inventory.groups.length,
+          `阶段2: ${index + 1}/${inventory.groups.length} · ${label}`
+        );
+        setSurplusStatus(`读取徽章: ${label}`);
+
+        try {
+          const rows = await resolveSurplusForBadge(group, profileUrl, queue);
+          if (rows.length === 0) {
+            surplusLog(`[${group.appid}] ${label}: 没有升满后剩余`, "info");
+            continue;
+          }
+          state.surplusResults.push(...rows);
+          const surplusCount = rows.reduce((sum, row) => sum + row.surplusCount, 0);
+          surplusLog(
+            `[${group.appid}] ${label}: ${rows.length} 种卡牌，多余 ${surplusCount} 张`,
+            "ok"
+          );
+          renderSurplusResults();
+        } catch (error) {
+          if (state.surplusStopRequested) break;
+          failed++;
+          surplusLog(
+            `[${group.appid}] ${label}: 读取失败 ${error?.message || error?.status || error}`,
+            "warn"
+          );
+        }
+      }
+
+      state.surplusResults.sort((left, right) => {
+        const gameCompare = (left.gameName || "").localeCompare(right.gameName || "", "zh-CN");
+        if (gameCompare) return gameCompare;
+        if (left.appid !== right.appid) return Number(left.appid) - Number(right.appid);
+        if (left.isFoil !== right.isFoil) return Number(left.isFoil) - Number(right.isFoil);
+        return (left.cardName || "").localeCompare(right.cardName || "", "zh-CN");
+      });
+      renderSurplusResults();
+
+      if (state.surplusStopRequested) {
+        surplusLog("已停止检测", "warn");
+      } else {
+        const totalSurplus = state.surplusResults.reduce((sum, result) => sum + result.surplusCount, 0);
+        surplusLog(
+          `检测完成：读取 ${scanned} 个徽章，失败 ${failed} 个，` +
+          `找到 ${state.surplusResults.length} 种多余卡牌 / ${totalSurplus} 张`,
+          failed ? "warn" : "ok"
+        );
+      }
+    } catch (error) {
+      if (!state.surplusStopRequested) {
+        surplusLog(`检测中断: ${error?.message || error?.status || error}`, "err");
+      }
+    } finally {
+      queue.stop();
+      state.surplusQueue = null;
+      state.surplusScanning = false;
+      state.surplusStopRequested = false;
+      hideSurplusProgress();
+      setSurplusStatus(null);
+      renderSurplusResults();
+      updateSurplusActionState();
+      updateBulkActionState();
+      updateCraftActionState();
+      updateSeasonalActionState();
+    }
+  }
+
+  function requestSurplusStop() {
+    if (!state.surplusScanning) return;
+    state.surplusStopRequested = true;
+    state.surplusQueue?.stop();
+    surplusLog("已请求停止检测", "warn");
+    updateSurplusActionState();
   }
 
   // ============================================================
@@ -3088,7 +3820,8 @@
       || state.bulkActionRunning
       || state.craftScanning
       || state.craftActionRunning
-      || state.seasonalActionRunning;
+      || state.seasonalActionRunning
+      || state.surplusScanning;
     document.getElementById("stch-recalculate-btn")?.classList.toggle("disabled", disabled);
     document.getElementById("stch-submit-orders-btn")?.classList.toggle("disabled", disabled);
     document.getElementById("stch-scan-btn")?.classList.toggle(
@@ -3098,6 +3831,7 @@
         || state.craftScanning
         || state.craftActionRunning
         || state.seasonalActionRunning
+        || state.surplusScanning
     );
 
     const selectAll = document.getElementById("stch-result-select-all");
@@ -3220,6 +3954,7 @@
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
+      || state.surplusScanning
     ) {
       return;
     }
@@ -3228,6 +3963,7 @@
     updateBulkActionState();
     updateCraftActionState();
     updateSeasonalActionState();
+    updateSurplusActionState();
     const cfg = state.cfg;
     const queue = new RequestQueue(
       cfg.requestInterval,
@@ -3280,6 +4016,7 @@
       updateBulkActionState();
       updateCraftActionState();
       updateSeasonalActionState();
+      updateSurplusActionState();
       log(`选中项重算结束: 成功 ${refreshed}, 失败 ${failed}`, failed ? "warn" : "ok");
     }
   }
@@ -3310,6 +4047,7 @@
     updateBulkActionState();
     updateCraftActionState();
     updateSeasonalActionState();
+    updateSurplusActionState();
     setScanPhase("scanning");
     setStatus("正在扫描徽章页");
 
@@ -3335,6 +4073,7 @@
       document.getElementById("stch-scan-btn")?.classList.remove("disabled");
       document.getElementById("stch-skip-btn")?.classList.add("disabled");
       document.getElementById("stch-stop-btn")?.classList.add("disabled");
+      updateSurplusActionState();
       return;
     }
 
@@ -3642,6 +4381,8 @@
       document.getElementById("stch-stop-btn")?.classList.add("disabled");
       updateBulkActionState();
       updateCraftActionState();
+      updateSeasonalActionState();
+      updateSurplusActionState();
     }
   }
 
@@ -4346,6 +5087,7 @@
       updateBulkActionState();
       updateCraftActionState();
       updateSeasonalActionState();
+      updateSurplusActionState();
     }
   }
 
