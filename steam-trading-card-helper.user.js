@@ -2,7 +2,7 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.5.5
+// @version      1.5.6
 // @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, and buy seasonal badge levels
 // @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章并购买季节徽章等级
 // @author       SpaceSyt
@@ -14,6 +14,7 @@
 // @match        *://steamcommunity.com/id/*/badges*
 // @match        *://steamcommunity.com/profiles/*/badges*
 // @match        *://steamcommunity.com/market/multibuy*
+// @match        *://store.steampowered.com/points/shop*
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -27,8 +28,8 @@
 (() => {
   "use strict";
 
-  const $J = unsafeWindow.jQuery || unsafeWindow.$;
-  if (!$J) {
+  const $J = unsafeWindow.jQuery || unsafeWindow.$ || window.jQuery || window.$ || null;
+  if (!$J && window.location.pathname.includes("/market/multibuy")) {
     console.warn("[STCH] jQuery not found");
     return;
   }
@@ -67,6 +68,7 @@
   const SEASONAL_BADGE_FALLBACK_APPID = 4844660;
   const SEASONAL_BADGE_MAX_LEVEL = 40;
   const SEASONAL_BADGE_DEFAULT_COST = 1000;
+  const STEAM_STORE_ORIGIN = "https://store.steampowered.com";
   const SEASONAL_POINTS_SHOP_URL = "https://store.steampowered.com/points/shop/c/steambadge";
 
   // ============================================================
@@ -625,6 +627,12 @@
       font-size: 13px;
     }
     .stch-btn-entry:hover { background: rgba(87, 157, 199, 1); }
+    .stch-store-entry-wrap {
+      margin-top: 8px;
+    }
+    .stch-store-entry-wrap .stch-btn-entry {
+      margin-left: 0;
+    }
 
     #stch-backdrop {
       position: fixed;
@@ -1173,21 +1181,67 @@
   // ============================================================
   const ONBOARDING_SEEN_KEY = "stch_onboarding_seen";
 
+  function isPointsShopPage() {
+    return location.hostname === "store.steampowered.com"
+      && location.pathname.startsWith("/points/shop");
+  }
+
+  function findPointsBalanceContainer() {
+    const candidates = Array.from(document.querySelectorAll("a, span, div"));
+    const label = candidates.find(el =>
+      /^(您的点数余额|your points balance)$/i.test((el.textContent || "").trim())
+    ) || candidates.find(el => {
+      const text = (el.textContent || "").trim();
+      return text.length <= 80 && /您的点数余额|your points balance/i.test(text);
+    });
+    const container = label?.parentElement;
+    if (container) return container;
+    return null;
+  }
+
   function injectEntryBtn() {
-    const target = document.querySelector(".profile_xp_block")
-      || document.querySelector(".badges_header")
-      || document.body;
+    if (document.getElementById("stch-entry-btn")) return true;
 
     const btn = document.createElement("span");
+    btn.id = "stch-entry-btn";
     btn.className = "stch-btn-entry";
     btn.textContent = "Steam Trading Card Helper";
     btn.addEventListener("click", openModal);
+
+    if (isPointsShopPage()) {
+      const container = findPointsBalanceContainer();
+      if (!container) return false;
+      const wrapper = document.createElement("div");
+      wrapper.className = "stch-store-entry-wrap";
+      wrapper.appendChild(btn);
+      container.appendChild(wrapper);
+      return true;
+    }
+
+    const target = document.querySelector(".profile_xp_block")
+      || document.querySelector(".badges_header")
+      || document.body;
 
     if (target.classList.contains("profile_xp_block")) {
       target.appendChild(btn);
     } else {
       target.insertBefore(btn, target.firstChild);
     }
+    return true;
+  }
+
+  function observePointsShopEntry() {
+    if (injectEntryBtn()) return;
+
+    let attempts = 0;
+    const observer = new MutationObserver(() => {
+      attempts += 1;
+      if (injectEntryBtn() || attempts >= 80) {
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => observer.disconnect(), 20000);
   }
 
   let modalEl = null;
@@ -1220,6 +1274,8 @@
   }
 
   function buildModal() {
+    const initialTab = isPointsShopPage() ? "seasonal" : "scan";
+    const activeClass = tabName => initialTab === tabName ? "active" : "";
     const backdrop = document.createElement("div");
     backdrop.id = "stch-backdrop";
     backdrop.style.display = "block";
@@ -1236,15 +1292,15 @@
       </div>
       <div class="stch-body">
         <div class="stch-tabs">
-          <span class="stch-tab active" data-tab="scan">价格扫描</span>
+          <span class="stch-tab ${activeClass("scan")}" data-tab="scan">价格扫描</span>
           <span class="stch-tab stch-tab-disabled" title="未实现">闪卡价格扫描</span>
           <span class="stch-tab" data-tab="craft">徽章合成</span>
-          <span class="stch-tab" data-tab="seasonal">季节徽章</span>
+          <span class="stch-tab ${activeClass("seasonal")}" data-tab="seasonal">季节徽章</span>
           <span class="stch-tab" data-tab="blacklist">黑名单</span>
           <span class="stch-tab stch-tab-disabled" title="未实现">多余卡牌检测</span>
           <span class="stch-tab stch-tab-right" data-tab="settings">设置</span>
         </div>
-        <div class="stch-tab-content active" id="stch-tab-scan">
+        <div class="stch-tab-content ${activeClass("scan")}" id="stch-tab-scan">
           <div class="stch-onboarding" id="stch-onboarding" style="display:none">
             <h3>欢迎使用 Steam 卡牌助手</h3>
             <p class="stch-onboarding-intro">扫描未完成的徽章，比较卡牌成本，更快地完成购买和徽章合成。</p>
@@ -1349,7 +1405,7 @@
           <div class="stch-game-list stch-craft-list" id="stch-craft-list"></div>
           <div id="stch-craft-log"></div>
         </div>
-        <div class="stch-tab-content" id="stch-tab-seasonal">
+        <div class="stch-tab-content ${activeClass("seasonal")}" id="stch-tab-seasonal">
           <div class="stch-toolbar">
             <label class="stch-primary-label">购买模式
               <select id="stch-seasonal-mode" class="stch-input" style="width:100px">
@@ -1435,7 +1491,7 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.5.5 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.5.6 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -1584,7 +1640,7 @@
       saveConfig(state.cfg);
     });
 
-    if (!GM_getValue(ONBOARDING_SEEN_KEY, false)) {
+    if (!isPointsShopPage() && !GM_getValue(ONBOARDING_SEEN_KEY, false)) {
       showOnboarding();
     }
 
@@ -2104,19 +2160,43 @@
     };
   }
 
-  async function postSteamWebApi(methodName, token, payload) {
-    const body = new URLSearchParams({
-      input_json: JSON.stringify(payload),
+  function appendQuery(url, params) {
+    const query = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+      if (value == null || value === "") return;
+      query.set(key, String(value));
     });
-    const response = await requestExternalText({
-      method: "POST",
-      url: `https://api.steampowered.com/ILoyaltyRewardsService/${methodName}/v1/?access_token=${encodeURIComponent(token)}`,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-      },
-      data: body.toString(),
-      timeout: 20000,
-    });
+    const qs = query.toString();
+    return qs ? `${url}?${qs}` : url;
+  }
+
+  async function requestSteamWebApi(methodName, token, payload, options = {}) {
+    const endpoint = `https://api.steampowered.com/ILoyaltyRewardsService/${methodName}/v1`;
+    const params = {};
+    const useAuth = options.auth !== false;
+    if (useAuth && token) params.access_token = token;
+
+    let response = null;
+    if (options.constMethod) {
+      response = await requestExternalText({
+        method: "GET",
+        url: appendQuery(endpoint, {
+          ...params,
+          origin: STEAM_STORE_ORIGIN,
+          input_json: JSON.stringify(payload),
+        }),
+        timeout: 20000,
+      });
+    } else {
+      const body = new FormData();
+      body.append("input_json", JSON.stringify(payload));
+      response = await requestExternalText({
+        method: "POST",
+        url: appendQuery(endpoint, params),
+        data: body,
+        timeout: 20000,
+      });
+    }
 
     if (response.status === 429) {
       throw buildHttpError(429);
@@ -2243,7 +2323,12 @@
 
     for (const attempt of attempts) {
       try {
-        const data = await postSteamWebApi(attempt.method, context.token, attempt.payload);
+        const data = await requestSteamWebApi(
+          attempt.method,
+          context.token,
+          attempt.payload,
+          { constMethod: true, auth: false }
+        );
         const definitions = collectRewardDefinitions(data);
         const selected = selectSeasonalDefinition(definitions, context.appid);
         if (selected) return selected;
@@ -2383,13 +2468,14 @@
       1,
       Math.min(SEASONAL_BADGE_MAX_LEVEL, parseInt(levels, 10) || 1)
     );
-    const data = await postSteamWebApi(
+    const data = await requestSteamWebApi(
       "RedeemPointsForBadgeLevel",
       info.token,
       {
         defid: Number(info.defid),
         num_levels: requestedLevels,
-      }
+      },
+      { auth: true }
     );
     return data;
   }
@@ -5138,6 +5224,8 @@
 
   if (pageUrl.includes("/market/multibuy")) {
     initWhenReady(initMultibuyAutoFill);
+  } else if (isPointsShopPage()) {
+    initWhenReady(observePointsShopEntry);
   } else {
     initWhenReady(injectEntryBtn);
   }
