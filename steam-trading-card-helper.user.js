@@ -798,19 +798,22 @@
       background: #0b141f;
       flex-shrink: 0;
     }
+    .stch-sidebar-title {
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
     .stch-sidebar-name {
       color: #fff;
       font-size: 15px;
       font-weight: bold;
       line-height: 1.25;
+      text-align: center;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    .stch-sidebar-sub {
-      color: #8f98a0;
-      margin-top: 3px;
-      font-size: 12px;
     }
     .stch-sidebar-pin {
       margin-left: auto;
@@ -1603,6 +1606,53 @@
     return "";
   }
 
+  function normalizeResourceUrl(value) {
+    const raw = String(value || "").trim().replace(/^url\(["']?/, "").replace(/["']?\)$/, "");
+    if (!raw) return "";
+    try {
+      return new URL(raw, location.origin).href;
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  function normalizeSteamAvatarUrl(value) {
+    const url = normalizeResourceUrl(value);
+    if (!url.includes("avatars.fastly.steamstatic.com/")) return url;
+    return url.replace(/_full(\.[a-z0-9]+)(?:\?.*)?$/i, "$1");
+  }
+
+  function getImageUrlFromElement(element) {
+    if (!element) return "";
+    const direct = element.getAttribute("src")
+      || element.getAttribute("data-src")
+      || element.getAttribute("data-original")
+      || element.getAttribute("data-fullsrc");
+    if (direct) return normalizeSteamAvatarUrl(direct);
+
+    const srcset = element.getAttribute("srcset") || element.getAttribute("data-srcset");
+    if (srcset) {
+      const candidate = srcset.split(",").map(part => part.trim().split(/\s+/)[0]).filter(Boolean).pop();
+      if (candidate) return normalizeSteamAvatarUrl(candidate);
+    }
+
+    const bg = element.style?.backgroundImage || "";
+    if (bg && bg !== "none") return normalizeSteamAvatarUrl(bg);
+    return "";
+  }
+
+  function getFirstImageUrl(root, selectors) {
+    for (const selector of selectors) {
+      const element = root.querySelector(selector);
+      const url = getImageUrlFromElement(element);
+      if (url) return url;
+      const nested = element?.querySelector?.("img");
+      const nestedUrl = getImageUrlFromElement(nested);
+      if (nestedUrl) return nestedUrl;
+    }
+    return "";
+  }
+
   function xpRequiredForLevel(level) {
     let total = 0;
     for (let current = 0; current < level; current++) {
@@ -1689,13 +1739,19 @@
       "#global_actions .persona",
     ]) || getFirstText(document, ["#global_actions .persona"]);
     const name = rawName.replace(/\s*».*$/, "").trim();
-    const avatar = getFirstAttr(doc, [
+    const avatarSelectors = [
       ".profile_small_header_avatar img",
+      ".profile_small_header_avatar",
       ".profile_header .playerAvatar img",
       ".playerAvatarAutoSizeInner img",
+      ".playerAvatarAutoSizeInner",
       ".playerAvatar img",
+      ".playerAvatar",
       "#global_actions .user_avatar img",
-    ], "src") || getFirstAttr(document, ["#global_actions .user_avatar img"], "src");
+      "#global_actions .user_avatar",
+    ];
+    const avatar = getFirstImageUrl(doc, avatarSelectors)
+      || getFirstImageUrl(document, avatarSelectors);
 
     const level = parseIntLoose(getFirstText(doc, [
       ".profile_xp_block .friendPlayerLevelNum",
@@ -1901,7 +1957,7 @@
     if (status) {
       status.textContent = sidebarLoading
         ? "正在刷新账号信息、库存宝石和市场价格..."
-        : sidebarData.error || (profile.name ? "已同步当前账号信息" : "鼠标移入侧栏后可查看账号摘要");
+        : sidebarData.error || (profile.name ? "已同步当前账号信息" : "鼠标移入侧栏后可查看信息");
     }
     const refresh = document.getElementById("stch-sidebar-refresh");
     if (refresh) refresh.disabled = sidebarLoading;
@@ -1957,9 +2013,8 @@
       <div class="stch-sidebar-panel">
         <div class="stch-sidebar-head">
           <img id="stch-sidebar-avatar" class="stch-sidebar-avatar" alt="">
-          <div style="min-width:0;flex:1;">
+          <div class="stch-sidebar-title">
             <div id="stch-sidebar-name" class="stch-sidebar-name">Steam 用户</div>
-            <div class="stch-sidebar-sub">账号摘要</div>
           </div>
           <button id="stch-sidebar-pin" class="stch-sidebar-pin" type="button">固定</button>
         </div>
@@ -1970,11 +2025,11 @@
           <div class="stch-sidebar-progress"><div id="stch-sidebar-progress-bar" class="stch-sidebar-progress-bar"></div></div>
           <div class="stch-sidebar-row"><span class="stch-sidebar-key">当前宝石</span><span id="stch-sidebar-gems" class="stch-sidebar-value">—</span></div>
           <div class="stch-sidebar-row"><span class="stch-sidebar-key">宝石价格参考</span><span id="stch-sidebar-gem-price" class="stch-sidebar-value">—</span></div>
-          <div id="stch-sidebar-status" class="stch-sidebar-status">正在准备账号摘要...</div>
+          <div id="stch-sidebar-status" class="stch-sidebar-status">正在准备侧栏信息...</div>
           <div class="stch-sidebar-actions"><button id="stch-sidebar-refresh" class="stch-sidebar-refresh" type="button">刷新</button></div>
         </div>
       </div>
-      <div id="stch-sidebar-handle" class="stch-sidebar-handle" title="移入展开，点击固定">账号摘要</div>
+      <div id="stch-sidebar-handle" class="stch-sidebar-handle" title="移入展开，点击固定">STCH</div>
     `;
     document.body.appendChild(sidebar);
 
