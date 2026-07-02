@@ -2112,7 +2112,7 @@
           <div class="stch-sidebar-actions"><button id="stch-sidebar-refresh" class="stch-sidebar-refresh" type="button">刷新</button></div>
         </div>
       </div>
-      <div id="stch-sidebar-handle" class="stch-sidebar-handle" title="移入展开，点击固定">STCH</div>
+      <div id="stch-sidebar-handle" class="stch-sidebar-handle" aria-label="侧栏"></div>
     `;
     document.body.appendChild(sidebar);
 
