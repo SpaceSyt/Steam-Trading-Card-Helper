@@ -2,7 +2,7 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.6.5
+// @version      1.6.6
 // @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, and find surplus cards
 // @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级并检测多余卡牌
 // @author       SpaceSyt
@@ -729,6 +729,13 @@
     .stch-store-entry-wrap .stch-btn-entry {
       margin-left: 0;
     }
+    .inventory_rightnav .stch-btn-entry.stch-inventory-entry {
+      margin: 0 12px 0 0;
+      padding: 0 12px;
+      height: 30px;
+      line-height: 30px;
+      vertical-align: top;
+    }
 
     #stch-sidebar {
       position: fixed;
@@ -1380,11 +1387,49 @@
 
     .stch-bl-result { color: #75b022; font-size: 14px; }
 
+    .stch-log-resizer {
+      flex: 0 0 9px;
+      height: 9px;
+      margin: 6px 0 4px;
+      cursor: row-resize;
+      position: relative;
+      border-radius: 3px;
+    }
+    .stch-log-resizer::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 4px;
+      height: 1px;
+      background: #45556b;
+    }
+    .stch-log-resizer::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 2px;
+      width: 42px;
+      height: 5px;
+      transform: translateX(-50%);
+      border-top: 1px solid #66c0f4;
+      border-bottom: 1px solid #66c0f4;
+      opacity: 0.55;
+    }
+    .stch-log-resizer:hover,
+    .stch-log-resizer.dragging {
+      background: rgba(103, 193, 245, 0.08);
+    }
+    body.stch-log-resizing {
+      cursor: row-resize;
+      user-select: none;
+    }
+
     #stch-log,
     #stch-craft-log,
     #stch-seasonal-log,
     #stch-surplus-log {
-      margin-top: 10px;
+      margin-top: 0;
       flex: 1;
       min-height: 0;
       overflow-y: auto;
@@ -1522,6 +1567,11 @@
       && location.pathname.startsWith("/points/shop");
   }
 
+  function isInventoryPage() {
+    return location.hostname === "steamcommunity.com"
+      && /\/inventory\/?$/i.test(location.pathname);
+  }
+
   function findPointsBalanceContainer() {
     const candidates = Array.from(document.querySelectorAll("a, span, div"));
     const label = candidates.find(el =>
@@ -1535,14 +1585,39 @@
     return null;
   }
 
-  function injectEntryBtn() {
-    if (document.getElementById("stch-entry-btn")) return true;
-
-    const btn = document.createElement("span");
+  function getEntryBtn() {
+    let btn = document.getElementById("stch-entry-btn");
+    if (btn) return btn;
+    btn = document.createElement("span");
     btn.id = "stch-entry-btn";
     btn.className = "stch-btn-entry";
     btn.textContent = "Steam Trading Card Helper";
     btn.addEventListener("click", openModal);
+    return btn;
+  }
+
+  function placeInventoryEntryBtn(btn) {
+    const nav = document.querySelector(".inventory_rightnav");
+    if (!nav) return false;
+
+    const reload = nav.querySelector("#inventory_reload_button, .reload_inventory");
+    const trade = nav.querySelector(".new_trade_offer_btn, a[href*='/tradeoffers/']");
+    if (!reload && !trade) return false;
+
+    btn.classList.add("stch-inventory-entry");
+    if (trade?.parentElement === nav) {
+      nav.insertBefore(btn, trade);
+    } else if (reload?.parentElement === nav && reload.nextSibling) {
+      nav.insertBefore(btn, reload.nextSibling);
+    } else {
+      nav.appendChild(btn);
+    }
+    return true;
+  }
+
+  function injectEntryBtn() {
+    const btn = getEntryBtn();
+    btn.classList.remove("stch-inventory-entry");
 
     if (isPointsShopPage()) {
       const container = findPointsBalanceContainer();
@@ -1552,6 +1627,10 @@
       wrapper.appendChild(btn);
       container.appendChild(wrapper);
       return true;
+    }
+
+    if (isInventoryPage()) {
+      return placeInventoryEntryBtn(btn);
     }
 
     const target = document.querySelector(".profile_xp_block")
@@ -1566,7 +1645,7 @@
     return true;
   }
 
-  function observePointsShopEntry() {
+  function observeEntryBtn() {
     if (injectEntryBtn()) return;
 
     let attempts = 0;
@@ -1578,6 +1657,10 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
     setTimeout(() => observer.disconnect(), 20000);
+  }
+
+  function observePointsShopEntry() {
+    observeEntryBtn();
   }
 
   function formatInt(value) {
@@ -2079,6 +2162,77 @@
     surplusQueue: null,
   };
 
+  function getOuterHeight(element) {
+    if (!element || getComputedStyle(element).display === "none") return 0;
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return rect.height
+      + (parseFloat(style.marginTop) || 0)
+      + (parseFloat(style.marginBottom) || 0);
+  }
+
+  function initLogResizers(root) {
+    root.querySelectorAll(".stch-log-resizer").forEach(resizer => {
+      const logPane = document.getElementById(resizer.dataset.log);
+      if (!logPane || resizer.dataset.ready === "1") return;
+      resizer.dataset.ready = "1";
+
+      const contentPane = resizer.dataset.content
+        ? document.getElementById(resizer.dataset.content)
+        : null;
+
+      resizer.addEventListener("pointerdown", event => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+
+        const tab = resizer.closest(".stch-tab-content") || root;
+        const tabHeight = tab.getBoundingClientRect().height || window.innerHeight;
+        const startY = event.clientY;
+        const startLogHeight = logPane.getBoundingClientRect().height || 160;
+        const minLogHeight = 82;
+        const minContentHeight = contentPane ? 82 : 42;
+        const reservedHeight = [...tab.children].reduce((sum, child) => {
+          if (child === logPane || child === resizer || child === contentPane) return sum;
+          return sum + getOuterHeight(child);
+        }, 0);
+        const maxLogHeight = Math.max(
+          minLogHeight,
+          tabHeight - reservedHeight - getOuterHeight(resizer) - minContentHeight - 12
+        );
+
+        if (contentPane) {
+          contentPane.style.flex = "1 1 0";
+          contentPane.style.maxHeight = "none";
+          contentPane.style.minHeight = `${minContentHeight}px`;
+        }
+        logPane.style.minHeight = `${minLogHeight}px`;
+
+        const onMove = moveEvent => {
+          const delta = moveEvent.clientY - startY;
+          const nextHeight = Math.max(
+            minLogHeight,
+            Math.min(maxLogHeight, startLogHeight - delta)
+          );
+          logPane.style.flex = `0 0 ${nextHeight}px`;
+          logPane.style.height = `${nextHeight}px`;
+        };
+        const onUp = () => {
+          resizer.classList.remove("dragging");
+          document.body.classList.remove("stch-log-resizing");
+          document.removeEventListener("pointermove", onMove);
+          document.removeEventListener("pointerup", onUp);
+          document.removeEventListener("pointercancel", onUp);
+        };
+
+        resizer.classList.add("dragging");
+        document.body.classList.add("stch-log-resizing");
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
+        document.addEventListener("pointercancel", onUp);
+      });
+    });
+  }
+
   function openModal() {
     if (modalEl) {
       modalEl.style.display = "";
@@ -2191,6 +2345,7 @@
           </div>
           <div class="stch-status-text" id="stch-status"></div>
           <div class="stch-game-list" id="stch-list"></div>
+          <div class="stch-log-resizer" data-log="stch-log" data-content="stch-list" title="上下拖动调整日志区域"></div>
           <div id="stch-log"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-craft">
@@ -2223,6 +2378,7 @@
           </div>
           <div class="stch-status-text" id="stch-craft-status"></div>
           <div class="stch-game-list stch-craft-list" id="stch-craft-list"></div>
+          <div class="stch-log-resizer" data-log="stch-craft-log" data-content="stch-craft-list" title="上下拖动调整日志区域"></div>
           <div id="stch-craft-log"></div>
         </div>
         <div class="stch-tab-content ${activeClass("seasonal")}" id="stch-tab-seasonal">
@@ -2241,6 +2397,7 @@
             2026 夏季徽章
           </div>
           <div class="stch-status-text" id="stch-seasonal-status"></div>
+          <div class="stch-log-resizer" data-log="stch-seasonal-log" title="上下拖动调整日志区域"></div>
           <div id="stch-seasonal-log"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-blacklist">
@@ -2288,6 +2445,7 @@
           </div>
           <div class="stch-status-text" id="stch-surplus-status"></div>
           <div class="stch-game-list stch-surplus-list" id="stch-surplus-list"></div>
+          <div class="stch-log-resizer" data-log="stch-surplus-log" data-content="stch-surplus-list" title="上下拖动调整日志区域"></div>
           <div id="stch-surplus-log"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-settings">
@@ -2320,11 +2478,12 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.6.5 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.6.6 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
     modalEl = modal;
+    initLogResizers(modal);
 
     modal.querySelector(".stch-close").addEventListener("click", closeModal);
 
@@ -6443,7 +6602,7 @@
     });
   } else {
     initWhenReady(() => {
-      injectEntryBtn();
+      observeEntryBtn();
       injectSidebar();
     });
   }
