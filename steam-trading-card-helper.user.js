@@ -2,9 +2,9 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.6.6
-// @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, and find surplus cards
-// @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级并检测多余卡牌
+// @version      1.6.8
+// @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and suggest surplus item gem conversion
+// @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测多余卡牌和多余物品分解建议
 // @author       SpaceSyt
 // @homepageURL  https://github.com/SpaceSyt/Steam-Trading-Card-Helper
 // @supportURL   https://github.com/SpaceSyt/Steam-Trading-Card-Helper/issues
@@ -42,7 +42,7 @@
   // Constants
   // ============================================================
   const DEFAULT_CONFIG = {
-    configVersion: 9,
+    configVersion: 10,
     threshold: 5,
     scanInterval: 0,
     requestInterval: 330,
@@ -66,6 +66,8 @@
     seasonalTargetLevel: 40,
     seasonalInterval: 200,
     surplusOnlyMaxed: false,
+    grindOnlyRecommended: true,
+    grindIncludeSurplusCards: true,
   };
   // Update these manually for each seasonal sale.
   const SEASONAL_BADGE_NAME = "2026 夏季徽章";
@@ -76,6 +78,8 @@
   const SIDEBAR_PINNED_KEY = "stch_sidebar_pinned";
   const SIDEBAR_GEM_SACK_HASH = "753-Sack of Gems";
   const GEM_SACK_SIZE = 1000;
+  const MARKET_STEAM_FEE_RATE = 0.05;
+  const MARKET_PUBLISHER_FEE_RATE = 0.10;
 
   // ============================================================
   // Config
@@ -132,6 +136,56 @@
   function formatCNY(cents) {
     if (cents == null || isNaN(cents)) return "?";
     return (cents / 100).toFixed(2);
+  }
+
+  function getMarketFeesForSellerReceive(sellerCents) {
+    const received = Math.max(0, Math.floor(Number(sellerCents) || 0));
+    if (received <= 0) {
+      return { steamFee: 0, publisherFee: 0, totalFees: 0, buyerCents: 0 };
+    }
+    const steamFee = Math.max(1, Math.floor(received * MARKET_STEAM_FEE_RATE));
+    const publisherFee = Math.max(1, Math.floor(received * MARKET_PUBLISHER_FEE_RATE));
+    return {
+      steamFee,
+      publisherFee,
+      totalFees: steamFee + publisherFee,
+      buyerCents: received + steamFee + publisherFee,
+    };
+  }
+
+  function getBuyerPriceForSellerReceive(sellerCents) {
+    return getMarketFeesForSellerReceive(sellerCents).buyerCents;
+  }
+
+  function getSellerReceiveForBuyerPrice(buyerCents) {
+    const total = Math.max(0, Math.floor(Number(buyerCents) || 0));
+    let low = 0;
+    let high = total;
+    let best = 0;
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (getBuyerPriceForSellerReceive(mid) <= total) {
+        best = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    return best;
+  }
+
+  function getGemSackSellerNetCents(priceCents) {
+    return getSellerReceiveForBuyerPrice(priceCents);
+  }
+
+  function getGemValueSellerNetCents(gems, gemSackPriceCents) {
+    const sackNet = getGemSackSellerNetCents(gemSackPriceCents);
+    return sackNet > 0 ? (sackNet * Math.max(0, Number(gems) || 0)) / GEM_SACK_SIZE : 0;
+  }
+
+  function getGemBreakEvenBuyerPrice(gems, gemSackPriceCents) {
+    const desiredSellerNet = Math.ceil(getGemValueSellerNetCents(gems, gemSackPriceCents));
+    return desiredSellerNet > 0 ? getBuyerPriceForSellerReceive(desiredSellerNet) : 0;
   }
 
   function createTextSpan(className, text) {
@@ -212,7 +266,8 @@
         || this.state?.skipCurrent
         || this.state?.craftStopRequested
         || this.state?.surplusStopRequested
-        || this.state?.seasonalStopRequested;
+        || this.state?.seasonalStopRequested
+        || this.state?.grindStopRequested;
     }
 
     async _sleep(ms) {
@@ -278,7 +333,14 @@
                 job.reject({ status: 429, error: "skipped by user" });
                 continue;
               }
-              if (this.state?.stopRequested || this.stopped) {
+              if (
+                this.state?.stopRequested
+                || this.state?.craftStopRequested
+                || this.state?.surplusStopRequested
+                || this.state?.seasonalStopRequested
+                || this.state?.grindStopRequested
+                || this.stopped
+              ) {
                 job.reject({ status: 0, error: "stopped" });
                 continue;
               }
@@ -1215,6 +1277,65 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .stch-grind-list {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+    }
+    .stch-grind-row .stch-name {
+      flex: 0 0 150px;
+    }
+    .stch-grind-row .stch-grind-type {
+      width: 66px;
+      flex-shrink: 0;
+      text-align: center;
+      color: #8db7d7;
+      font-size: 12px;
+    }
+    .stch-grind-row .stch-grind-item {
+      flex: 1;
+      min-width: 120px;
+      color: #e2e2e2;
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .stch-grind-row .stch-grind-num {
+      width: 48px;
+      flex-shrink: 0;
+      text-align: center;
+      color: #c6d4df;
+      font-size: 12px;
+    }
+    .stch-grind-row .stch-grind-price {
+      width: 70px;
+      flex-shrink: 0;
+      text-align: center;
+      color: #ffc902;
+      font-size: 12px;
+    }
+    .stch-grind-row .stch-grind-action {
+      width: 72px;
+      flex-shrink: 0;
+      text-align: center;
+      color: #8f98a0;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .stch-grind-row .stch-grind-action.ok { color: #75b022; }
+    .stch-grind-row .stch-grind-action.warn { color: #ffc902; }
+    .stch-grind-row .stch-grind-action.info { color: #66c0f4; }
+    .stch-grind-row .stch-grind-assets {
+      width: 132px;
+      flex-shrink: 0;
+      color: #8db7d7;
+      font-family: "Courier New", monospace;
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .stch-seasonal-panel {
       border: 1px solid #2a3f5a;
       border-radius: 3px;
@@ -1428,7 +1549,8 @@
     #stch-log,
     #stch-craft-log,
     #stch-seasonal-log,
-    #stch-surplus-log {
+    #stch-surplus-log,
+    #stch-grind-log {
       margin-top: 0;
       flex: 1;
       min-height: 0;
@@ -1445,14 +1567,15 @@
     }
     #stch-craft-log,
     #stch-seasonal-log,
-    #stch-surplus-log {
+    #stch-surplus-log,
+    #stch-grind-log {
       flex: 0 0 19vh;
     }
-    #stch-log .ok, #stch-craft-log .ok, #stch-seasonal-log .ok, #stch-surplus-log .ok { color: #75b022; }
-    #stch-log .warn, #stch-craft-log .warn, #stch-seasonal-log .warn, #stch-surplus-log .warn { color: #ffc902; }
-    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-seasonal-log .warn-ip, #stch-surplus-log .warn-ip { color: #fff; }
-    #stch-log .err, #stch-craft-log .err, #stch-seasonal-log .err, #stch-surplus-log .err { color: #c04040; }
-    #stch-log .info, #stch-craft-log .info, #stch-seasonal-log .info, #stch-surplus-log .info { color: #67c1f5; }
+    #stch-log .ok, #stch-craft-log .ok, #stch-seasonal-log .ok, #stch-surplus-log .ok, #stch-grind-log .ok { color: #75b022; }
+    #stch-log .warn, #stch-craft-log .warn, #stch-seasonal-log .warn, #stch-surplus-log .warn, #stch-grind-log .warn { color: #ffc902; }
+    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-seasonal-log .warn-ip, #stch-surplus-log .warn-ip, #stch-grind-log .warn-ip { color: #fff; }
+    #stch-log .err, #stch-craft-log .err, #stch-seasonal-log .err, #stch-surplus-log .err, #stch-grind-log .err { color: #c04040; }
+    #stch-log .info, #stch-craft-log .info, #stch-seasonal-log .info, #stch-surplus-log .info, #stch-grind-log .info { color: #67c1f5; }
 
     .stch-progress {
       height: 20px;
@@ -2029,12 +2152,27 @@
     setSidebarText("stch-sidebar-gems", gemText);
 
     const priceText = gemPrice.priceCents
-      ? `一袋 ¥${formatCNY(gemPrice.priceCents)}`
+      ? `一袋/${formatInt(GEM_SACK_SIZE)}/ ¥${formatCNY(gemPrice.priceCents)}`
       : "—";
+    const gemSackNetCents = gemPrice.priceCents
+      ? getGemSackSellerNetCents(gemPrice.priceCents)
+      : 0;
     const priceTitle = gemPrice.priceCents
-      ? `${gemPrice.source}${gemPrice.volume ? `，成交量 ${formatInt(gemPrice.volume)}` : ""}`
+      ? `${gemPrice.source}${gemPrice.volume ? `，成交量 ${formatInt(gemPrice.volume)}` : ""}，税后到手约 ¥${formatCNY(gemSackNetCents)}`
       : "暂无宝石袋市场价格";
     setSidebarText("stch-sidebar-gem-price", priceText, priceTitle);
+
+    const breakEven10 = gemPrice.priceCents
+      ? getGemBreakEvenBuyerPrice(10, gemPrice.priceCents)
+      : 0;
+    const breakEvenTitle = breakEven10
+      ? `按宝石袋税后到手 ¥${formatCNY(gemSackNetCents)} 计算；物品卖出税后低于该值时，分解成宝石更值`
+      : "暂无宝石袋市场价格";
+    setSidebarText(
+      "stch-sidebar-grind-threshold",
+      breakEven10 ? `10宝石/¥${formatCNY(breakEven10)}` : "—",
+      breakEvenTitle
+    );
 
     const status = document.getElementById("stch-sidebar-status");
     if (status) {
@@ -2108,6 +2246,7 @@
           <div class="stch-sidebar-progress"><div id="stch-sidebar-progress-bar" class="stch-sidebar-progress-bar"></div></div>
           <div class="stch-sidebar-row"><span class="stch-sidebar-key">当前宝石</span><span id="stch-sidebar-gems" class="stch-sidebar-value">—</span></div>
           <div class="stch-sidebar-row"><span class="stch-sidebar-key">宝石价格参考</span><span id="stch-sidebar-gem-price" class="stch-sidebar-value">—</span></div>
+          <div class="stch-sidebar-row"><span class="stch-sidebar-key">分解临界点</span><span id="stch-sidebar-grind-threshold" class="stch-sidebar-value">—</span></div>
           <div id="stch-sidebar-status" class="stch-sidebar-status">正在准备侧栏信息...</div>
           <div class="stch-sidebar-actions"><button id="stch-sidebar-refresh" class="stch-sidebar-refresh" type="button">刷新</button></div>
         </div>
@@ -2160,6 +2299,11 @@
     surplusScanning: false,
     surplusStopRequested: false,
     surplusQueue: null,
+    grindResults: [],
+    grindScanning: false,
+    grindStopRequested: false,
+    grindQueue: null,
+    grindGemPrice: null,
   };
 
   function getOuterHeight(element) {
@@ -2269,8 +2413,9 @@
           <span class="stch-tab ${activeClass("scan")}" data-tab="scan">价格扫描</span>
           <span class="stch-tab stch-tab-disabled" title="未实现">闪卡价格扫描</span>
           <span class="stch-tab" data-tab="craft">徽章合成</span>
-          <span class="stch-tab" data-tab="blacklist">黑名单</span>
+          <span class="stch-tab" data-tab="blacklist">游戏/AppID黑名单</span>
           <span class="stch-tab" data-tab="surplus">多余卡牌检测</span>
+          <span class="stch-tab" data-tab="grind">多余物品销毁</span>
           <span class="stch-tab stch-tab-right" data-tab="settings">设置</span>
           `}
         </div>
@@ -2404,21 +2549,21 @@
           <div class="stch-bl-form">
             <label>输入游戏 AppID <input id="stch-bl-appid" class="stch-input" type="text" style="width:100px" placeholder="例如: 1144400"></label>
             <div class="stch-btn alt" id="stch-bl-lookup">查询游戏</div>
-            <div class="stch-btn" id="stch-bl-add" style="display:none;">加入黑名单</div>
-            <div class="stch-btn" id="stch-bl-add-fixed" style="display:none;">加入固定黑名单</div>
+            <div class="stch-btn" id="stch-bl-add" style="display:none;">加入游戏黑名单</div>
+            <div class="stch-btn" id="stch-bl-add-fixed" style="display:none;">加入固定游戏黑名单</div>
             <div class="stch-btn alt stch-btn-danger disabled" id="stch-bl-del-sel" style="display:none;">删除选中项</div>
-            <div class="stch-btn alt disabled" id="stch-bl-fix-sel" style="display:none;">加入固定黑名单</div>
-            <div class="stch-btn alt disabled" id="stch-bl-unfix-sel" style="display:none;">移除固定黑名单</div>
+            <div class="stch-btn alt disabled" id="stch-bl-fix-sel" style="display:none;">加入固定游戏黑名单</div>
+            <div class="stch-btn alt disabled" id="stch-bl-unfix-sel" style="display:none;">移除固定游戏黑名单</div>
             <div class="stch-btn alt disabled" id="stch-bl-cleanup">一键清理过期</div>
             <span class="stch-bl-result" id="stch-bl-result"></span>
           </div>
           <div class="stch-bl-form">
             <label>
               <input id="stch-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
-              启用自动黑名单
+              启用自动游戏黑名单
             </label>
             <label class="stch-primary-label">价格上限 ¥ <input id="stch-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
-            <span style="color:#8f98a0;font-size:12px;">扫描时超过此价格的游戏自动加入黑名单</span>
+            <span style="color:#8f98a0;font-size:12px;">扫描时超过此价格的游戏会自动加入游戏/AppID黑名单</span>
           </div>
           <div class="stch-bl-list" id="stch-bl-list"></div>
           <div class="stch-bl-list" id="stch-bl-list-fixed" style="max-height:100px;margin-top:8px;"></div>
@@ -2447,6 +2592,34 @@
           <div class="stch-game-list stch-surplus-list" id="stch-surplus-list"></div>
           <div class="stch-log-resizer" data-log="stch-surplus-log" data-content="stch-surplus-list" title="上下拖动调整日志区域"></div>
           <div id="stch-surplus-log"></div>
+        </div>
+        <div class="stch-tab-content" id="stch-tab-grind">
+          <div class="stch-toolbar">
+            <label>
+              <input id="stch-grind-only-recommended" type="checkbox" ${state.cfg.grindOnlyRecommended ? "checked" : ""}>
+              只显示建议分解
+            </label>
+            <label>
+              <input id="stch-grind-include-surplus-cards" type="checkbox" ${state.cfg.grindIncludeSurplusCards ? "checked" : ""}>
+              包含已检测多余卡牌
+            </label>
+            <span style="color:#8f98a0;font-size:12px;">仅生成建议和资产 ID，不会自动销毁物品</span>
+          </div>
+          <div class="stch-scan-actions">
+            <div class="stch-btn" id="stch-grind-scan-btn">扫描可分解物品</div>
+            <div class="stch-btn alt disabled" id="stch-grind-stop-btn">停止</div>
+          </div>
+          <div class="stch-progress" id="stch-grind-progress-wrap" style="display:none">
+            <div class="stch-progress-bar" id="stch-grind-progress-bar" style="width:0"></div>
+            <div class="stch-progress-text" id="stch-grind-progress-text">0/0</div>
+          </div>
+          <div class="stch-summary" id="stch-grind-summary-row" style="display:none">
+            <span class="stch-summary-text" id="stch-grind-summary"></span>
+          </div>
+          <div class="stch-status-text" id="stch-grind-status"></div>
+          <div class="stch-game-list stch-grind-list" id="stch-grind-list"></div>
+          <div class="stch-log-resizer" data-log="stch-grind-log" data-content="stch-grind-list" title="上下拖动调整日志区域"></div>
+          <div id="stch-grind-log"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-settings">
           <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">价格扫描</div>
@@ -2478,7 +2651,7 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.6.6 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.6.8 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -2537,6 +2710,8 @@
       );
       state.cfg.earlyPricePrediction = !!document.getElementById("stch-early-price-prediction")?.checked;
       state.cfg.surplusOnlyMaxed = !!document.getElementById("stch-surplus-only-maxed")?.checked;
+      state.cfg.grindOnlyRecommended = !!document.getElementById("stch-grind-only-recommended")?.checked;
+      state.cfg.grindIncludeSurplusCards = !!document.getElementById("stch-grind-include-surplus-cards")?.checked;
       state.cfg.craftInterval = readNumberInput(
         "stch-craft-interval",
         state.cfg.craftInterval ?? DEFAULT_CONFIG.craftInterval,
@@ -2554,6 +2729,7 @@
       updateResultColumns();
       if (changedId === "stch-craft-mode") renderCraftResults();
       if (changedId === "stch-surplus-only-maxed") renderSurplusResults();
+      if (changedId?.startsWith("stch-grind-")) renderGrindResults();
       if (changedId?.startsWith("stch-seasonal-")) {
         normalizeSeasonalInputs();
         updateSeasonalSummary();
@@ -2565,7 +2741,8 @@
       "stch-order-price-source", "stch-price-adjustment",
       "stch-early-price-prediction", "stch-craft-interval",
       "stch-craft-mode", "stch-seasonal-target",
-      "stch-surplus-only-maxed"];
+      "stch-surplus-only-maxed", "stch-grind-only-recommended",
+      "stch-grind-include-surplus-cards"];
     cfgIds.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -2581,6 +2758,7 @@
         content.classList.toggle("active", content.id === `stch-tab-${tabName}`);
       });
       if (tabName === "blacklist") renderBlacklist();
+      if (tabName === "grind") renderGrindResults();
     };
     const showOnboarding = () => {
       GM_setValue(ONBOARDING_SEEN_KEY, true);
@@ -2617,6 +2795,8 @@
     document.getElementById("stch-seasonal-stop-btn").addEventListener("click", requestSeasonalStop);
     document.getElementById("stch-surplus-scan-btn").addEventListener("click", startSurplusScan);
     document.getElementById("stch-surplus-stop-btn").addEventListener("click", requestSurplusStop);
+    document.getElementById("stch-grind-scan-btn").addEventListener("click", startGrindScan);
+    document.getElementById("stch-grind-stop-btn").addEventListener("click", requestGrindStop);
     const syncCraftMaxPages = event => {
       state.cfg.maxBadgePages = Math.max(
         1,
@@ -2646,9 +2826,9 @@
       showOnboarding();
     }
 
-    // Blacklist tab
+    // Game/AppID blacklist tab
     // Source: 0 = 手动 (manual query+add), 1 = 自动 (auto threshold during scan)
-    // Fixed:  0 = 普通黑名单,           1 = 固定黑名单 (permanent, ignored by cleanup)
+    // Fixed:  0 = 普通游戏黑名单,       1 = 固定游戏黑名单 (permanent, ignored by cleanup)
     // Days:   computed from stored Date.now() timestamp, 0 = today
 
     document.getElementById("stch-bl-lookup").addEventListener("click", () => {
@@ -2669,7 +2849,7 @@
     document.getElementById("stch-bl-add").addEventListener("click", () => {
       if (!blLookupAppid || !blLookupName) return;
       addToBlacklist(blLookupAppid, blLookupName, 0, 0);
-      document.getElementById("stch-bl-result").textContent = `${blLookupName} 已加入黑名单`;
+      document.getElementById("stch-bl-result").textContent = `${blLookupName} 已加入游戏黑名单`;
       document.getElementById("stch-bl-appid").value = "";
       blLookupAppid = "";
       blLookupName = "";
@@ -2680,7 +2860,7 @@
     document.getElementById("stch-bl-add-fixed").addEventListener("click", () => {
       if (!blLookupAppid || !blLookupName) return;
       addToBlacklist(blLookupAppid, blLookupName, 0, 1);
-      document.getElementById("stch-bl-result").textContent = `${blLookupName} 已加入固定黑名单`;
+      document.getElementById("stch-bl-result").textContent = `${blLookupName} 已加入固定游戏黑名单`;
       document.getElementById("stch-bl-appid").value = "";
       blLookupAppid = "";
       blLookupName = "";
@@ -2762,7 +2942,7 @@
         document.getElementById("stch-bl-result").textContent = "没有可清理的过期项";
         return;
       }
-      if (!confirm(`将清理 ${expired.length} 项过期（>7天）黑名单，确定？`)) return;
+      if (!confirm(`将清理 ${expired.length} 项过期（>7天）游戏黑名单，确定？`)) return;
       const keep = bl.filter(a => !expired.includes(a));
       expired.forEach(a => { delete n[a]; delete s[a]; delete d[a]; delete f[a]; });
       state.cfg.blacklist = keep.join(",");
@@ -2781,6 +2961,8 @@
     updateSeasonalSummary();
     updateSurplusActionState();
     renderSurplusResults();
+    updateGrindActionState();
+    renderGrindResults();
   }
 
   function skipCurrentBadge() {
@@ -2966,7 +3148,8 @@
       || state.bulkActionRunning
       || state.craftScanning
       || state.craftActionRunning
-      || state.surplusScanning;
+      || state.surplusScanning
+      || state.grindScanning;
     const plan = (() => {
       const targetLevel = clampNumber(
         document.getElementById("stch-seasonal-target")?.value,
@@ -3224,6 +3407,7 @@
       || state.craftScanning
       || state.craftActionRunning
       || state.surplusScanning
+      || state.grindScanning
     ) {
       return;
     }
@@ -3241,6 +3425,7 @@
     updateBulkActionState();
     updateCraftActionState();
     updateSurplusActionState();
+    updateGrindActionState();
     setSeasonalStatus("读取 Steam 点数商店");
 
     let completed = 0;
@@ -3424,7 +3609,8 @@
     const otherBusy = state.scanning
       || state.bulkActionRunning
       || state.seasonalActionRunning
-      || state.surplusScanning;
+      || state.surplusScanning
+      || state.grindScanning;
     const hasResults = state.craftResults.length > 0;
     const hasPlan = getCraftPlan().length > 0;
 
@@ -3493,7 +3679,8 @@
     selectAll.disabled = state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
-      || state.surplusScanning;
+      || state.surplusScanning
+      || state.grindScanning;
     const applyCraftSelectAll = checked => {
       state.craftResults.forEach(result => {
         if (result.maxCraftable <= 0) return;
@@ -3551,6 +3738,7 @@
         || state.craftActionRunning
         || state.seasonalActionRunning
         || state.surplusScanning
+        || state.grindScanning
         || state.cfg.craftMode === "max"
         || result.maxCraftable <= 0;
       countCell.appendChild(countInput);
@@ -3573,6 +3761,7 @@
         || state.craftActionRunning
         || state.seasonalActionRunning
         || state.surplusScanning
+        || state.grindScanning
         || result.maxCraftable <= 0;
       checkCell.appendChild(createCheckboxHit(checkbox));
 
@@ -3629,6 +3818,7 @@
       || state.bulkActionRunning
       || state.seasonalActionRunning
       || state.surplusScanning
+      || state.grindScanning
     ) {
       return;
     }
@@ -3654,6 +3844,7 @@
       || state.bulkActionRunning
       || state.seasonalActionRunning
       || state.surplusScanning
+      || state.grindScanning
     ) {
       return;
     }
@@ -3673,6 +3864,7 @@
     updateCraftActionState();
     updateBulkActionState();
     updateSurplusActionState();
+    updateGrindActionState();
     setCraftStatus("扫描可合成徽章");
 
     const cfg = state.cfg;
@@ -3715,7 +3907,7 @@
           seen.add(key);
           if (blacklist.has(String(candidate.appid))) {
             craftLog(
-              `[${candidate.appid}] ${candidate.gameName}: 位于黑名单，跳过`,
+              `[${candidate.appid}] ${candidate.gameName}: 位于游戏/AppID黑名单，跳过`,
               "info"
             );
             continue;
@@ -3818,6 +4010,7 @@
       updateBulkActionState();
       updateSeasonalActionState();
       updateSurplusActionState();
+      updateGrindActionState();
     }
   }
 
@@ -3960,6 +4153,8 @@
       || state.scanning
       || state.bulkActionRunning
       || state.seasonalActionRunning
+      || state.surplusScanning
+      || state.grindScanning
     ) {
       return;
     }
@@ -3976,6 +4171,7 @@
     updateBulkActionState();
     updateSeasonalActionState();
     updateSurplusActionState();
+    updateGrindActionState();
     renderCraftResults();
 
     const totalLevels = plan.reduce((sum, item) => sum + item.count, 0);
@@ -4098,6 +4294,7 @@
       updateBulkActionState();
       updateSeasonalActionState();
       updateSurplusActionState();
+      updateGrindActionState();
     }
   }
 
@@ -4464,7 +4661,8 @@
       || state.bulkActionRunning
       || state.craftScanning
       || state.craftActionRunning
-      || state.seasonalActionRunning;
+      || state.seasonalActionRunning
+      || state.grindScanning;
     document.getElementById("stch-surplus-scan-btn")?.classList.toggle(
       "disabled",
       surplusBusy || otherBusy
@@ -4561,6 +4759,7 @@
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
+      || state.grindScanning
     ) {
       return;
     }
@@ -4587,6 +4786,7 @@
     updateBulkActionState();
     updateCraftActionState();
     updateSeasonalActionState();
+    updateGrindActionState();
 
     const cfg = state.cfg;
     const queue = new RequestQueue(
@@ -4695,6 +4895,7 @@
       updateBulkActionState();
       updateCraftActionState();
       updateSeasonalActionState();
+      updateGrindActionState();
     }
   }
 
@@ -4704,6 +4905,695 @@
     state.surplusQueue?.stop();
     surplusLog("已请求停止检测", "warn");
     updateSurplusActionState();
+  }
+
+  // ============================================================
+  // Surplus item grind recommendations
+  // ============================================================
+  let grindStatusTimer = null;
+
+  function grindLog(msg, type = "") {
+    const box = document.getElementById("stch-grind-log");
+    if (!box) { console.log("[STCH Grind]", msg); return; }
+    const line = document.createElement("div");
+    if (type) line.className = type;
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function setGrindStatus(text, animate = true) {
+    const el = document.getElementById("stch-grind-status");
+    if (!el) return;
+    if (grindStatusTimer) {
+      clearInterval(grindStatusTimer);
+      grindStatusTimer = null;
+    }
+    if (!text) {
+      el.textContent = "";
+      el.style.display = "none";
+      return;
+    }
+    el.style.display = "";
+    el.textContent = text;
+    if (!animate) return;
+    let dots = 0;
+    grindStatusTimer = setInterval(() => {
+      dots = (dots + 1) % 4;
+      el.textContent = text + " " + ".".repeat(dots);
+    }, 500);
+  }
+
+  function setGrindProgress(done, total, text = "") {
+    const wrap = document.getElementById("stch-grind-progress-wrap");
+    const bar = document.getElementById("stch-grind-progress-bar");
+    const label = document.getElementById("stch-grind-progress-text");
+    if (!wrap || !bar || !label) return;
+    wrap.style.display = "";
+    const pct = total > 0 ? Math.min(100, done / total * 100) : 0;
+    bar.style.width = `${pct}%`;
+    label.textContent = text || `${done}/${total}`;
+  }
+
+  function hideGrindProgress() {
+    const wrap = document.getElementById("stch-grind-progress-wrap");
+    if (wrap) wrap.style.display = "none";
+  }
+
+  function getBlacklistAppids() {
+    return new Set(
+      (state.cfg.blacklist || "")
+        .split(",")
+        .map(value => value.trim())
+        .filter(Boolean)
+    );
+  }
+
+  function isBlacklistedAppid(appid) {
+    return !!appid && getBlacklistAppids().has(String(appid));
+  }
+
+  function normalizeInventoryText(value) {
+    const div = document.createElement("div");
+    div.innerHTML = String(value ?? "").replace(/<br\s*\/?>/gi, " ");
+    return decodeHtmlEntities(div.textContent || div.innerText || String(value || ""))
+      .replace(/\u00a0/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function parseGemValueFromText(text) {
+    const normalized = normalizeInventoryText(text).replace(/[，,]/g, "");
+    if (!normalized) return 0;
+    const direct = normalized.match(
+      /(?:turn(?:ed)?\s+into|convert(?:ed)?\s+into|worth|可分解为|可转换为|可转化为|转换为|转化为|分解为|分解成)[^\d]{0,40}(\d+)\s*(?:gems?|宝石)/i
+    );
+    const fallback = direct || normalized.match(/(\d+)\s*(?:gems?|宝石)/i);
+    return fallback ? Math.max(0, parseInt(fallback[1], 10) || 0) : 0;
+  }
+
+  function parseGemValueFromDescription(description) {
+    const values = [];
+    ["owner_descriptions", "descriptions", "owner_actions", "actions"].forEach(key => {
+      const list = Array.isArray(description?.[key]) ? description[key] : [];
+      list.forEach(item => {
+        values.push(item?.value, item?.name, item?.link);
+      });
+    });
+    return values.reduce((best, value) => {
+      if (value == null) return best;
+      return Math.max(best, parseGemValueFromText(value));
+    }, 0);
+  }
+
+  const grindGemValueCache = new Map();
+
+  function parseGooValueParams(description) {
+    const links = [];
+    ["owner_actions", "actions"].forEach(key => {
+      const list = Array.isArray(description?.[key]) ? description[key] : [];
+      list.forEach(item => {
+        if (item?.link) links.push(String(item.link));
+      });
+    });
+    for (const link of links) {
+      const match = link.match(/GetGooValue\s*\(([^)]*)\)/i);
+      if (!match) continue;
+      const args = match[1]
+        .split(",")
+        .map(value => value.trim().replace(/^['"]|['"]$/g, ""));
+      if (args.length < 5) continue;
+      const appid = args[args.length - 3];
+      const itemType = args[args.length - 2];
+      const borderColor = args[args.length - 1];
+      if (/^\d+$/.test(appid) && /^\d+$/.test(itemType) && /^\d+$/.test(borderColor)) {
+        return { appid, itemType, borderColor };
+      }
+    }
+    return null;
+  }
+
+  async function getGrindGemValue(description, queue) {
+    const parsedValue = parseGemValueFromDescription(description);
+    if (parsedValue > 0) return parsedValue;
+
+    const params = parseGooValueParams(description);
+    if (!params) return 0;
+    const key = `${params.appid}_${params.itemType}_${params.borderColor}`;
+    if (grindGemValueCache.has(key)) return grindGemValueCache.get(key);
+
+    try {
+      const url = `https://steamcommunity.com/auction/ajaxgetgoovalueforitemtype/?appid=${encodeURIComponent(params.appid)}&item_type=${encodeURIComponent(params.itemType)}&border_color=${encodeURIComponent(params.borderColor)}`;
+      const response = await queue.fetch(url);
+      const value = Math.max(0, parseInt(response?.data?.goo_value, 10) || 0);
+      grindGemValueCache.set(key, value);
+      return value;
+    } catch (_) {
+      if (state.grindStopRequested || queue.stopped) return 0;
+      grindGemValueCache.set(key, 0);
+      return 0;
+    }
+  }
+
+  function getCommunityItemType(description) {
+    if (isTradingCardDescription(description)) {
+      return isFoilCardDescription(description) ? "闪亮卡牌" : "卡牌";
+    }
+    const itemClass = findDescriptionTag(description, "item_class");
+    return String(
+      description?.type
+      || itemClass?.localized_tag_name
+      || "物品"
+    ).replace(/\s+/g, " ").trim();
+  }
+
+  function getSurplusAssetAllowance() {
+    const allowance = new Map();
+    for (const result of state.surplusResults || []) {
+      for (const asset of result.assets || []) {
+        const assetid = String(asset.assetid || "");
+        if (!assetid) continue;
+        allowance.set(assetid, (allowance.get(assetid) || 0) + (asset.selectedAmount || 0));
+      }
+    }
+    return allowance;
+  }
+
+  function addGrindItem(groupMap, asset, description, amount, source, gemValue) {
+    if (!description || amount <= 0) return "skipped";
+    if (isGemSackDescription(description) || isLooseGemDescription(description)) return "gem";
+
+    const unitGemValue = Math.max(0, parseInt(gemValue, 10) || 0);
+    if (unitGemValue <= 0) return "noGemValue";
+
+    const appid = getCardGameAppid(description);
+    if (isBlacklistedAppid(appid)) return "blacklisted";
+
+    const marketHashName = String(description.market_hash_name || "").trim();
+    const key = [
+      appid || "0",
+      marketHashName || getDescriptionKey(description),
+      unitGemValue,
+      source,
+    ].join("|");
+    let item = groupMap.get(key);
+    if (!item) {
+      item = {
+        appid,
+        gameName: getCardGameName(description),
+        type: getCommunityItemType(description),
+        itemName: String(description.name || marketHashName || "未知物品").trim(),
+        marketHashName,
+        gemValue: unitGemValue,
+        quantity: 0,
+        totalGems: 0,
+        marketableCount: 0,
+        tradableCount: 0,
+        source,
+        assets: [],
+      };
+      groupMap.set(key, item);
+    }
+    if (!item.gameName) item.gameName = getCardGameName(description);
+
+    const marketable = Number(description.marketable) === 1;
+    const tradable = Number(description.tradable) === 1;
+    item.quantity += amount;
+    item.totalGems += amount * unitGemValue;
+    if (marketable) item.marketableCount += amount;
+    if (tradable) item.tradableCount += amount;
+    item.assets.push({
+      assetid: String(asset.assetid || ""),
+      amount,
+      marketable,
+      tradable,
+    });
+    return "added";
+  }
+
+  async function loadGrindInventoryItems(steamId, queue) {
+    const groupMap = new Map();
+    const language = unsafeWindow.g_strLanguage || "schinese";
+    const surplusAllowance = getSurplusAssetAllowance();
+    const includeCards = !!state.cfg.grindIncludeSurplusCards;
+    let startAssetId = "";
+    let page = 0;
+    let totalInventoryCount = 0;
+    let totalAssetsSeen = 0;
+    const skipped = {
+      cardsWithoutSurplus: 0,
+      noGemValue: 0,
+      blacklisted: 0,
+      gems: 0,
+    };
+
+    do {
+      page++;
+      const params = new URLSearchParams({
+        l: language,
+        count: "2000",
+      });
+      if (startAssetId) params.set("start_assetid", startAssetId);
+      const url = `https://steamcommunity.com/inventory/${steamId}/753/6?${params.toString()}`;
+      setGrindStatus(`读取库存第 ${page} 页`);
+      const response = await queue.fetch(url);
+      const data = response?.data || {};
+      if (data?.success !== 1 && data?.success !== true) {
+        throw new Error(data?.Error || data?.error || "Steam 未返回可用库存数据");
+      }
+
+      totalInventoryCount = Number(data.total_inventory_count || totalInventoryCount) || totalInventoryCount;
+      const descriptions = new Map();
+      (Array.isArray(data.descriptions) ? data.descriptions : []).forEach(description => {
+        descriptions.set(getDescriptionKey(description), description);
+      });
+
+      const assets = Array.isArray(data.assets) ? data.assets : [];
+      totalAssetsSeen += assets.length;
+      for (const asset of assets) {
+        if (state.grindStopRequested) break;
+        const description = descriptions.get(getDescriptionKey(asset));
+        if (!description) continue;
+        const assetAmount = getAssetAmount(asset);
+        if (isGemSackDescription(description) || isLooseGemDescription(description)) {
+          skipped.gems += assetAmount;
+          continue;
+        }
+        if (isBlacklistedAppid(getCardGameAppid(description))) {
+          skipped.blacklisted += assetAmount;
+          continue;
+        }
+        let amount = assetAmount;
+        if (isTradingCardDescription(description)) {
+          const allowed = surplusAllowance.get(String(asset.assetid || "")) || 0;
+          amount = includeCards ? Math.min(assetAmount, allowed) : 0;
+          if (amount <= 0) {
+            skipped.cardsWithoutSurplus += assetAmount;
+            continue;
+          }
+        }
+
+        const gemValue = await getGrindGemValue(description, queue);
+        const result = addGrindItem(
+          groupMap,
+          asset,
+          description,
+          amount,
+          isTradingCardDescription(description) ? "card" : "item",
+          gemValue
+        );
+        if (result === "noGemValue") skipped.noGemValue += amount;
+        else if (result === "blacklisted") skipped.blacklisted += amount;
+        else if (result === "gem") skipped.gems += amount;
+      }
+
+      grindLog(
+        `库存第 ${page} 页：读取 ${assets.length} 件，累计候选 ${groupMap.size} 种`,
+        "info"
+      );
+      startAssetId = data.more_items && data.last_assetid
+        ? String(data.last_assetid)
+        : "";
+    } while (startAssetId && !state.grindStopRequested);
+
+    const items = [...groupMap.values()].sort((left, right) => {
+      const adviceCompare = Number(right.totalGems) - Number(left.totalGems);
+      if (adviceCompare) return adviceCompare;
+      const gameCompare = (left.gameName || "").localeCompare(right.gameName || "", "zh-CN");
+      if (gameCompare) return gameCompare;
+      return (left.itemName || "").localeCompare(right.itemName || "", "zh-CN");
+    });
+
+    return {
+      items,
+      totalInventoryCount,
+      totalAssetsSeen,
+      skipped,
+    };
+  }
+
+  function applyGrindRecommendation(item, gemSackPriceCents) {
+    item.gemSackPriceCents = gemSackPriceCents || 0;
+    item.gemValueNetCents = getGemValueSellerNetCents(item.totalGems, gemSackPriceCents);
+    item.unitGemValueNetCents = getGemValueSellerNetCents(item.gemValue, gemSackPriceCents);
+    item.breakEvenPriceCents = getGemBreakEvenBuyerPrice(item.gemValue, gemSackPriceCents);
+    item.marketNetCents = item.priceCents ? getSellerReceiveForBuyerPrice(item.priceCents) : 0;
+
+    if (!gemSackPriceCents) {
+      item.recommendationKey = "unknown";
+      item.recommendationLabel = "缺宝石价";
+      item.recommendationClass = "warn";
+    } else if (!item.marketHashName || item.marketableCount <= 0) {
+      item.recommendationKey = "grind";
+      item.recommendationLabel = "分解";
+      item.recommendationClass = "ok";
+      item.recommendationReason = "不可出售或缺少市场标识";
+    } else if (!item.priceCents) {
+      item.recommendationKey = "grind";
+      item.recommendationLabel = "分解";
+      item.recommendationClass = "ok";
+      item.recommendationReason = "市场暂无可用价格";
+    } else if (item.marketNetCents <= item.unitGemValueNetCents) {
+      item.recommendationKey = "grind";
+      item.recommendationLabel = "分解";
+      item.recommendationClass = "ok";
+      item.recommendationReason =
+        `卖出税后约 ¥${formatCNY(item.marketNetCents)}，低于分解宝石税后约 ¥${formatCNY(item.unitGemValueNetCents)}`;
+    } else {
+      item.recommendationKey = "sell";
+      item.recommendationLabel = "卖出";
+      item.recommendationClass = "info";
+      item.recommendationReason =
+        `卖出税后约 ¥${formatCNY(item.marketNetCents)}，高于分解宝石税后约 ¥${formatCNY(item.unitGemValueNetCents)}`;
+    }
+    return item;
+  }
+
+  function getVisibleGrindResults() {
+    const all = state.grindResults || [];
+    if (!state.cfg.grindOnlyRecommended) return all;
+    return all.filter(item => item.recommendationKey === "grind");
+  }
+
+  function updateGrindSummary() {
+    const row = document.getElementById("stch-grind-summary-row");
+    const summary = document.getElementById("stch-grind-summary");
+    if (!row || !summary) return;
+    const visible = getVisibleGrindResults();
+    if (visible.length === 0) {
+      row.style.display = "none";
+      summary.textContent = "";
+      return;
+    }
+
+    const recommended = (state.grindResults || []).filter(item => item.recommendationKey === "grind");
+    const visibleQuantity = visible.reduce((sum, item) => sum + item.quantity, 0);
+    const recommendedQuantity = recommended.reduce((sum, item) => sum + item.quantity, 0);
+    const recommendedGems = recommended.reduce((sum, item) => sum + item.totalGems, 0);
+    const gemPrice = state.grindGemPrice || {};
+    const priceText = gemPrice.priceCents
+      ? `宝石袋 ¥${formatCNY(gemPrice.priceCents)} / 税后 ¥${formatCNY(getGemSackSellerNetCents(gemPrice.priceCents))}`
+      : "暂无宝石袋价格";
+    summary.innerHTML =
+      `显示 <b>${visible.length}</b> 种 / <b>${visibleQuantity}</b> 件 · ` +
+      `建议分解 <b>${recommended.length}</b> 种 / <b>${recommendedQuantity}</b> 件 · ` +
+      `预计 <b>${formatInt(recommendedGems)}</b> 宝石 · ${priceText}`;
+    row.style.display = "";
+  }
+
+  function updateGrindActionState() {
+    const grindBusy = state.grindScanning;
+    const otherBusy = state.scanning
+      || state.bulkActionRunning
+      || state.craftScanning
+      || state.craftActionRunning
+      || state.seasonalActionRunning
+      || state.surplusScanning;
+    document.getElementById("stch-grind-scan-btn")?.classList.toggle(
+      "disabled",
+      grindBusy || otherBusy
+    );
+    document.getElementById("stch-grind-stop-btn")?.classList.toggle(
+      "disabled",
+      !grindBusy
+    );
+    ["stch-grind-only-recommended", "stch-grind-include-surplus-cards"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = grindBusy || otherBusy;
+    });
+  }
+
+  function renderGrindResults() {
+    const list = document.getElementById("stch-grind-list");
+    if (!list) return;
+    list.innerHTML = "";
+
+    const visible = getVisibleGrindResults();
+    if (visible.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "stch-game-row";
+      empty.textContent = state.grindScanning
+        ? "正在扫描可分解物品..."
+        : state.grindResults.length > 0
+          ? "当前筛选下没有建议分解物品"
+          : "尚未扫描可分解物品";
+      list.appendChild(empty);
+      updateGrindSummary();
+      updateGrindActionState();
+      return;
+    }
+
+    const header = document.createElement("div");
+    header.className = "stch-game-row stch-grind-row stch-row-header";
+    header.innerHTML = `
+      <span class="stch-appid">游戏ID</span>
+      <span class="stch-name">游戏名</span>
+      <span class="stch-grind-type">类型</span>
+      <span class="stch-grind-item">物品</span>
+      <span class="stch-grind-num">数量</span>
+      <span class="stch-grind-num">宝石</span>
+      <span class="stch-grind-price">市场</span>
+      <span class="stch-grind-price">临界</span>
+      <span class="stch-grind-action">建议</span>
+      <span class="stch-grind-assets">资产ID</span>
+    `;
+    list.appendChild(header);
+
+    for (const item of visible) {
+      const row = document.createElement("div");
+      row.className = "stch-game-row stch-grind-row";
+      if (item.marketHashName) {
+        row.style.cursor = "pointer";
+        row.addEventListener("click", event => {
+          if (event.target.closest("a")) return;
+          window.open(
+            `https://steamcommunity.com/market/listings/753/${encodeURIComponent(item.marketHashName)}`,
+            "_blank"
+          );
+        });
+      }
+
+      const assetSummary = summarizeAssetIds(item.assets.map(asset => ({
+        assetid: asset.assetid,
+        selectedAmount: asset.amount,
+      })));
+      const marketText = item.priceCents
+        ? `¥${formatCNY(item.priceCents)}`
+        : item.marketHashName && item.marketableCount > 0
+          ? "无价"
+          : "不可售";
+      const marketTitle = item.priceCents
+        ? `${item.priceSource || "市场价"}；卖出税后约 ¥${formatCNY(item.marketNetCents)}`
+        : item.recommendationReason || "";
+      const action = createTextSpan(
+        `stch-grind-action ${item.recommendationClass || ""}`.trim(),
+        item.recommendationLabel || "—"
+      );
+      action.title = item.recommendationReason || "";
+
+      const appid = createTextSpan("stch-appid", item.appid || "—");
+      const gameName = createTextSpan("stch-name", item.gameName || "—");
+      gameName.title = item.gameName || "";
+      const type = createTextSpan("stch-grind-type", item.type || "物品");
+      const name = createTextSpan("stch-grind-item", item.itemName || item.marketHashName || "未知物品");
+      name.title = item.marketHashName || item.itemName || "";
+      const quantity = createTextSpan("stch-grind-num", item.quantity);
+      const gems = createTextSpan("stch-grind-num", item.totalGems);
+      gems.title = `${item.gemValue} 宝石/件`;
+      const market = createTextSpan("stch-grind-price", marketText);
+      market.title = marketTitle;
+      const breakEven = createTextSpan(
+        "stch-grind-price",
+        item.breakEvenPriceCents ? `¥${formatCNY(item.breakEvenPriceCents)}` : "—"
+      );
+      breakEven.title = item.breakEvenPriceCents
+        ? `${item.gemValue} 宝石/件的市场可见临界价，已计入物品卖出税`
+        : "";
+      const assets = createTextSpan("stch-grind-assets", assetSummary.text || "—");
+      assets.title = assetSummary.title || "";
+      row.append(appid, gameName, type, name, quantity, gems, market, breakEven, action, assets);
+      list.appendChild(row);
+    }
+
+    updateGrindSummary();
+    updateGrindActionState();
+  }
+
+  async function startGrindScan() {
+    if (
+      state.grindScanning
+      || state.scanning
+      || state.bulkActionRunning
+      || state.craftScanning
+      || state.craftActionRunning
+      || state.seasonalActionRunning
+      || state.surplusScanning
+    ) {
+      return;
+    }
+
+    if (location.hostname !== "steamcommunity.com") {
+      grindLog("请在 Steam 社区徽章页或库存页使用多余物品销毁", "warn");
+      return;
+    }
+
+    const steamId = getSteamId();
+    if (!steamId) {
+      grindLog("未找到 SteamID，无法读取库存", "err");
+      return;
+    }
+
+    state.grindScanning = true;
+    state.grindStopRequested = false;
+    state.grindResults = [];
+    state.grindGemPrice = null;
+    const logBox = document.getElementById("stch-grind-log");
+    if (logBox) logBox.innerHTML = "";
+    renderGrindResults();
+    updateGrindActionState();
+    updateBulkActionState();
+    updateCraftActionState();
+    updateSeasonalActionState();
+    updateSurplusActionState();
+
+    const cfg = state.cfg;
+    const queue = new RequestQueue(
+      cfg.requestInterval,
+      cfg.batchSize,
+      cfg.batchPause,
+      state,
+      setGrindStatus,
+      grindLog,
+      cfg.scanInterval
+    );
+    state.grindQueue = queue;
+
+    try {
+      grindLog("【阶段 1/3】读取宝石袋市场价格");
+      setGrindProgress(0, 1, "阶段1: 读取宝石价格");
+      const gemPrice = await loadSidebarGemPrice();
+      if (!gemPrice.priceCents) {
+        throw new Error("宝石袋暂无可用市场价格，无法计算分解临界点");
+      }
+      state.grindGemPrice = gemPrice;
+      const sackNet = getGemSackSellerNetCents(gemPrice.priceCents);
+      const breakEven10 = getGemBreakEvenBuyerPrice(10, gemPrice.priceCents);
+      grindLog(
+        `宝石袋 ${gemPrice.source} ¥${formatCNY(gemPrice.priceCents)}，税后到手约 ¥${formatCNY(sackNet)}；10宝石临界价 ¥${formatCNY(breakEven10)}`,
+        "ok"
+      );
+
+      if (cfg.grindIncludeSurplusCards && (state.surplusResults || []).length === 0) {
+        grindLog("未检测到多余卡牌结果：本次只会分析非卡牌库存物品；如需包含卡牌，请先跑“多余卡牌检测”", "warn");
+      }
+
+      grindLog("【阶段 2/3】读取社区库存并识别可分解物品");
+      setGrindProgress(0, 1, "阶段2: 读取库存");
+      const inventory = await loadGrindInventoryItems(steamId, queue);
+      if (state.grindStopRequested) {
+        grindLog("已停止扫描", "warn");
+        return;
+      }
+
+      grindLog(
+        `库存读取完成：库存 ${inventory.totalInventoryCount || inventory.totalAssetsSeen} 件，` +
+        `候选 ${inventory.items.length} 种；` +
+        `跳过无宝石值 ${inventory.skipped.noGemValue} 件，` +
+        `游戏黑名单 ${inventory.skipped.blacklisted} 件`,
+        "ok"
+      );
+
+      if (inventory.items.length === 0) {
+        renderGrindResults();
+        grindLog("没有找到可用于分解建议的物品", "warn");
+        return;
+      }
+
+      grindLog("【阶段 3/3】查询市场价格并计算建议");
+      const pricedCandidates = inventory.items.filter(item => item.marketHashName && item.marketableCount > 0);
+      let priced = 0;
+      let failed = 0;
+
+      for (let index = 0; index < inventory.items.length; index++) {
+        if (state.grindStopRequested) break;
+        const item = inventory.items[index];
+        setGrindProgress(
+          index,
+          inventory.items.length,
+          `阶段3: ${index + 1}/${inventory.items.length} · ${item.itemName || item.marketHashName}`
+        );
+        setGrindStatus(`查询价格: ${item.itemName || item.marketHashName}`);
+
+        if (item.marketHashName && item.marketableCount > 0) {
+          const price = await priceCard(item.marketHashName, queue);
+          if (price && !price.noPriceData) {
+            item.priceCents = price.lowestSellCents;
+            item.medianCents = price.medianCents;
+            item.volume = price.volume;
+            item.priceSource = price.priceSource === "lowest" ? "在售最低" : "平均价格";
+            priced++;
+          } else if (price?.noPriceData) {
+            item.priceSource = "无可用价格";
+          } else {
+            failed++;
+            item.priceSource = "查价失败";
+          }
+        }
+
+        applyGrindRecommendation(item, gemPrice.priceCents);
+        state.grindResults.push(item);
+        renderGrindResults();
+      }
+
+      state.grindResults.sort((left, right) => {
+        const recommendCompare = Number(right.recommendationKey === "grind") - Number(left.recommendationKey === "grind");
+        if (recommendCompare) return recommendCompare;
+        const gemCompare = right.totalGems - left.totalGems;
+        if (gemCompare) return gemCompare;
+        const gameCompare = (left.gameName || "").localeCompare(right.gameName || "", "zh-CN");
+        if (gameCompare) return gameCompare;
+        return (left.itemName || "").localeCompare(right.itemName || "", "zh-CN");
+      });
+      renderGrindResults();
+
+      if (state.grindStopRequested) {
+        grindLog("已停止扫描", "warn");
+      } else {
+        const recommended = state.grindResults.filter(item => item.recommendationKey === "grind");
+        const recommendedQuantity = recommended.reduce((sum, item) => sum + item.quantity, 0);
+        const recommendedGems = recommended.reduce((sum, item) => sum + item.totalGems, 0);
+        grindLog(
+          `扫描完成：查价 ${priced}/${pricedCandidates.length} 种，失败 ${failed} 种；` +
+          `建议分解 ${recommended.length} 种 / ${recommendedQuantity} 件 / ${formatInt(recommendedGems)} 宝石`,
+          failed ? "warn" : "ok"
+        );
+      }
+    } catch (error) {
+      if (!state.grindStopRequested) {
+        grindLog(`扫描中断: ${error?.message || error?.status || error}`, "err");
+      }
+    } finally {
+      queue.stop();
+      state.grindQueue = null;
+      state.grindScanning = false;
+      state.grindStopRequested = false;
+      hideGrindProgress();
+      setGrindStatus(null);
+      renderGrindResults();
+      updateGrindActionState();
+      updateBulkActionState();
+      updateCraftActionState();
+      updateSeasonalActionState();
+      updateSurplusActionState();
+    }
+  }
+
+  function requestGrindStop() {
+    if (!state.grindScanning) return;
+    state.grindStopRequested = true;
+    state.grindQueue?.stop();
+    grindLog("已请求停止扫描", "warn");
+    updateGrindActionState();
   }
 
   // ============================================================
@@ -4741,7 +5631,8 @@
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
-      || state.surplusScanning;
+      || state.surplusScanning
+      || state.grindScanning;
     document.getElementById("stch-recalculate-btn")?.classList.toggle("disabled", disabled);
     document.getElementById("stch-submit-orders-btn")?.classList.toggle("disabled", disabled);
     document.getElementById("stch-scan-btn")?.classList.toggle(
@@ -4752,6 +5643,7 @@
         || state.craftActionRunning
         || state.seasonalActionRunning
         || state.surplusScanning
+        || state.grindScanning
     );
 
     const selectAll = document.getElementById("stch-result-select-all");
@@ -4875,6 +5767,7 @@
       || state.craftActionRunning
       || state.seasonalActionRunning
       || state.surplusScanning
+      || state.grindScanning
     ) {
       return;
     }
@@ -4937,6 +5830,7 @@
       updateCraftActionState();
       updateSeasonalActionState();
       updateSurplusActionState();
+      updateGrindActionState();
       log(`选中项重算结束: 成功 ${refreshed}, 失败 ${failed}`, failed ? "warn" : "ok");
     }
   }
@@ -4948,6 +5842,8 @@
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
+      || state.surplusScanning
+      || state.grindScanning
     ) {
       return;
     }
@@ -4968,6 +5864,7 @@
     updateCraftActionState();
     updateSeasonalActionState();
     updateSurplusActionState();
+    updateGrindActionState();
     setScanPhase("scanning");
     setStatus("正在扫描徽章页");
 
@@ -4994,6 +5891,7 @@
       document.getElementById("stch-skip-btn")?.classList.add("disabled");
       document.getElementById("stch-stop-btn")?.classList.add("disabled");
       updateSurplusActionState();
+      updateGrindActionState();
       return;
     }
 
@@ -5031,7 +5929,7 @@
         // blacklist check
         const blAppids = (cfg.blacklist || "").split(",").map(s => s.trim()).filter(Boolean);
         if (blAppids.includes(String(b.appid))) {
-          log(`[${b.appid}] ${b.gameName || ""}: 在黑名单中, 跳过`, "info");
+          log(`[${b.appid}] ${b.gameName || ""}: 在游戏/AppID黑名单中, 跳过`, "info");
           skipped++;
           continue;
         }
@@ -5255,7 +6153,7 @@
           const autoBlCents = Math.round((state.cfg.autoBlackThreshold || 0) * 100);
           if (state.cfg.autoBlackEnabled && autoBlCents > 0 && fullSetCostCents > autoBlCents) {
             addToBlacklist(b.appid, info.gameName || b.gameName || "", 1);
-            log(`  → 自动加入黑名单: 全套 ¥${info.fullSetCNY} > ¥${state.cfg.autoBlackThreshold}`, "info");
+            log(`  → 自动加入游戏黑名单: 全套 ¥${info.fullSetCNY} > ¥${state.cfg.autoBlackThreshold}`, "info");
             skipped++;
             continue;
           }
@@ -5303,6 +6201,7 @@
       updateCraftActionState();
       updateSeasonalActionState();
       updateSurplusActionState();
+      updateGrindActionState();
     }
   }
 
@@ -5969,6 +6868,8 @@
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
+      || state.surplusScanning
+      || state.grindScanning
     ) {
       return;
     }
@@ -5977,6 +6878,8 @@
     updateBulkActionState();
     updateCraftActionState();
     updateSeasonalActionState();
+    updateSurplusActionState();
+    updateGrindActionState();
     let submitted = 0;
     let failed = 0;
     try {
@@ -6028,6 +6931,7 @@
       updateCraftActionState();
       updateSeasonalActionState();
       updateSurplusActionState();
+      updateGrindActionState();
     }
   }
 
@@ -6514,7 +7418,7 @@
     if (listFixed) listFixed.replaceChildren();
 
     if (normal.length === 0 && fixedList.length === 0) {
-      list.appendChild(createPlaceholder("黑名单为空"));
+      list.appendChild(createPlaceholder("游戏/AppID黑名单为空"));
       if (countEl) countEl.textContent = "";
     } else {
       list.appendChild(createHeader());
@@ -6524,7 +7428,7 @@
     }
 
     if (listFixed && fixedList.length > 0) {
-      const separator = createTextSpan("stch-bl-sep", "固定黑名单");
+      const separator = createTextSpan("stch-bl-sep", "固定游戏黑名单");
       listFixed.appendChild(separator);
       appendItems(listFixed, fixedList);
     }
