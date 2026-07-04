@@ -2,7 +2,7 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.7.5
+// @version      1.7.6
 // @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and suggest surplus item gem conversion
 // @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测多余卡牌和多余物品分解建议
 // @author       SpaceSyt
@@ -1240,10 +1240,12 @@
       min-height: 0;
       max-height: none;
     }
-    .stch-order-list {
+    .stch-order-page-list {
       flex: 1;
       min-height: 0;
       max-height: none;
+      width: 100%;
+      box-sizing: border-box;
     }
     .stch-order-tools {
       margin-left: auto;
@@ -1472,6 +1474,23 @@
       color: #f0c4f7;
       text-shadow: 0 0 10px rgba(207, 115, 201, 0.35);
     }
+    .stch-control-disabled {
+      color: #687682 !important;
+      font-weight: normal !important;
+    }
+    .stch-control-disabled .stch-input,
+    .stch-input:disabled {
+      color: #687682;
+      background: #111a25;
+      border-color: #2f3f51;
+      cursor: not-allowed;
+      opacity: 0.75;
+    }
+    .stch-foil-mode-label.disabled {
+      color: #7d6685;
+      text-shadow: none;
+      cursor: not-allowed;
+    }
 
     .stch-status-text { color: #8db7d7; font-size: 13px; padding: 6px 0; min-height: 20px; }
 
@@ -1619,7 +1638,6 @@
     }
 
     #stch-log,
-    #stch-order-log,
     #stch-craft-log,
     #stch-seasonal-log,
     #stch-surplus-log,
@@ -1638,18 +1656,17 @@
       white-space: pre-wrap;
       word-break: break-all;
     }
-    #stch-order-log,
     #stch-craft-log,
     #stch-seasonal-log,
     #stch-surplus-log,
     #stch-grind-log {
       flex: 0 0 19vh;
     }
-    #stch-log .ok, #stch-order-log .ok, #stch-craft-log .ok, #stch-seasonal-log .ok, #stch-surplus-log .ok, #stch-grind-log .ok { color: #75b022; }
-    #stch-log .warn, #stch-order-log .warn, #stch-craft-log .warn, #stch-seasonal-log .warn, #stch-surplus-log .warn, #stch-grind-log .warn { color: #ffc902; }
-    #stch-log .warn-ip, #stch-order-log .warn-ip, #stch-craft-log .warn-ip, #stch-seasonal-log .warn-ip, #stch-surplus-log .warn-ip, #stch-grind-log .warn-ip { color: #fff; }
-    #stch-log .err, #stch-order-log .err, #stch-craft-log .err, #stch-seasonal-log .err, #stch-surplus-log .err, #stch-grind-log .err { color: #c04040; }
-    #stch-log .info, #stch-order-log .info, #stch-craft-log .info, #stch-seasonal-log .info, #stch-surplus-log .info, #stch-grind-log .info { color: #67c1f5; }
+    #stch-log .ok, #stch-craft-log .ok, #stch-seasonal-log .ok, #stch-surplus-log .ok, #stch-grind-log .ok { color: #75b022; }
+    #stch-log .warn, #stch-craft-log .warn, #stch-seasonal-log .warn, #stch-surplus-log .warn, #stch-grind-log .warn { color: #ffc902; }
+    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-seasonal-log .warn-ip, #stch-surplus-log .warn-ip, #stch-grind-log .warn-ip { color: #fff; }
+    #stch-log .err, #stch-craft-log .err, #stch-seasonal-log .err, #stch-surplus-log .err, #stch-grind-log .err { color: #c04040; }
+    #stch-log .info, #stch-craft-log .info, #stch-seasonal-log .info, #stch-surplus-log .info, #stch-grind-log .info { color: #67c1f5; }
 
     .stch-progress {
       height: 20px;
@@ -2528,7 +2545,7 @@
           </div>
           <div class="stch-toolbar">
             <label class="stch-primary-label">单套卡牌价格上限 ¥ <input id="stch-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.threshold}"></label>
-            <label class="stch-primary-label">购买卡牌逻辑 <select id="stch-buy-mode" class="stch-input" style="width:110px">
+            <label class="stch-primary-label" id="stch-buy-mode-label">购买卡牌逻辑 <select id="stch-buy-mode" class="stch-input" style="width:110px">
               <option value="complete1" ${state.cfg.buyMode === "complete1" ? "selected" : ""}>补全单套</option>
               <option value="complete5" ${state.cfg.buyMode === "complete5" ? "selected" : ""}>补至五级</option>
               <option value="buy1" ${state.cfg.buyMode === "buy1" ? "selected" : ""}>购买单套</option>
@@ -2580,26 +2597,21 @@
         <div class="stch-tab-content" id="stch-tab-orders">
           <div class="stch-toolbar">
             <label class="stch-primary-label">手动 AppID <input id="stch-order-appid" class="stch-input" type="text" style="width:100px" placeholder="4761370"></label>
-            <label>
+            <label class="stch-foil-mode-label" id="stch-order-manual-foil-label">
               <input id="stch-order-manual-foil" type="checkbox">
               闪卡
             </label>
             <div class="stch-btn alt" id="stch-order-add-btn">读取并加入</div>
-            <span style="color:#8f98a0;font-size:12px;">提示：4761370，本次夏促</span>
-          </div>
-          <div class="stch-scan-actions">
             <div class="stch-btn alt disabled" id="stch-order-recalculate-btn">重新计算</div>
             <div class="stch-btn disabled" id="stch-order-submit-orders-btn">提交订购单</div>
-            <div class="stch-btn alt stch-btn-danger disabled stch-order-tools" id="stch-order-delete-btn">删除选中缓存</div>
+            <div class="stch-btn alt stch-btn-danger disabled stch-order-tools" id="stch-order-delete-btn">删除过期</div>
           </div>
           <div class="stch-summary" id="stch-order-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-order-summary"></span>
             <span class="stch-selected-count" id="stch-order-selected-count">已选择 0 项</span>
           </div>
-          <div class="stch-status-text" id="stch-order-status"></div>
-          <div class="stch-game-list stch-order-list" id="stch-order-list"></div>
-          <div class="stch-log-resizer" data-log="stch-order-log" data-content="stch-order-list" title="上下拖动调整日志区域"></div>
-          <div id="stch-order-log"></div>
+          <div class="stch-status-text" id="stch-order-status" style="display:none"></div>
+          <div class="stch-game-list stch-order-page-list" id="stch-order-list"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-craft">
           <div class="stch-toolbar">
@@ -2764,7 +2776,7 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.7.5 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.7.6 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -2815,7 +2827,13 @@
         state.cfg.batchPause ?? DEFAULT_CONFIG.batchPause,
         { integer: true, min: 0 }
       );
-      state.cfg.buyMode = document.getElementById("stch-buy-mode")?.value || state.cfg.buyMode;
+      const buyModeEl = document.getElementById("stch-buy-mode");
+      if (state.cfg.foilScanMode) {
+        state.cfg.buyMode = buyModeEl?.dataset.normalValue || state.cfg.buyMode || DEFAULT_CONFIG.buyMode;
+      } else {
+        state.cfg.buyMode = buyModeEl?.dataset.normalValue || buyModeEl?.value || state.cfg.buyMode;
+        if (buyModeEl) delete buyModeEl.dataset.normalValue;
+      }
       state.cfg.orderPriceSource = document.getElementById("stch-order-price-source")?.value
         || state.cfg.orderPriceSource;
       state.cfg.priceAdjustment = readNumberInput(
@@ -2916,7 +2934,7 @@
     document.getElementById("stch-order-add-btn").addEventListener("click", addManualOrderAppid);
     document.getElementById("stch-order-recalculate-btn").addEventListener("click", recalculateSelectedOrderResults);
     document.getElementById("stch-order-submit-orders-btn").addEventListener("click", submitSelectedOrderBuyOrders);
-    document.getElementById("stch-order-delete-btn").addEventListener("click", deleteSelectedOrderResults);
+    document.getElementById("stch-order-delete-btn").addEventListener("click", deleteExpiredOrderResults);
     document.getElementById("stch-craft-scan-btn").addEventListener("click", startCraftScan);
     document.getElementById("stch-craft-stop-btn").addEventListener("click", requestCraftStop);
     document.getElementById("stch-craft-one-btn").addEventListener("click", () => setAllCraftCounts("one"));
@@ -3172,13 +3190,10 @@
 
   let orderStatusTimer = null;
   function orderLog(msg, type = "") {
-    const box = document.getElementById("stch-order-log");
-    if (!box) { console.log("[STCH][Order]", msg); return; }
-    const line = document.createElement("div");
-    if (type) line.className = type;
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
+    console.log("[STCH][Order]", msg);
+    if (["ok", "warn", "err"].includes(type)) {
+      setOrderStatus(msg.replace(/^\s*[✓✗]\s*/, ""), false);
+    }
   }
 
   function setOrderStatus(text, animate = true) {
@@ -5939,7 +5954,7 @@
     document.getElementById("stch-order-submit-orders-btn")?.classList.toggle("disabled", disabled);
     document.getElementById("stch-order-delete-btn")?.classList.toggle(
       "disabled",
-      selectedCount === 0 || isSharedActionBusy()
+      getExpiredOrderCacheCount() === 0 || isSharedActionBusy()
     );
     document.getElementById("stch-order-add-btn")?.classList.toggle("disabled", isSharedActionBusy());
 
@@ -5959,7 +5974,27 @@
   function applyScanModeTheme() {
     const enabled = !!state.cfg.foilScanMode;
     document.getElementById("stch-tab-scan")?.classList.toggle("stch-foil-mode", enabled);
-    document.getElementById("stch-foil-mode-label")?.classList.toggle("active", enabled);
+    const foilLabel = document.getElementById("stch-foil-mode-label");
+    const foilInput = document.getElementById("stch-foil-scan-mode");
+    const buyMode = document.getElementById("stch-buy-mode");
+    const buyModeLabel = document.getElementById("stch-buy-mode-label");
+    foilLabel?.classList.toggle("active", enabled);
+    foilLabel?.classList.toggle("disabled", state.scanning);
+    if (foilInput) foilInput.disabled = !!state.scanning;
+    if (buyMode) {
+      if (enabled) {
+        if (!buyMode.dataset.normalValue && buyMode.value !== "complete1") {
+          buyMode.dataset.normalValue = buyMode.value;
+        }
+        buyMode.value = "complete1";
+        buyMode.disabled = true;
+      } else {
+        buyMode.disabled = false;
+        buyMode.value = buyMode.dataset.normalValue || state.cfg.buyMode || DEFAULT_CONFIG.buyMode;
+        delete buyMode.dataset.normalValue;
+      }
+    }
+    buyModeLabel?.classList.toggle("stch-control-disabled", enabled);
   }
 
   async function refreshResultInfo(existing, queue) {
@@ -6216,15 +6251,39 @@
     }
   }
 
-  function deleteSelectedOrderResults() {
-    const selected = [...state.selectedOrderResults];
-    if (selected.length === 0 || state.orderActionRunning) return;
-    if (!confirm(`将删除 ${selected.length} 项订购卡牌缓存，确定？`)) return;
-    state.orderResults = state.orderResults.filter(info => !state.selectedOrderResults.has(getResultKey(info)));
-    state.selectedOrderResults.clear();
+  function readRawOrderCache() {
+    try {
+      const raw = GM_getValue(ORDER_CACHE_KEY, "[]");
+      const parsed = Array.isArray(raw) ? raw : JSON.parse(raw || "[]");
+      return Array.isArray(parsed) ? parsed.map(item => normalizeOrderResult(item, item?.cachedAt)).filter(Boolean) : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function getExpiredOrderCacheCount() {
+    return readRawOrderCache().filter(item => !isOrderCacheFresh(item)).length;
+  }
+
+  function deleteExpiredOrderResults() {
+    if (isSharedActionBusy()) return;
+    const raw = readRawOrderCache();
+    const fresh = raw.filter(isOrderCacheFresh);
+    const expiredCount = raw.length - fresh.length;
+    if (expiredCount <= 0) {
+      setOrderStatus("没有过期缓存", false);
+      return;
+    }
+    if (!confirm(`将删除 ${expiredCount} 项过期订购缓存，确定？`)) return;
+    state.orderResults = fresh;
+    state.selectedOrderResults.forEach(key => {
+      if (!state.orderResults.some(info => getResultKey(info) === key)) {
+        state.selectedOrderResults.delete(key);
+      }
+    });
     saveOrderCache();
     renderOrderResults();
-    orderLog(`已删除 ${selected.length} 项订购卡牌缓存`, "info");
+    setOrderStatus(`已删除 ${expiredCount} 项过期缓存`, false);
   }
 
   async function startScan() {
@@ -6247,10 +6306,15 @@
     updateSeasonalActionState();
     updateSurplusActionState();
     updateGrindActionState();
+    applyScanModeTheme();
     setScanPhase("scanning");
     setStatus("正在扫描徽章页");
 
-    const cfg = { ...state.cfg, foilScanMode: !!state.cfg.foilScanMode };
+    const cfg = {
+      ...state.cfg,
+      foilScanMode: !!state.cfg.foilScanMode,
+      buyMode: state.cfg.foilScanMode ? "complete1" : state.cfg.buyMode
+    };
     const queue = new RequestQueue(
       cfg.requestInterval,
       cfg.batchSize,
@@ -6274,6 +6338,7 @@
       document.getElementById("stch-stop-btn")?.classList.add("disabled");
       updateSurplusActionState();
       updateGrindActionState();
+      applyScanModeTheme();
       return;
     }
 
@@ -6598,6 +6663,7 @@
       updateSeasonalActionState();
       updateSurplusActionState();
       updateGrindActionState();
+      applyScanModeTheme();
     }
   }
 
@@ -7997,6 +8063,7 @@
           document.getElementById("stch-scan-btn").classList.remove("disabled");
           document.getElementById("stch-skip-btn").classList.add("disabled");
           document.getElementById("stch-stop-btn").classList.add("disabled");
+          applyScanModeTheme();
           setScanPhase("done");
         }
       }, 5000);
