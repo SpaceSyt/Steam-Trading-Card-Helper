@@ -2,7 +2,7 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.7.0
+// @version      1.7.5
 // @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and suggest surplus item gem conversion
 // @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测多余卡牌和多余物品分解建议
 // @author       SpaceSyt
@@ -42,7 +42,7 @@
   // Constants
   // ============================================================
   const DEFAULT_CONFIG = {
-    configVersion: 11,
+    configVersion: 12,
     threshold: 5,
     scanInterval: 0,
     requestInterval: 330,
@@ -50,6 +50,8 @@
     batchPause: 53000,
     includeDrops: false,
     foilScanMode: false,
+    orderCacheDays: 3,
+    skipCachedOrderResults: false,
     maxBadgePages: 1,
     blacklist: "",
     blacklistNames: "{}",
@@ -77,6 +79,7 @@
   const SEASONAL_BADGE_DEFAULT_COST = 1000;
   const SEASONAL_POINTS_SHOP_URL = "https://store.steampowered.com/points/shop/c/steambadge";
   const SIDEBAR_PINNED_KEY = "stch_sidebar_pinned";
+  const ORDER_CACHE_KEY = "stch_order_cache";
   const SIDEBAR_GEM_SACK_HASH = "753-Sack of Gems";
   const GEM_SACK_SIZE = 1000;
   const MARKET_STEAM_FEE_RATE = 0.05;
@@ -1186,6 +1189,13 @@
       font-size: 12px;
       text-align: center;
     }
+    .stch-game-row .stch-order-cache-age {
+      width: 38px;
+      flex-shrink: 0;
+      color: #8f98a0;
+      font-size: 12px;
+      text-align: center;
+    }
     .stch-game-row .stch-buy {
       width: 60px;
       flex-shrink: 0;
@@ -1229,6 +1239,14 @@
       flex: 1;
       min-height: 0;
       max-height: none;
+    }
+    .stch-order-list {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+    }
+    .stch-order-tools {
+      margin-left: auto;
     }
     .stch-craft-row .stch-craft-available {
       width: 64px;
@@ -1601,6 +1619,7 @@
     }
 
     #stch-log,
+    #stch-order-log,
     #stch-craft-log,
     #stch-seasonal-log,
     #stch-surplus-log,
@@ -1619,17 +1638,18 @@
       white-space: pre-wrap;
       word-break: break-all;
     }
+    #stch-order-log,
     #stch-craft-log,
     #stch-seasonal-log,
     #stch-surplus-log,
     #stch-grind-log {
       flex: 0 0 19vh;
     }
-    #stch-log .ok, #stch-craft-log .ok, #stch-seasonal-log .ok, #stch-surplus-log .ok, #stch-grind-log .ok { color: #75b022; }
-    #stch-log .warn, #stch-craft-log .warn, #stch-seasonal-log .warn, #stch-surplus-log .warn, #stch-grind-log .warn { color: #ffc902; }
-    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-seasonal-log .warn-ip, #stch-surplus-log .warn-ip, #stch-grind-log .warn-ip { color: #fff; }
-    #stch-log .err, #stch-craft-log .err, #stch-seasonal-log .err, #stch-surplus-log .err, #stch-grind-log .err { color: #c04040; }
-    #stch-log .info, #stch-craft-log .info, #stch-seasonal-log .info, #stch-surplus-log .info, #stch-grind-log .info { color: #67c1f5; }
+    #stch-log .ok, #stch-order-log .ok, #stch-craft-log .ok, #stch-seasonal-log .ok, #stch-surplus-log .ok, #stch-grind-log .ok { color: #75b022; }
+    #stch-log .warn, #stch-order-log .warn, #stch-craft-log .warn, #stch-seasonal-log .warn, #stch-surplus-log .warn, #stch-grind-log .warn { color: #ffc902; }
+    #stch-log .warn-ip, #stch-order-log .warn-ip, #stch-craft-log .warn-ip, #stch-seasonal-log .warn-ip, #stch-surplus-log .warn-ip, #stch-grind-log .warn-ip { color: #fff; }
+    #stch-log .err, #stch-order-log .err, #stch-craft-log .err, #stch-seasonal-log .err, #stch-surplus-log .err, #stch-grind-log .err { color: #c04040; }
+    #stch-log .info, #stch-order-log .info, #stch-craft-log .info, #stch-seasonal-log .info, #stch-surplus-log .info, #stch-grind-log .info { color: #67c1f5; }
 
     .stch-progress {
       height: 20px;
@@ -2358,7 +2378,13 @@
     grindStopRequested: false,
     grindQueue: null,
     grindGemPrice: null,
+    orderResults: [],
+    selectedOrderResults: new Set(),
+    orderSortKey: "cached",
+    orderSortAsc: false,
+    orderActionRunning: false,
   };
+  state.orderResults = loadOrderCache();
 
   function getOuterHeight(element) {
     if (!element || getComputedStyle(element).display === "none") return 0;
@@ -2465,6 +2491,7 @@
           <span class="stch-tab ${activeClass("seasonal")}" data-tab="seasonal">季节徽章</span>
           ` : `
           <span class="stch-tab ${activeClass("scan")}" data-tab="scan">卡牌价格扫描</span>
+          <span class="stch-tab" data-tab="orders">订购卡牌</span>
           <span class="stch-tab" data-tab="craft">徽章合成</span>
           <span class="stch-tab" data-tab="blacklist">游戏/AppID黑名单</span>
           <span class="stch-tab" data-tab="surplus">多余卡牌检测</span>
@@ -2549,6 +2576,30 @@
           <div class="stch-game-list" id="stch-list"></div>
           <div class="stch-log-resizer" data-log="stch-log" data-content="stch-list" title="上下拖动调整日志区域"></div>
           <div id="stch-log"></div>
+        </div>
+        <div class="stch-tab-content" id="stch-tab-orders">
+          <div class="stch-toolbar">
+            <label class="stch-primary-label">手动 AppID <input id="stch-order-appid" class="stch-input" type="text" style="width:100px" placeholder="4761370"></label>
+            <label>
+              <input id="stch-order-manual-foil" type="checkbox">
+              闪卡
+            </label>
+            <div class="stch-btn alt" id="stch-order-add-btn">读取并加入</div>
+            <span style="color:#8f98a0;font-size:12px;">提示：4761370，本次夏促</span>
+          </div>
+          <div class="stch-scan-actions">
+            <div class="stch-btn alt disabled" id="stch-order-recalculate-btn">重新计算</div>
+            <div class="stch-btn disabled" id="stch-order-submit-orders-btn">提交订购单</div>
+            <div class="stch-btn alt stch-btn-danger disabled stch-order-tools" id="stch-order-delete-btn">删除选中缓存</div>
+          </div>
+          <div class="stch-summary" id="stch-order-summary-row" style="display:none">
+            <span class="stch-summary-text" id="stch-order-summary"></span>
+            <span class="stch-selected-count" id="stch-order-selected-count">已选择 0 项</span>
+          </div>
+          <div class="stch-status-text" id="stch-order-status"></div>
+          <div class="stch-game-list stch-order-list" id="stch-order-list"></div>
+          <div class="stch-log-resizer" data-log="stch-order-log" data-content="stch-order-list" title="上下拖动调整日志区域"></div>
+          <div id="stch-order-log"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-craft">
           <div class="stch-toolbar">
@@ -2693,6 +2744,11 @@
             <label><input id="stch-early-price-prediction" type="checkbox" ${state.cfg.earlyPricePrediction ? "checked" : ""}> 价格预测提早跳过</label>
             <span style="color:#8f98a0;font-size:12px;">扫描部分卡牌后保守预测全套价格，超过上限时提前跳过</span>
           </div>
+          <div class="stch-toolbar">
+            <label>订购卡牌缓存 <input id="stch-order-cache-days" class="stch-input" type="number" min="0" step="1" value="${state.cfg.orderCacheDays}" style="width:55px"> 天</label>
+            <label><input id="stch-skip-cached-orders" type="checkbox" ${state.cfg.skipCachedOrderResults ? "checked" : ""}> 扫描时跳过缓存内结果</label>
+            <span style="color:#8f98a0;font-size:12px;">缓存超期会自动删除；天数显示与黑名单一致，0 为今天</span>
+          </div>
           <div style="color:#8f98a0;font-size:12px;margin-top:4px;">默认值为作者测试稳定配置 (330ms / 53s)。如遇 429 可调高 100ms / 5s。gamecard 通常不需要调整，保持 0 即可。</div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">徽章合成</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
@@ -2708,7 +2764,7 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.7.0 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.7.5 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -2767,6 +2823,12 @@
         state.cfg.priceAdjustment ?? DEFAULT_CONFIG.priceAdjustment
       );
       state.cfg.earlyPricePrediction = !!document.getElementById("stch-early-price-prediction")?.checked;
+      state.cfg.orderCacheDays = readNumberInput(
+        "stch-order-cache-days",
+        state.cfg.orderCacheDays ?? DEFAULT_CONFIG.orderCacheDays,
+        { integer: true, min: 0 }
+      );
+      state.cfg.skipCachedOrderResults = !!document.getElementById("stch-skip-cached-orders")?.checked;
       state.cfg.surplusOnlyMaxed = !!document.getElementById("stch-surplus-only-maxed")?.checked;
       state.cfg.grindOnlyRecommended = !!document.getElementById("stch-grind-only-recommended")?.checked;
       state.cfg.grindIncludeSurplusCards = !!document.getElementById("stch-grind-include-surplus-cards")?.checked;
@@ -2786,6 +2848,10 @@
       if (craftMaxPages) craftMaxPages.value = String(state.cfg.maxBadgePages);
       updateResultColumns();
       applyScanModeTheme();
+      if (changedId === "stch-order-cache-days") {
+        pruneOrderCache(true);
+        renderOrderResults();
+      }
       if (changedId === "stch-craft-mode") renderCraftResults();
       if (changedId === "stch-surplus-only-maxed") renderSurplusResults();
       if (changedId?.startsWith("stch-grind-")) renderGrindResults();
@@ -2799,7 +2865,8 @@
       "stch-foil-scan-mode",
       "stch-batch-size", "stch-batch-pause", "stch-buy-mode",
       "stch-order-price-source", "stch-price-adjustment",
-      "stch-early-price-prediction", "stch-craft-interval",
+      "stch-early-price-prediction", "stch-order-cache-days",
+      "stch-skip-cached-orders", "stch-craft-interval",
       "stch-craft-mode", "stch-seasonal-target",
       "stch-surplus-only-maxed", "stch-grind-only-recommended",
       "stch-grind-include-surplus-cards"];
@@ -2818,6 +2885,7 @@
         content.classList.toggle("active", content.id === `stch-tab-${tabName}`);
       });
       if (tabName === "blacklist") renderBlacklist();
+      if (tabName === "orders") renderOrderResults();
       if (tabName === "grind") renderGrindResults();
     };
     const showOnboarding = () => {
@@ -2845,6 +2913,10 @@
     document.getElementById("stch-skip-btn").addEventListener("click", skipCurrentBadge);
     document.getElementById("stch-recalculate-btn").addEventListener("click", recalculateSelectedResults);
     document.getElementById("stch-submit-orders-btn").addEventListener("click", submitSelectedBuyOrders);
+    document.getElementById("stch-order-add-btn").addEventListener("click", addManualOrderAppid);
+    document.getElementById("stch-order-recalculate-btn").addEventListener("click", recalculateSelectedOrderResults);
+    document.getElementById("stch-order-submit-orders-btn").addEventListener("click", submitSelectedOrderBuyOrders);
+    document.getElementById("stch-order-delete-btn").addEventListener("click", deleteSelectedOrderResults);
     document.getElementById("stch-craft-scan-btn").addEventListener("click", startCraftScan);
     document.getElementById("stch-craft-stop-btn").addEventListener("click", requestCraftStop);
     document.getElementById("stch-craft-one-btn").addEventListener("click", () => setAllCraftCounts("one"));
@@ -3025,6 +3097,8 @@
     renderSurplusResults();
     updateGrindActionState();
     renderGrindResults();
+    pruneOrderCache(true);
+    renderOrderResults();
   }
 
   function skipCurrentBadge() {
@@ -3094,6 +3168,133 @@
       dots = (dots + 1) % 4;
       el.textContent = text + " " + ".".repeat(dots);
     }, 500);
+  }
+
+  let orderStatusTimer = null;
+  function orderLog(msg, type = "") {
+    const box = document.getElementById("stch-order-log");
+    if (!box) { console.log("[STCH][Order]", msg); return; }
+    const line = document.createElement("div");
+    if (type) line.className = type;
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function setOrderStatus(text, animate = true) {
+    const el = document.getElementById("stch-order-status");
+    if (!el) return;
+    if (orderStatusTimer) { clearInterval(orderStatusTimer); orderStatusTimer = null; }
+    if (!text) { el.textContent = ""; el.style.display = "none"; return; }
+    el.style.display = "";
+    if (!animate) { el.textContent = text; return; }
+    el.textContent = text;
+    let dots = 0;
+    orderStatusTimer = setInterval(() => {
+      dots = (dots + 1) % 4;
+      el.textContent = text + " " + ".".repeat(dots);
+    }, 500);
+  }
+
+  function getOrderCacheDays() {
+    const days = Number(state?.cfg?.orderCacheDays ?? DEFAULT_CONFIG.orderCacheDays);
+    return Number.isFinite(days) ? Math.max(0, Math.floor(days)) : DEFAULT_CONFIG.orderCacheDays;
+  }
+
+  function getOrderCacheAgeDays(cachedAt) {
+    const ts = Number(cachedAt) || Date.now();
+    return Math.max(0, Math.floor((Date.now() - ts) / 86400000));
+  }
+
+  function normalizeOrderResult(info, cachedAt = Date.now()) {
+    if (!info?.appid) return null;
+    const copy = JSON.parse(JSON.stringify(info));
+    copy.appid = String(copy.appid).trim();
+    copy.isFoil = !!copy.isFoil;
+    copy.targetLevel = getBadgeTargetLevel(copy);
+    copy.cachedAt = Number(copy.cachedAt || cachedAt) || cachedAt;
+    copy.cards = Array.isArray(copy.cards) ? copy.cards : [];
+    copy.cardPrices = Array.isArray(copy.cardPrices) ? copy.cardPrices : [];
+    copy.cheapestSetCostCents = Number(copy.cheapestSetCostCents) || 0;
+    copy.fullSetCostCents = Number(copy.fullSetCostCents) || 0;
+    copy.level5CostCents = Number(copy.level5CostCents) || 0;
+    copy.cheapestSetCNY = copy.cheapestSetCNY || formatCNY(copy.cheapestSetCostCents);
+    copy.fullSetCNY = copy.fullSetCNY || formatCNY(copy.fullSetCostCents);
+    copy.level5CNY = copy.level5CNY || formatCNY(copy.level5CostCents);
+    return copy.appid ? copy : null;
+  }
+
+  function isOrderCacheFresh(info) {
+    return getOrderCacheAgeDays(info?.cachedAt) <= getOrderCacheDays();
+  }
+
+  function loadOrderCache() {
+    try {
+      const raw = GM_getValue(ORDER_CACHE_KEY, "[]");
+      const parsed = Array.isArray(raw) ? raw : JSON.parse(raw || "[]");
+      return parsed
+        .map(item => normalizeOrderResult(item, item?.cachedAt))
+        .filter(Boolean)
+        .filter(isOrderCacheFresh);
+    } catch (error) {
+      console.warn("[STCH] Order cache load failed:", error);
+      return [];
+    }
+  }
+
+  function saveOrderCache() {
+    GM_setValue(
+      ORDER_CACHE_KEY,
+      JSON.stringify(state.orderResults.map(item => normalizeOrderResult(item, item.cachedAt)).filter(Boolean))
+    );
+  }
+
+  function pruneOrderCache(persist = false) {
+    const before = state.orderResults.length;
+    state.orderResults = state.orderResults
+      .map(item => normalizeOrderResult(item, item?.cachedAt))
+      .filter(Boolean)
+      .filter(isOrderCacheFresh);
+    if (persist && state.orderResults.length !== before) {
+      saveOrderCache();
+      state.selectedOrderResults.forEach(key => {
+        if (!state.orderResults.some(item => getResultKey(item) === key)) {
+          state.selectedOrderResults.delete(key);
+        }
+      });
+    }
+    return before - state.orderResults.length;
+  }
+
+  function getCachedOrderResult(info) {
+    pruneOrderCache(true);
+    const key = getResultKey(info);
+    return state.orderResults.find(item => getResultKey(item) === key) || null;
+  }
+
+  function upsertOrderResult(info, options = {}) {
+    const item = normalizeOrderResult(info, options.cachedAt || Date.now());
+    if (!item) return null;
+    item.cachedAt = options.cachedAt || Date.now();
+    pruneOrderCache(false);
+    const key = getResultKey(item);
+    const index = state.orderResults.findIndex(existing => getResultKey(existing) === key);
+    if (index >= 0) state.orderResults[index] = item;
+    else state.orderResults.push(item);
+    if (options.select) state.selectedOrderResults.add(key);
+    saveOrderCache();
+    if (options.render !== false) renderOrderResults();
+    return item;
+  }
+
+  function removeOrderResultByKey(key, options = {}) {
+    const before = state.orderResults.length;
+    state.orderResults = state.orderResults.filter(item => getResultKey(item) !== key);
+    state.selectedOrderResults.delete(key);
+    if (state.orderResults.length !== before) {
+      if (options.persist !== false) saveOrderCache();
+      if (options.render !== false) renderOrderResults();
+    }
   }
 
   // ============================================================
@@ -3208,6 +3409,7 @@
     const seasonalBusy = state.seasonalActionRunning;
     const otherBusy = state.scanning
       || state.bulkActionRunning
+      || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
       || state.surplusScanning
@@ -3466,6 +3668,7 @@
       state.seasonalActionRunning
       || state.scanning
       || state.bulkActionRunning
+      || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
       || state.surplusScanning
@@ -3670,6 +3873,7 @@
     const craftBusy = state.craftScanning || state.craftActionRunning;
     const otherBusy = state.scanning
       || state.bulkActionRunning
+      || state.orderActionRunning
       || state.seasonalActionRunning
       || state.surplusScanning
       || state.grindScanning;
@@ -3878,6 +4082,7 @@
       || state.craftActionRunning
       || state.scanning
       || state.bulkActionRunning
+      || state.orderActionRunning
       || state.seasonalActionRunning
       || state.surplusScanning
       || state.grindScanning
@@ -3904,6 +4109,7 @@
       || state.craftActionRunning
       || state.scanning
       || state.bulkActionRunning
+      || state.orderActionRunning
       || state.seasonalActionRunning
       || state.surplusScanning
       || state.grindScanning
@@ -4214,6 +4420,7 @@
       || state.craftActionRunning
       || state.scanning
       || state.bulkActionRunning
+      || state.orderActionRunning
       || state.seasonalActionRunning
       || state.surplusScanning
       || state.grindScanning
@@ -4721,6 +4928,7 @@
     const surplusBusy = state.surplusScanning;
     const otherBusy = state.scanning
       || state.bulkActionRunning
+      || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
@@ -4818,6 +5026,7 @@
       state.surplusScanning
       || state.scanning
       || state.bulkActionRunning
+      || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
@@ -5367,6 +5576,7 @@
     const grindBusy = state.grindScanning;
     const otherBusy = state.scanning
       || state.bulkActionRunning
+      || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
@@ -5486,6 +5696,7 @@
       state.grindScanning
       || state.scanning
       || state.bulkActionRunning
+      || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
@@ -5682,36 +5893,60 @@
     return state.results.filter(info => state.selectedResults.has(getResultKey(info)));
   }
 
-  function updateBulkActionState() {
-    const selectedCount = getSelectedResults().length;
-    const countEl = document.getElementById("stch-selected-count");
-    if (countEl) countEl.textContent = `已选择 ${selectedCount} 项`;
+  function getSelectedOrderResults() {
+    return state.orderResults.filter(info => state.selectedOrderResults.has(getResultKey(info)));
+  }
 
-    const disabled = selectedCount === 0
-      || state.scanning
+  function isSharedActionBusy() {
+    return state.scanning
       || state.bulkActionRunning
+      || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
       || state.surplusScanning
       || state.grindScanning;
+  }
+
+  function updateBulkActionState() {
+    const selectedCount = getSelectedResults().length;
+    const countEl = document.getElementById("stch-selected-count");
+    if (countEl) countEl.textContent = `已选择 ${selectedCount} 项`;
+
+    const disabled = selectedCount === 0 || isSharedActionBusy();
     document.getElementById("stch-recalculate-btn")?.classList.toggle("disabled", disabled);
     document.getElementById("stch-submit-orders-btn")?.classList.toggle("disabled", disabled);
     document.getElementById("stch-scan-btn")?.classList.toggle(
       "disabled",
-      state.scanning
-        || state.bulkActionRunning
-        || state.craftScanning
-        || state.craftActionRunning
-        || state.seasonalActionRunning
-        || state.surplusScanning
-        || state.grindScanning
+      isSharedActionBusy()
     );
 
     const selectAll = document.getElementById("stch-result-select-all");
     if (selectAll) {
       selectAll.checked = state.results.length > 0 && selectedCount === state.results.length;
       selectAll.indeterminate = selectedCount > 0 && selectedCount < state.results.length;
+    }
+    updateOrderActionState();
+  }
+
+  function updateOrderActionState() {
+    const selectedCount = getSelectedOrderResults().length;
+    const countEl = document.getElementById("stch-order-selected-count");
+    if (countEl) countEl.textContent = `已选择 ${selectedCount} 项`;
+
+    const disabled = selectedCount === 0 || isSharedActionBusy();
+    document.getElementById("stch-order-recalculate-btn")?.classList.toggle("disabled", disabled);
+    document.getElementById("stch-order-submit-orders-btn")?.classList.toggle("disabled", disabled);
+    document.getElementById("stch-order-delete-btn")?.classList.toggle(
+      "disabled",
+      selectedCount === 0 || isSharedActionBusy()
+    );
+    document.getElementById("stch-order-add-btn")?.classList.toggle("disabled", isSharedActionBusy());
+
+    const selectAll = document.getElementById("stch-order-select-all");
+    if (selectAll) {
+      selectAll.checked = state.orderResults.length > 0 && selectedCount === state.orderResults.length;
+      selectAll.indeterminate = selectedCount > 0 && selectedCount < state.orderResults.length;
     }
   }
 
@@ -5826,56 +6061,59 @@
     return info;
   }
 
-  async function recalculateSelectedResults() {
-    const selected = getSelectedResults();
-    if (
-      selected.length === 0
-      || state.scanning
-      || state.bulkActionRunning
-      || state.craftScanning
-      || state.craftActionRunning
-      || state.seasonalActionRunning
-      || state.surplusScanning
-      || state.grindScanning
-    ) {
-      return;
-    }
+  async function recalculateResultSelection(source = "scan") {
+    const isOrder = source === "order";
+    const selected = isOrder ? getSelectedOrderResults() : getSelectedResults();
+    if (selected.length === 0 || isSharedActionBusy()) return;
+
+    const statusFn = isOrder ? setOrderStatus : setStatus;
+    const logFn = isOrder ? orderLog : log;
+    const selectedSet = isOrder ? state.selectedOrderResults : state.selectedResults;
+    const targetResults = isOrder ? state.orderResults : state.results;
 
     state.bulkActionRunning = true;
     updateBulkActionState();
     updateCraftActionState();
     updateSeasonalActionState();
     updateSurplusActionState();
+    updateGrindActionState();
     const cfg = state.cfg;
     const queue = new RequestQueue(
       cfg.requestInterval,
       cfg.batchSize,
       cfg.batchPause,
       state,
-      setStatus,
-      log,
+      statusFn,
+      logFn,
       cfg.scanInterval
     );
 
     let refreshed = 0;
+    let removed = 0;
     let failed = 0;
     try {
       for (let index = 0; index < selected.length; index++) {
         const existing = selected[index];
-        setStatus(`重新计算 ${index + 1}/${selected.length}: ${existing.gameName}`);
+        const key = getResultKey(existing);
+        statusFn(`重新计算 ${index + 1}/${selected.length}: ${existing.gameName}`);
         try {
           const next = await refreshResultInfo(existing, queue);
-          const resultIndex = state.results.findIndex(
-            info => getResultKey(info) === getResultKey(existing)
-          );
+          const resultIndex = targetResults.findIndex(info => getResultKey(info) === key);
           if (next.level >= getBadgeTargetLevel(next)) {
-            if (resultIndex >= 0) state.results.splice(resultIndex, 1);
-            state.selectedResults.delete(getResultKey(existing));
-            log(`[${existing.appid}] ${existing.gameName}: 已满级，从结果中移除`, "info");
+            if (resultIndex >= 0) targetResults.splice(resultIndex, 1);
+            selectedSet.delete(key);
+            if (!isOrder) removeOrderResultByKey(key, { render: false });
+            removed++;
+            logFn(`[${existing.appid}] ${existing.gameName}: 已满级，从结果中移除`, "info");
           } else if (resultIndex >= 0) {
-            state.results[resultIndex] = next;
+            if (isOrder) {
+              targetResults[resultIndex] = normalizeOrderResult(next, Date.now());
+            } else {
+              targetResults[resultIndex] = next;
+              upsertOrderResult(next, { render: false });
+            }
             refreshed++;
-            log(
+            logFn(
               `[${existing.appid}] ${existing.gameName}: 重算完成，` +
               `补全 ¥${next.cheapestSetCNY} | 满级 ¥${next.level5CNY}`,
               "ok"
@@ -5883,7 +6121,7 @@
           }
         } catch (error) {
           failed++;
-          log(
+          logFn(
             `[${existing.appid}] ${existing.gameName}: 重算失败 ${error?.message || error}`,
             "err"
           );
@@ -5892,30 +6130,105 @@
     } finally {
       queue.stop();
       state.bulkActionRunning = false;
-      setStatus(null);
-      renderResults();
-      updateSummary();
+      statusFn(null);
+      if (isOrder) {
+        saveOrderCache();
+        renderOrderResults();
+      } else {
+        renderResults();
+        updateSummary();
+        renderOrderResults();
+      }
       updateBulkActionState();
       updateCraftActionState();
       updateSeasonalActionState();
       updateSurplusActionState();
       updateGrindActionState();
-      log(`选中项重算结束: 成功 ${refreshed}, 失败 ${failed}`, failed ? "warn" : "ok");
+      logFn(
+        `选中项重算结束: 成功 ${refreshed}, 移除 ${removed}, 失败 ${failed}`,
+        failed ? "warn" : "ok"
+      );
     }
   }
 
-  async function startScan() {
-    if (
-      state.scanning
-      || state.bulkActionRunning
-      || state.craftScanning
-      || state.craftActionRunning
-      || state.seasonalActionRunning
-      || state.surplusScanning
-      || state.grindScanning
-    ) {
+  async function recalculateSelectedResults() {
+    return recalculateResultSelection("scan");
+  }
+
+  async function recalculateSelectedOrderResults() {
+    return recalculateResultSelection("order");
+  }
+
+  async function addManualOrderAppid() {
+    if (isSharedActionBusy()) return;
+    const input = document.getElementById("stch-order-appid");
+    const appid = String(input?.value || "").trim();
+    if (!/^\d+$/.test(appid)) {
+      setOrderStatus("请输入有效的 AppID，例如 4761370", false);
       return;
     }
+
+    const isFoil = !!document.getElementById("stch-order-manual-foil")?.checked;
+    const existing = getCachedOrderResult({ appid, isFoil });
+    state.orderActionRunning = true;
+    updateBulkActionState();
+    updateCraftActionState();
+    updateSeasonalActionState();
+    updateSurplusActionState();
+    updateGrindActionState();
+
+    const cfg = state.cfg;
+    const queue = new RequestQueue(
+      cfg.requestInterval,
+      cfg.batchSize,
+      cfg.batchPause,
+      state,
+      setOrderStatus,
+      orderLog,
+      cfg.scanInterval
+    );
+
+    try {
+      setOrderStatus(`读取 ${appid}${isFoil ? " 闪卡" : ""}`);
+      orderLog(`[${appid}] 开始读取${isFoil ? "闪卡" : "普通卡"}卡牌页并查价`, "info");
+      const info = await refreshResultInfo(
+        { appid, isFoil, gameName: existing?.gameName || "" },
+        queue
+      );
+      upsertOrderResult(info, { select: true, render: true });
+      if (input) input.value = "";
+      orderLog(
+        `[${appid}] ${info.gameName || ""}: 已加入订购缓存，` +
+        `补全 ¥${info.cheapestSetCNY} | 全套 ¥${info.fullSetCNY} | 满级 ¥${info.level5CNY}`,
+        "ok"
+      );
+    } catch (error) {
+      orderLog(`[${appid}] 加入失败: ${error?.message || error}`, "err");
+    } finally {
+      queue.stop();
+      state.orderActionRunning = false;
+      setOrderStatus(null);
+      updateBulkActionState();
+      updateCraftActionState();
+      updateSeasonalActionState();
+      updateSurplusActionState();
+      updateGrindActionState();
+    }
+  }
+
+  function deleteSelectedOrderResults() {
+    const selected = [...state.selectedOrderResults];
+    if (selected.length === 0 || state.orderActionRunning) return;
+    if (!confirm(`将删除 ${selected.length} 项订购卡牌缓存，确定？`)) return;
+    state.orderResults = state.orderResults.filter(info => !state.selectedOrderResults.has(getResultKey(info)));
+    state.selectedOrderResults.clear();
+    saveOrderCache();
+    renderOrderResults();
+    orderLog(`已删除 ${selected.length} 项订购卡牌缓存`, "info");
+  }
+
+  async function startScan() {
+    if (isSharedActionBusy()) return;
     if (_stopTimeout) { clearTimeout(_stopTimeout); _stopTimeout = null; }
     state.scanning = true;
     state.stopRequested = false;
@@ -6002,6 +6315,18 @@
           log(`[${b.appid}] ${b.gameName || ""}: 在游戏/AppID黑名单中, 跳过`, "info");
           skipped++;
           continue;
+        }
+        if (cfg.skipCachedOrderResults) {
+          const cached = getCachedOrderResult(b);
+          if (cached) {
+            log(
+              `[${b.appid}] ${b.gameName || cached.gameName || ""}: 订购缓存内已有结果 ` +
+              `(${getOrderCacheAgeDays(cached.cachedAt)} 天)，跳过扫描`,
+              "info"
+            );
+            skipped++;
+            continue;
+          }
         }
         processed++;
         setProgress(processed, badges.length,
@@ -6279,38 +6604,69 @@
   // ============================================================
   // Render game row
   // ============================================================
-  function sortArrow(key) {
-    if (state.sortKey !== key) return "";
-    return state.sortAsc ? " ▲" : " ▼";
+  function getResultSourceState(source = "scan") {
+    if (source === "order") {
+      return {
+        results: state.orderResults,
+        selected: state.selectedOrderResults,
+        sortKey: state.orderSortKey,
+        sortAsc: state.orderSortAsc,
+        render: renderOrderResults,
+        selectAllId: "stch-order-select-all",
+      };
+    }
+    return {
+      results: state.results,
+      selected: state.selectedResults,
+      sortKey: state.sortKey,
+      sortAsc: state.sortAsc,
+      render: renderResults,
+      selectAllId: "stch-result-select-all",
+    };
   }
 
-  function renderHeader(list) {
+  function sortArrow(key, source = "scan") {
+    const sourceState = getResultSourceState(source);
+    if (sourceState.sortKey !== key) return "";
+    return sourceState.sortAsc ? " ▲" : " ▼";
+  }
+
+  function renderHeader(list, options = {}) {
+    const source = options.source || "scan";
+    const sourceState = getResultSourceState(source);
+    const cacheHeader = options.showCacheAge
+      ? `<span class="stch-order-cache-age stch-sortable" data-sort="cached">天数<span class="stch-sort-arrow">${sortArrow("cached", source)}</span></span>`
+      : "";
     const hdr = document.createElement("div");
     hdr.className = "stch-game-row stch-row-header";
     hdr.innerHTML = `
-      <span class="stch-appid stch-sortable" data-sort="appid">游戏ID<span class="stch-sort-arrow">${sortArrow("appid")}</span></span>
-      <span class="stch-name stch-sortable" data-sort="name">游戏名<span class="stch-sort-arrow">${sortArrow("name")}</span></span>
-      <span class="stch-level stch-sortable" data-sort="level">等级<span class="stch-sort-arrow">${sortArrow("level")}</span></span>
-      <span class="stch-cards stch-sortable" data-sort="cards">卡牌<span class="stch-sort-arrow">${sortArrow("cards")}</span></span>
-      <span class="stch-cost stch-sortable" data-sort="cost">单套补全<span class="stch-sort-arrow">${sortArrow("cost")}</span></span>
-      <span class="stch-full stch-sortable" data-sort="full">单套最低<span class="stch-sort-arrow">${sortArrow("full")}</span></span>
-      <span class="stch-lv5 stch-sortable" data-sort="lv5">满级估算 <span class="stch-sort-arrow">${sortArrow("lv5")}</span><span style="cursor:help;color:#8f98a0;font-size:11px;" title="绿色:近期成交>1，参考性较强&#10;灰色:近期成交=1，参考性不强&#10;红色:近期成交=0，参考性较弱&#10;黄色:Steam返回信息不全，采用 median_price 或公式估算，结果可能偏低">?</span></span>
-      <span class="stch-drops stch-sortable" data-sort="drops">掉落<span class="stch-sort-arrow">${sortArrow("drops")}</span></span>
+      <span class="stch-appid stch-sortable" data-sort="appid">游戏ID<span class="stch-sort-arrow">${sortArrow("appid", source)}</span></span>
+      <span class="stch-name stch-sortable" data-sort="name">游戏名<span class="stch-sort-arrow">${sortArrow("name", source)}</span></span>
+      <span class="stch-level stch-sortable" data-sort="level">等级<span class="stch-sort-arrow">${sortArrow("level", source)}</span></span>
+      <span class="stch-cards stch-sortable" data-sort="cards">卡牌<span class="stch-sort-arrow">${sortArrow("cards", source)}</span></span>
+      <span class="stch-cost stch-sortable" data-sort="cost">单套补全<span class="stch-sort-arrow">${sortArrow("cost", source)}</span></span>
+      <span class="stch-full stch-sortable" data-sort="full">单套最低<span class="stch-sort-arrow">${sortArrow("full", source)}</span></span>
+      <span class="stch-lv5 stch-sortable" data-sort="lv5">满级估算 <span class="stch-sort-arrow">${sortArrow("lv5", source)}</span><span style="cursor:help;color:#8f98a0;font-size:11px;" title="绿色:近期成交>1，参考性较强&#10;灰色:近期成交=1，参考性不强&#10;红色:近期成交=0，参考性较弱&#10;黄色:Steam返回信息不全，采用 median_price 或公式估算，结果可能偏低">?</span></span>
+      <span class="stch-drops stch-sortable" data-sort="drops">掉落<span class="stch-sort-arrow">${sortArrow("drops", source)}</span></span>
+      ${cacheHeader}
       <span class="stch-buy">手动购买</span>
-      <span class="stch-check"><span class="stch-check-hit"><input id="stch-result-select-all" class="stch-result-cb" type="checkbox" title="全选"></span></span>
+      <span class="stch-check"><span class="stch-check-hit"><input id="${sourceState.selectAllId}" class="stch-result-cb" type="checkbox" title="全选"></span></span>
     `;
     hdr.querySelectorAll(".stch-sortable").forEach(sp => {
-      sp.addEventListener("click", () => sortAndRender(sp.dataset.sort));
+      sp.addEventListener("click", () => {
+        if (source === "order") sortAndRenderOrder(sp.dataset.sort);
+        else sortAndRender(sp.dataset.sort);
+      });
     });
-    const selectAll = hdr.querySelector("#stch-result-select-all");
+    const selectAll = hdr.querySelector(`#${sourceState.selectAllId}`);
     const selectAllCell = selectAll.closest(".stch-check");
     const applySelectAll = checked => {
       if (checked) {
-        state.results.forEach(info => state.selectedResults.add(getResultKey(info)));
+        sourceState.results.forEach(info => sourceState.selected.add(getResultKey(info)));
       } else {
-        state.selectedResults.clear();
+        sourceState.selected.clear();
       }
-      renderResults();
+      sourceState.render();
     };
     selectAll.addEventListener("click", e => {
       e.stopPropagation();
@@ -6325,12 +6681,12 @@
     list.appendChild(hdr);
   }
 
-  function getSortedResults() {
-    const sorted = [...state.results];
-    if (!state.sortKey) return sorted;
+  function getSortedGameResults(results, sortKey, sortAsc) {
+    const sorted = [...results];
+    if (!sortKey) return sorted;
     return sorted.sort((a, b) => {
       let va, vb;
-      switch (state.sortKey) {
+      switch (sortKey) {
         case "appid": va = +a.appid; vb = +b.appid; break;
         case "name": va = a.gameName || ""; vb = b.gameName || ""; break;
         case "level": va = a.level; vb = b.level; break;
@@ -6340,14 +6696,24 @@
         case "full": va = a.fullSetCostCents; vb = b.fullSetCostCents; break;
         case "lv5": va = a.level5CostCents; vb = b.level5CostCents; break;
         case "drops": va = a.dropsRemaining; vb = b.dropsRemaining; break;
+        case "cached": va = a.cachedAt || 0; vb = b.cachedAt || 0; break;
         default: return 0;
       }
       if (typeof va === "string") {
         const cmp = va.localeCompare(vb, "zh");
-        return state.sortAsc ? cmp : -cmp;
+        return sortAsc ? cmp : -cmp;
       }
-      return state.sortAsc ? va - vb : vb - va;
+      return sortAsc ? va - vb : vb - va;
     });
+  }
+
+  function getSortedResults() {
+    return getSortedGameResults(state.results, state.sortKey, state.sortAsc);
+  }
+
+  function getSortedOrderResults() {
+    pruneOrderCache(true);
+    return getSortedGameResults(state.orderResults, state.orderSortKey, state.orderSortAsc);
   }
 
   function renderResults() {
@@ -6366,6 +6732,33 @@
     updateResultColumns();
   }
 
+  function renderOrderResults() {
+    const list = document.getElementById("stch-order-list");
+    if (!list) return;
+    pruneOrderCache(true);
+    list.innerHTML = "";
+    if (state.orderResults.length === 0) {
+      const row = document.createElement("div");
+      row.className = "stch-game-row";
+      const text = createTextSpan("", "订购卡牌缓存为空。价格扫描结果会实时进入这里，也可以手动输入 AppID。");
+      text.style.color = "#8f98a0";
+      row.appendChild(text);
+      list.appendChild(row);
+      setOrderSummaryVisibility(false);
+      updateOrderActionState();
+      updateOrderResultColumns();
+      return;
+    }
+    renderHeader(list, { source: "order", showCacheAge: true });
+    getSortedOrderResults().forEach(info => {
+      renderDataRow(list, info, { source: "order", showCacheAge: true });
+    });
+    updateOrderSummary();
+    setOrderSummaryVisibility(true);
+    updateOrderActionState();
+    updateOrderResultColumns();
+  }
+
   function sortAndRender(key) {
     if (state.sortKey === key) {
       state.sortAsc = !state.sortAsc;
@@ -6376,7 +6769,19 @@
     renderResults();
   }
 
-  function renderDataRow(list, info) {
+  function sortAndRenderOrder(key) {
+    if (state.orderSortKey === key) {
+      state.orderSortAsc = !state.orderSortAsc;
+    } else {
+      state.orderSortKey = key;
+      state.orderSortAsc = key === "cached" ? false : true;
+    }
+    renderOrderResults();
+  }
+
+  function renderDataRow(list, info, options = {}) {
+    const source = options.source || "scan";
+    const sourceState = getResultSourceState(source);
     const row = document.createElement("div");
     row.className = "stch-game-row";
     row.dataset.appid = info.appid;
@@ -6419,6 +6824,11 @@
     lv5.title = lv5Title;
     row.appendChild(lv5);
     row.appendChild(createTextSpan("stch-drops", info.dropsRemaining));
+    if (options.showCacheAge) {
+      const age = createTextSpan("stch-order-cache-age", String(getOrderCacheAgeDays(info.cachedAt)));
+      age.title = info.cachedAt ? new Date(info.cachedAt).toLocaleString() : "";
+      row.appendChild(age);
+    }
 
     const buyCell = document.createElement("span");
     buyCell.className = "stch-buy";
@@ -6431,7 +6841,7 @@
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.className = "stch-result-cb";
-    checkbox.checked = state.selectedResults.has(getResultKey(info));
+    checkbox.checked = sourceState.selected.has(getResultKey(info));
     checkbox.title = "选择此游戏进行重新计算或提交订购单";
     buyCell.appendChild(buyLink);
     row.appendChild(buyCell);
@@ -6447,10 +6857,11 @@
     const applyChecked = checked => {
       const key = getResultKey(info);
       if (checked) {
-        state.selectedResults.add(key);
+        sourceState.selected.add(key);
       } else {
-        state.selectedResults.delete(key);
+        sourceState.selected.delete(key);
       }
+      if (source === "order") updateOrderSummary();
       updateBulkActionState();
     };
     checkbox.addEventListener("click", e => {
@@ -6476,6 +6887,7 @@
     const list = document.getElementById("stch-list");
     if (list.children.length === 0) renderHeader(list);
     renderDataRow(list, info);
+    upsertOrderResult(info, { render: true });
     updateBulkActionState();
     updateResultColumns();
   }
@@ -6491,6 +6903,30 @@
     summary.innerHTML = `
       共 <b>${count}</b> 个${modeLabel} ≤ ¥${state.cfg.threshold} (单套卡牌价格上限)，补全总价 <b>¥${totalCNY}</b>，全套总价 ¥${fullCNY}，满级总价 ¥${lv5CNY}
     `;
+  }
+
+  function setOrderSummaryVisibility(visible) {
+    const row = document.getElementById("stch-order-summary-row");
+    if (row) row.style.display = visible ? "" : "none";
+  }
+
+  function updateOrderSummary() {
+    const summary = document.getElementById("stch-order-summary");
+    if (!summary) return;
+    pruneOrderCache(true);
+    const count = state.orderResults.length;
+    const selectedCount = getSelectedOrderResults().length;
+    const totalCNY = (state.orderResults.reduce((s, r) => s + r.cheapestSetCostCents, 0) / 100).toFixed(2);
+    const fullCNY = (state.orderResults.reduce((s, r) => s + r.fullSetCostCents, 0) / 100).toFixed(2);
+    const lv5CNY = (state.orderResults.reduce((s, r) => s + r.level5CostCents, 0) / 100).toFixed(2);
+    summary.innerHTML = `
+      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>¥${totalCNY}</b>，全套总价 ¥${fullCNY}，满级总价 ¥${lv5CNY}
+    `;
+  }
+
+  function updateOrderResultColumns() {
+    const showDrops = state.orderResults.some(info => Number(info.dropsRemaining) > 0);
+    document.getElementById("stch-order-list")?.classList.toggle("stch-show-drops", showDrops);
   }
 
   // ============================================================
@@ -6705,7 +7141,9 @@
     return highestBuyCents;
   }
 
-  async function buildBuyOrderPlan(selected, activeOrders) {
+  async function buildBuyOrderPlan(selected, activeOrders, ui = {}) {
+    const statusFn = ui.setStatus || setStatus;
+    const logFn = ui.log || log;
     const configuredPriceSource =
       document.getElementById("stch-order-price-source")?.value
       || state.cfg.orderPriceSource
@@ -6781,11 +7219,11 @@
       ) {
         basePriceCents = card.medianCents;
       } else if (priceSource === "highest") {
-        setStatus(`读取求购最高 ${index + 1}/${candidates.length}: ${card.name}`);
+        statusFn(`读取求购最高 ${index + 1}/${candidates.length}: ${card.name}`);
         try {
           basePriceCents = await fetchHighestBuyPrice(card.marketHashName);
         } catch (error) {
-          log(
+          logFn(
             `  ${info.gameName} · ${card.name}: ${error?.message || error}，已跳过`,
             "warn"
           );
@@ -6879,7 +7317,9 @@
     });
   }
 
-  async function createLongTermBuyOrder(item) {
+  async function createLongTermBuyOrder(item, ui = {}) {
+    const statusFn = ui.setStatus || setStatus;
+    const logFn = ui.log || log;
     const sessionId = getSessionId();
     if (!sessionId) throw new Error("未找到 Steam sessionid");
     if (unsafeWindow.g_bRequiresBillingInfo === true) {
@@ -6923,8 +7363,8 @@
       if (data?.need_confirmation && data?.confirmation?.confirmation_id) {
         confirmation = data.confirmation.confirmation_id;
         if (attempt === 0) {
-          log(`  ${item.cardName}: 等待 Steam 移动确认`, "warn");
-          setStatus(`请在 Steam 移动应用中确认: ${item.cardName}`);
+          logFn(`  ${item.cardName}: 等待 Steam 移动确认`, "warn");
+          statusFn(`请在 Steam 移动应用中确认: ${item.cardName}`);
         }
         await new Promise(resolve => setTimeout(resolve, 1500));
         continue;
@@ -6934,20 +7374,14 @@
     throw new Error("等待 Steam 移动确认超时");
   }
 
-  async function submitSelectedBuyOrders() {
-    const selected = getSelectedResults();
-    if (
-      selected.length === 0
-      || state.scanning
-      || state.bulkActionRunning
-      || state.craftScanning
-      || state.craftActionRunning
-      || state.seasonalActionRunning
-      || state.surplusScanning
-      || state.grindScanning
-    ) {
-      return;
-    }
+  async function submitBuyOrdersForSelection(source = "scan") {
+    const isOrder = source === "order";
+    const selected = isOrder ? getSelectedOrderResults() : getSelectedResults();
+    if (selected.length === 0 || isSharedActionBusy()) return;
+
+    const statusFn = isOrder ? setOrderStatus : setStatus;
+    const logFn = isOrder ? orderLog : log;
+    const ui = { setStatus: statusFn, log: logFn };
 
     state.bulkActionRunning = true;
     updateBulkActionState();
@@ -6958,11 +7392,11 @@
     let submitted = 0;
     let failed = 0;
     try {
-      setStatus("读取现有订购单");
+      statusFn("读取现有订购单");
       const activeOrders = await loadActiveBuyOrders();
-      const planData = await buildBuyOrderPlan(selected, activeOrders);
+      const planData = await buildBuyOrderPlan(selected, activeOrders, ui);
       if (planData.plan.length === 0) {
-        log(
+        logFn(
           `无需提交订购单：已有订单已覆盖，或没有可用的${getOrderPriceSourceLabel(planData.priceSource)}`,
           "warn"
         );
@@ -6974,40 +7408,48 @@
 
       for (let index = 0; index < planData.plan.length; index++) {
         const item = planData.plan[index];
-        setStatus(`提交订购单 ${index + 1}/${planData.plan.length}: ${item.cardName}`);
+        statusFn(`提交订购单 ${index + 1}/${planData.plan.length}: ${item.cardName}`);
         try {
-          const result = await createLongTermBuyOrder(item);
+          const result = await createLongTermBuyOrder(item, ui);
           submitted++;
           state.pendingOrderQuantities.set(item.marketHashName, {
             expectedQuantity: item.reservedQuantity + item.quantity,
             createdAt: Date.now(),
           });
-          log(
+          logFn(
             `  ✓ ${item.gameName} · ${item.cardName}: ${item.quantity} 张 @ ` +
             `¥${formatCNY(item.unitPriceCents)}，订单 ${result.buy_orderid}`,
             "ok"
           );
         } catch (error) {
           failed++;
-          log(
+          logFn(
             `  ✗ ${item.gameName} · ${item.cardName}: ${error?.message || error}`,
             "err"
           );
         }
         await new Promise(resolve => setTimeout(resolve, 500));
       }
-      log(`长期订购单提交结束: 成功 ${submitted}, 失败 ${failed}`, failed ? "warn" : "ok");
+      logFn(`长期订购单提交结束: 成功 ${submitted}, 失败 ${failed}`, failed ? "warn" : "ok");
     } catch (error) {
-      log(`无法提交长期订购单: ${error?.message || error}`, "err");
+      logFn(`无法提交长期订购单: ${error?.message || error}`, "err");
     } finally {
       state.bulkActionRunning = false;
-      setStatus(null);
+      statusFn(null);
       updateBulkActionState();
       updateCraftActionState();
       updateSeasonalActionState();
       updateSurplusActionState();
       updateGrindActionState();
     }
+  }
+
+  async function submitSelectedBuyOrders() {
+    return submitBuyOrdersForSelection("scan");
+  }
+
+  async function submitSelectedOrderBuyOrders() {
+    return submitBuyOrdersForSelection("order");
   }
 
   function sameMarketItems(left, right) {
