@@ -2,7 +2,7 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.6.8
+// @version      1.7.0
 // @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and suggest surplus item gem conversion
 // @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测多余卡牌和多余物品分解建议
 // @author       SpaceSyt
@@ -42,13 +42,14 @@
   // Constants
   // ============================================================
   const DEFAULT_CONFIG = {
-    configVersion: 10,
+    configVersion: 11,
     threshold: 5,
     scanInterval: 0,
     requestInterval: 330,
     batchSize: 20,
     batchPause: 53000,
     includeDrops: false,
+    foilScanMode: false,
     maxBadgePages: 1,
     blacklist: "",
     blacklistNames: "{}",
@@ -200,6 +201,22 @@
     hit.className = "stch-check-hit";
     hit.appendChild(checkbox);
     return hit;
+  }
+
+  function isFoilBadge(value) {
+    return typeof value === "boolean" ? value : !!value?.isFoil;
+  }
+
+  function getBadgeTargetLevel(value) {
+    return isFoilBadge(value) ? 1 : 5;
+  }
+
+  function getBadgeUrlSuffix(value) {
+    return isFoilBadge(value) ? "?border=1" : "";
+  }
+
+  function getBadgeModeLabel(value) {
+    return isFoilBadge(value) ? "闪卡" : "普通卡";
   }
 
   // ============================================================
@@ -421,11 +438,12 @@
     const candidates = [];
     const seen = new Set();
     const perPage = 150;
+    const scanModeLabel = cfg.foilScanMode ? "闪卡" : "普通卡";
 
     for (let page = 1; page <= cfg.maxBadgePages; page++) {
       const rangeStart = (page - 1) * perPage + 1;
       const rangeEnd = page * perPage;
-      onProgress?.(`正在扫描徽章 ${rangeStart}-${rangeEnd} (页${page})...`);
+      onProgress?.(`正在扫描${scanModeLabel}候选徽章 ${rangeStart}-${rangeEnd} (页${page})...`);
       const url = `${profileUrl}/badges/?sort=${curSort}&p=${page}`;
       const res = await queue.fetch(url);
       if (!res || !res.text) {
@@ -449,7 +467,9 @@
         const m = href.match(/\/(?:gamecards|badges)\/(\d+)\/?(\?|$)/);
         if (!m) continue;
         const appid = m[1];
-        const isFoil = href.includes("border=1");
+        const sourceIsFoil = href.includes("border=1");
+        if (!cfg.foilScanMode && sourceIsFoil) continue;
+        const isFoil = cfg.foilScanMode || sourceIsFoil;
         const key = `${appid}_${isFoil ? 1 : 0}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -464,8 +484,9 @@
         const owned = parseInt(countMatch[1], 10);
         const totalInSet = parseInt(countMatch[2], 10);
 
-        // only keep badges with partial progress (have SOME cards, but NOT all)
-        if (owned === 0 || owned >= totalInSet) continue;
+        // In foil mode the visible progress may belong to the normal badge, so
+        // keep broader app candidates and let the ?border=1 card page decide.
+        if (!cfg.foilScanMode && (owned === 0 || owned >= totalInSet)) continue;
 
         // game name
         const titleEl = row.querySelector(".badge_title");
@@ -490,7 +511,7 @@
         pageCandidateCount++;
       }
 
-      onProgress?.(`徽章 ${rangeStart}-${actualEnd}: ${pageCandidateCount} 个有未完成进度 (共 ${rows.length} 个徽章)`);
+      onProgress?.(`徽章 ${rangeStart}-${actualEnd}: ${pageCandidateCount} 个${scanModeLabel}候选 (共 ${rows.length} 个徽章)`);
 
       const nextLink = doc.querySelector(`a.pagebtn[href*="p=${page + 1}"]`);
       if (!nextLink) break;
@@ -498,7 +519,7 @@
       await new Promise(r => setTimeout(r, cfg.scanInterval));
     }
 
-    onProgress?.(`徽章列表扫描完成, 共 ${candidates.length} 个有未完成进度`);
+    onProgress?.(`徽章列表扫描完成, 共 ${candidates.length} 个${scanModeLabel}候选`);
     return candidates;
   }
 
@@ -507,6 +528,7 @@
   // ============================================================
   function parseGameCardsHtml(html, appid, isFoil) {
     const doc = new DOMParser().parseFromString(html, "text/html");
+    const targetLevel = getBadgeTargetLevel(isFoil);
 
     // game name from title
     let gameName = "";
@@ -595,13 +617,13 @@
     });
     const totalInSet = cardList.length;
     if (totalInSet === 0) {
-      return { gameName, level, totalInSet: 0, dropsRemaining, cards: cardList, need: 0, setsToLevel5: 0 };
+      return { gameName, level, totalInSet: 0, dropsRemaining, cards: cardList, need: 0, setsToLevel5: 0, targetLevel };
     }
 
     // single set calculation
     const cappedOwned = cardList.reduce((sum, c) => sum + Math.min(c.owned, 1), 0);
     const need = Math.max(0, totalInSet - cappedOwned);
-    const setsToLevel5 = Math.max(0, 5 - level);
+    const setsToLevel5 = Math.max(0, targetLevel - level);
 
     return {
       gameName,
@@ -611,6 +633,7 @@
       cards: cardList,
       need,
       setsToLevel5,
+      targetLevel,
     };
   }
 
@@ -1065,6 +1088,26 @@
       border-radius: 3px;
       background: rgba(0,0,0,0.2);
     }
+    #stch-tab-scan.stch-foil-mode {
+      background: linear-gradient(180deg, rgba(70, 31, 82, 0.46), rgba(27, 40, 56, 0.98) 260px);
+      box-shadow: inset 0 0 0 1px rgba(193, 91, 196, 0.24);
+      border-radius: 3px;
+    }
+    #stch-tab-scan.stch-foil-mode .stch-game-list {
+      border-color: rgba(193, 91, 196, 0.42);
+      background: rgba(20, 11, 27, 0.34);
+    }
+    #stch-tab-scan.stch-foil-mode #stch-log {
+      background: #120d1b;
+      border: 1px solid rgba(193, 91, 196, 0.22);
+    }
+    #stch-tab-scan.stch-foil-mode .stch-progress-bar {
+      background: linear-gradient(to right, #8f55c2, #cf73c9);
+    }
+    #stch-tab-scan.stch-foil-mode .stch-cost,
+    #stch-tab-scan.stch-foil-mode .stch-appid {
+      color: #d78be8;
+    }
     .stch-game-row {
       padding: 6px 14px;
       border-bottom: 1px solid rgba(69,85,107,0.4);
@@ -1400,6 +1443,17 @@
     }
     .stch-toolbar label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
     .stch-primary-label { color: #fff !important; font-weight: bold; }
+    .stch-foil-mode-label {
+      color: #d9a4e8;
+      font-weight: bold;
+    }
+    .stch-foil-mode-label input {
+      accent-color: #b75ac7;
+    }
+    .stch-foil-mode-label.active {
+      color: #f0c4f7;
+      text-shadow: 0 0 10px rgba(207, 115, 201, 0.35);
+    }
 
     .stch-status-text { color: #8db7d7; font-size: 13px; padding: 6px 0; min-height: 20px; }
 
@@ -2410,8 +2464,7 @@
           ${seasonalOnly ? `
           <span class="stch-tab ${activeClass("seasonal")}" data-tab="seasonal">季节徽章</span>
           ` : `
-          <span class="stch-tab ${activeClass("scan")}" data-tab="scan">价格扫描</span>
-          <span class="stch-tab stch-tab-disabled" title="未实现">闪卡价格扫描</span>
+          <span class="stch-tab ${activeClass("scan")}" data-tab="scan">卡牌价格扫描</span>
           <span class="stch-tab" data-tab="craft">徽章合成</span>
           <span class="stch-tab" data-tab="blacklist">游戏/AppID黑名单</span>
           <span class="stch-tab" data-tab="surplus">多余卡牌检测</span>
@@ -2458,6 +2511,10 @@
             <label>
               <input id="stch-include-drops" type="checkbox" ${state.cfg.includeDrops ? "checked" : ""}>
               包含有掉落卡牌的游戏
+            </label>
+            <label class="stch-foil-mode-label ${state.cfg.foilScanMode ? "active" : ""}" id="stch-foil-mode-label">
+              <input id="stch-foil-scan-mode" type="checkbox" ${state.cfg.foilScanMode ? "checked" : ""}>
+              闪卡模式
             </label>
           </div>
           <div class="stch-toolbar">
@@ -2622,7 +2679,7 @@
           <div id="stch-grind-log"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-settings">
-          <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">价格扫描</div>
+          <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">卡牌价格扫描</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
             <label>priceoverview请求间隔 <input id="stch-req-interval" class="stch-input" type="number" min="100" step="10" value="${state.cfg.requestInterval}" style="width:70px"> ms</label>
@@ -2651,7 +2708,7 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.6.8 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.7.0 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -2691,6 +2748,7 @@
         { integer: true, min: 1 }
       );
       state.cfg.includeDrops = !!document.getElementById("stch-include-drops")?.checked;
+      state.cfg.foilScanMode = !!document.getElementById("stch-foil-scan-mode")?.checked;
       state.cfg.batchSize = readNumberInput(
         "stch-batch-size",
         state.cfg.batchSize ?? DEFAULT_CONFIG.batchSize,
@@ -2727,6 +2785,7 @@
       const craftMaxPages = document.getElementById("stch-craft-max-pages");
       if (craftMaxPages) craftMaxPages.value = String(state.cfg.maxBadgePages);
       updateResultColumns();
+      applyScanModeTheme();
       if (changedId === "stch-craft-mode") renderCraftResults();
       if (changedId === "stch-surplus-only-maxed") renderSurplusResults();
       if (changedId?.startsWith("stch-grind-")) renderGrindResults();
@@ -2737,6 +2796,7 @@
     };
     const cfgIds = ["stch-threshold", "stch-scan-interval",
       "stch-req-interval", "stch-max-pages", "stch-include-drops",
+      "stch-foil-scan-mode",
       "stch-batch-size", "stch-batch-pause", "stch-buy-mode",
       "stch-order-price-source", "stch-price-adjustment",
       "stch-early-price-prediction", "stch-craft-interval",
@@ -2821,6 +2881,8 @@
       state.cfg.autoBlackEnabled = document.getElementById("stch-auto-bl-enabled").checked;
       saveConfig(state.cfg);
     });
+
+    applyScanModeTheme();
 
     if (!isPointsShopPage() && !GM_getValue(ONBOARDING_SEEN_KEY, false)) {
       showOnboarding();
@@ -5659,11 +5721,17 @@
     document.getElementById("stch-list")?.classList.toggle("stch-show-drops", showDrops);
   }
 
+  function applyScanModeTheme() {
+    const enabled = !!state.cfg.foilScanMode;
+    document.getElementById("stch-tab-scan")?.classList.toggle("stch-foil-mode", enabled);
+    document.getElementById("stch-foil-mode-label")?.classList.toggle("active", enabled);
+  }
+
   async function refreshResultInfo(existing, queue) {
     const profileUrl = getProfileUrl();
     if (!profileUrl) throw new Error("未找到 Profile URL");
 
-    const suffix = existing.isFoil ? "?border=1" : "";
+    const suffix = getBadgeUrlSuffix(existing);
     const res = await queue.fetch(`${profileUrl}/gamecards/${existing.appid}/${suffix}`);
     if (!res?.text?.includes("badge_card_set_card")) {
       throw new Error("未找到卡牌套组");
@@ -5672,6 +5740,7 @@
     const info = parseGameCardsHtml(res.text, existing.appid, existing.isFoil);
     info.appid = existing.appid;
     info.isFoil = existing.isFoil;
+    info.targetLevel = getBadgeTargetLevel(info);
     info.gameName = existing.gameName || info.gameName || "";
     info.cardPrices = [];
     info.cheapestSetCostCents = 0;
@@ -5682,7 +5751,7 @@
     let fullSetCostCents = 0;
     let level5CostCents = 0;
     let minVolume = Infinity;
-    const setsTo5 = Math.max(0, 5 - info.level);
+    const setsToTarget = Math.max(0, info.targetLevel - info.level);
     const noPriceCards = [];
     let failedPriceCount = 0;
 
@@ -5722,7 +5791,7 @@
       });
 
       const need1 = Math.max(0, 1 - card.owned);
-      const need5 = Math.max(0, setsTo5 - card.owned);
+      const need5 = Math.max(0, setsToTarget - card.owned);
       setCostCents += pk.lowestSellCents * need1;
       fullSetCostCents += pk.lowestSellCents;
       level5CostCents += need5 > 0
@@ -5735,7 +5804,7 @@
     }
 
     if (noPriceCards.length / info.totalInSet >= 0.5) {
-      const formulaEstimate = estimateMissingLevel5Cost(noPriceCards, info.cardPrices, setsTo5);
+      const formulaEstimate = estimateMissingLevel5Cost(noPriceCards, info.cardPrices, setsToTarget);
       if (formulaEstimate) {
         level5CostCents += formulaEstimate.estimatedCostCents;
         info.hasEstimated = true;
@@ -5799,7 +5868,7 @@
           const resultIndex = state.results.findIndex(
             info => getResultKey(info) === getResultKey(existing)
           );
-          if (next.level >= 5) {
+          if (next.level >= getBadgeTargetLevel(next)) {
             if (resultIndex >= 0) state.results.splice(resultIndex, 1);
             state.selectedResults.delete(getResultKey(existing));
             log(`[${existing.appid}] ${existing.gameName}: 已满级，从结果中移除`, "info");
@@ -5868,7 +5937,7 @@
     setScanPhase("scanning");
     setStatus("正在扫描徽章页");
 
-    const cfg = state.cfg;
+    const cfg = { ...state.cfg, foilScanMode: !!state.cfg.foilScanMode };
     const queue = new RequestQueue(
       cfg.requestInterval,
       cfg.batchSize,
@@ -5896,19 +5965,20 @@
     }
 
     try {
-      log("【阶段 1/3】正在扫描徽章页 (找有未完成进度的游戏)...");
+      const scanModeLabel = getBadgeModeLabel(cfg.foilScanMode);
+      log(`【阶段 1/3】正在扫描徽章页 (${scanModeLabel}模式，找候选游戏)...`);
       setProgress(0, 1, "阶段1: 扫描徽章页列表中...");
       setScanPhase("phase1");
       const badges = await scanBadgePages(cfg, msg => log(msg, "info"), queue);
 
       if (badges.length === 0) {
-        log("未找到任何有未完成进度的徽章", "warn");
+        log(`未找到任何${scanModeLabel}候选徽章`, "warn");
         setStatus(null);
         setScanPhase("done");
         return;
       }
 
-      log(`找到 ${badges.length} 个有未完成进度的徽章，开始逐个获取卡牌详情`);
+      log(`找到 ${badges.length} 个${scanModeLabel}候选徽章，开始逐个获取卡牌详情`);
       log("【阶段 2/3】逐个获取卡牌页 + 查价中...");
       setProgress(0, badges.length, `阶段2: 获取卡牌详情 0/${badges.length}`);
       setScanPhase("phase2");
@@ -5938,7 +6008,7 @@
           `阶段2: 获取卡牌详情 ${processed}/${badges.length} · ${b.gameName || b.appid}`);
 
         try {
-          const suffix = b.isFoil ? "?border=1" : "";
+          const suffix = getBadgeUrlSuffix(b);
           const url = `${profileUrl}/gamecards/${b.appid}/${suffix}`;
           let res;
           try {
@@ -5970,6 +6040,7 @@
           const info = parseGameCardsHtml(res.text, b.appid, b.isFoil);
           info.appid = b.appid;
           info.isFoil = b.isFoil;
+          info.targetLevel = getBadgeTargetLevel(info);
           info.gameName = b.gameName || info.gameName || "";
           info.cardPrices = [];
           info.cheapestSetCostCents = 0;
@@ -5988,20 +6059,20 @@
             continue;
           }
 
-          if (info.level >= 5) {
-            log(`[${b.appid}] ${info.gameName}: 已满级 Lv${info.level}`, "info");
+          if (info.level >= info.targetLevel) {
+            log(`[${b.appid}] ${info.gameName}: 已满级 Lv${info.level}/${info.targetLevel}`, "info");
             skipped++;
             continue;
           }
 
-          log(`[${b.appid}] ${info.gameName} Lv${info.level} 缺 ${info.need}/${info.totalInSet} 张, 正在查价...`);
+          log(`[${b.appid}] ${info.gameName} ${scanModeLabel} Lv${info.level}/${info.targetLevel} 缺 ${info.need}/${info.totalInSet} 张, 正在查价...`);
 
           // Phase 3: price each card type
           let setCostCents = 0;
           let fullSetCostCents = 0;
           let level5CostCents = 0;
           let minVolume = Infinity;
-          const setsTo5 = Math.max(0, 5 - info.level);
+          const setsToTarget = Math.max(0, info.targetLevel - info.level);
           let allPriced = true;
           let thresholdSkip = false;
           let cancelledCurrent = false;
@@ -6053,7 +6124,7 @@
             });
 
             const need1 = Math.max(0, 1 - card.owned);
-            const need5 = Math.max(0, setsTo5 - card.owned);
+            const need5 = Math.max(0, setsToTarget - card.owned);
             setCostCents += pk.lowestSellCents * need1;
             fullSetCostCents += pk.lowestSellCents;
             level5CostCents += need5 > 0
@@ -6123,7 +6194,7 @@
             const formulaEstimate = estimateMissingLevel5Cost(
               noPriceCards,
               info.cardPrices,
-              setsTo5
+              setsToTarget
             );
             if (formulaEstimate) {
               level5CostCents += formulaEstimate.estimatedCostCents;
@@ -6310,6 +6381,7 @@
     row.className = "stch-game-row";
     row.dataset.appid = info.appid;
     row.dataset.foil = info.isFoil ? 1 : 0;
+    const targetLevel = getBadgeTargetLevel(info);
     const ownedCards = info.cards.reduce((sum, c) => sum + Math.min(c.owned, 1), 0);
     const minVol = info.minVolume || 0;
     const lv5Color = info.hasEstimated ? "color:#c9a02c" : minVol > 1 ? "color:#4caf50" : minVol === 1 ? "color:#888" : "";
@@ -6338,7 +6410,7 @@
           : "近期成交=0，参考性较弱";
     row.appendChild(createTextSpan("stch-appid", `${info.appid}${info.isFoil ? "(箔)" : ""}`));
     row.appendChild(createTextSpan("stch-name", info.gameName || "(未知)"));
-    row.appendChild(createTextSpan("stch-level", `Lv${info.level}/5`));
+    row.appendChild(createTextSpan("stch-level", `Lv${info.level}/${targetLevel}`));
     row.appendChild(createTextSpan("stch-cards", `${ownedCards}/${info.totalInSet}`));
     row.appendChild(createTextSpan("stch-cost", `¥${info.cheapestSetCNY}`));
     row.appendChild(createTextSpan("stch-full", `¥${info.fullSetCNY}`));
@@ -6394,7 +6466,7 @@
     row.addEventListener("click", (e) => {
       if (e.target.closest(".stch-buy-link, .stch-result-cb, .stch-check, .stch-check-hit")) return;
       const pUrl = getProfileUrl();
-      if (pUrl) window.open(`${pUrl}/gamecards/${info.appid}/`, "_blank");
+      if (pUrl) window.open(`${pUrl}/gamecards/${info.appid}/${getBadgeUrlSuffix(info)}`, "_blank");
     });
     row.style.cursor = "pointer";
     list.appendChild(row);
@@ -6412,11 +6484,12 @@
     const summary = document.getElementById("stch-summary");
     if (!summary) return;
     const count = state.results.length;
+    const modeLabel = state.results.some(info => info.isFoil) ? "闪卡" : "普通卡";
     const totalCNY = (state.results.reduce((s, r) => s + r.cheapestSetCostCents, 0) / 100).toFixed(2);
     const fullCNY = (state.results.reduce((s, r) => s + r.fullSetCostCents, 0) / 100).toFixed(2);
     const lv5CNY = (state.results.reduce((s, r) => s + r.level5CostCents, 0) / 100).toFixed(2);
     summary.innerHTML = `
-      共 <b>${count}</b> 个 ≤ ¥${state.cfg.threshold} (单套卡牌价格上限)，补全总价 <b>¥${totalCNY}</b>，全套总价 ¥${fullCNY}，满级总价 ¥${lv5CNY}
+      共 <b>${count}</b> 个${modeLabel} ≤ ¥${state.cfg.threshold} (单套卡牌价格上限)，补全总价 <b>¥${totalCNY}</b>，全套总价 ¥${fullCNY}，满级总价 ¥${lv5CNY}
     `;
   }
 
@@ -6431,11 +6504,12 @@
     GM_setValue(MULTIBUY_DATA_KEY, null);
   }
 
-  function getMultibuyQuantity(mode, badgeLevel, owned) {
+  function getMultibuyQuantity(mode, badgeLevel, owned, targetLevel = 5) {
+    const maxLevel = Math.max(1, Math.floor(Number(targetLevel) || 5));
     switch (mode) {
-      case "complete5": return Math.max(0, (5 - badgeLevel) - owned);
+      case "complete5": return Math.max(0, (maxLevel - badgeLevel) - owned);
       case "buy1":      return 1;
-      case "buy5":      return 5;
+      case "buy5":      return maxLevel;
       default:          return owned < 1 ? 1 : 0;
     }
   }
@@ -6666,7 +6740,8 @@
         const targetQuantity = getMultibuyQuantity(
           state.cfg.buyMode || "complete1",
           info.level,
-          card.owned
+          card.owned,
+          getBadgeTargetLevel(info)
         );
         if (targetQuantity <= 0) continue;
 
@@ -7060,7 +7135,7 @@
 
     const qtyByCard = [];
     cardsWithHash.forEach(c => {
-      const qty = getMultibuyQuantity(mode, info.level, c.owned);
+      const qty = getMultibuyQuantity(mode, info.level, c.owned, getBadgeTargetLevel(info));
       qtyByCard.push({ card: c, qty });
     });
     const toBuy = qtyByCard.filter(q => q.qty > 0);
@@ -7075,7 +7150,7 @@
 
     const profileUrl = getProfileUrl();
     if (profileUrl) {
-      params.set("steamdb_return_to", `${profileUrl}/gamecards/${info.appid}/`);
+      params.set("steamdb_return_to", `${profileUrl}/gamecards/${info.appid}/${getBadgeUrlSuffix(info)}`);
     }
 
     const adjustmentInput = document.getElementById("stch-price-adjustment");
@@ -7087,6 +7162,7 @@
     );
     const buyData = {
       appid: info.appid,
+      isFoil: !!info.isFoil,
       gameName: info.gameName,
       bufferCents,
       createdAt: Date.now(),
