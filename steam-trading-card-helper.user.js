@@ -2,7 +2,7 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.7.6
+// @version      1.7.7
 // @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and suggest surplus item gem conversion
 // @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测多余卡牌和多余物品分解建议
 // @author       SpaceSyt
@@ -42,7 +42,7 @@
   // Constants
   // ============================================================
   const DEFAULT_CONFIG = {
-    configVersion: 12,
+    configVersion: 13,
     threshold: 5,
     scanInterval: 0,
     requestInterval: 330,
@@ -90,11 +90,28 @@
   // ============================================================
   function loadConfig() {
     const defaults = { ...DEFAULT_CONFIG };
+    const currentVersion = defaults.configVersion;
     try {
       const raw = GM_getValue("stch_config", null);
       if (raw) {
         const saved = JSON.parse(raw);
-        return { ...defaults, ...saved };
+        const merged = { ...defaults, ...saved };
+        // Drop keys that no longer exist in defaults (renamed/removed fields).
+        let pruned = false;
+        for (const key of Object.keys(merged)) {
+          if (!Object.prototype.hasOwnProperty.call(defaults, key)) {
+            delete merged[key];
+            pruned = true;
+          }
+        }
+        const savedVersion = Number(saved?.configVersion) || 0;
+        if (savedVersion < currentVersion) {
+          merged.configVersion = currentVersion;
+          saveConfig(merged);
+        } else if (pruned) {
+          saveConfig(merged);
+        }
+        return merged;
       }
     } catch (e) {
       console.warn("[STCH] Config load failed:", e);
@@ -2776,7 +2793,7 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.7.6 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.7.7 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -3131,33 +3148,80 @@
   }
 
   // ============================================================
+  // Status controller factory
+  // Each tab (scan/order/craft/seasonal/surplus/grind) shares the
+  // same log + animated-status + progress behaviour. The factory
+  // keeps a private interval timer per controller so they never
+  // interfere with each other.
+  // ============================================================
+  function createStatusController({
+    tag,
+    logId = null,
+    statusId = null,
+    progressWrapId = null,
+    progressBarId = null,
+    progressTextId = null,
+  }) {
+    let statusTimer = null;
+
+    function log(msg, type = "") {
+      const box = logId ? document.getElementById(logId) : null;
+      if (!box) { console.log(`[${tag}]`, msg); return; }
+      const line = document.createElement("div");
+      if (type) line.className = type;
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      box.appendChild(line);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function setStatus(text, animate = true) {
+      if (!statusId) return;
+      const el = document.getElementById(statusId);
+      if (!el) return;
+      if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+      if (!text) { el.textContent = ""; el.style.display = "none"; return; }
+      el.style.display = "";
+      el.textContent = text;
+      if (!animate) return;
+      let dots = 0;
+      statusTimer = setInterval(() => {
+        dots = (dots + 1) % 4;
+        el.textContent = text + " " + ".".repeat(dots);
+      }, 500);
+    }
+
+    function setProgress(done, total, text = "") {
+      if (!progressWrapId) return;
+      const wrap = document.getElementById(progressWrapId);
+      const bar = document.getElementById(progressBarId);
+      const label = document.getElementById(progressTextId);
+      if (!wrap || !bar || !label) return;
+      wrap.style.display = "";
+      const pct = total > 0 ? Math.min(100, done / total * 100) : 0;
+      bar.style.width = `${pct}%`;
+      label.textContent = text || `${done}/${total}`;
+    }
+
+    function hideProgress() {
+      if (!progressWrapId) return;
+      const wrap = document.getElementById(progressWrapId);
+      if (wrap) wrap.style.display = "none";
+    }
+
+    return { log, setStatus, setProgress, hideProgress };
+  }
+
+  // ============================================================
   // Logging / Progress
   // ============================================================
-  function log(msg, type = "") {
-    const box = document.getElementById("stch-log");
-    if (!box) { console.log("[STCH]", msg); return; }
-    const line = document.createElement("div");
-    if (type) line.className = type;
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function setProgress(done, total, text = "") {
-    const wrap = document.getElementById("stch-progress-wrap");
-    const bar = document.getElementById("stch-progress-bar");
-    const ptxt = document.getElementById("stch-progress-text");
-    if (!wrap) return;
-    wrap.style.display = "";
-    const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
-    bar.style.width = pct + "%";
-    ptxt.textContent = text || `${done}/${total}`;
-  }
-
-  function hideProgress() {
-    const wrap = document.getElementById("stch-progress-wrap");
-    if (wrap) wrap.style.display = "none";
-  }
+  const { log, setStatus, setProgress, hideProgress } = createStatusController({
+    tag: "STCH",
+    logId: "stch-log",
+    statusId: "stch-status",
+    progressWrapId: "stch-progress-wrap",
+    progressBarId: "stch-progress-bar",
+    progressTextId: "stch-progress-text",
+  });
 
   function setSummary(html) {
     const el = document.getElementById("stch-summary");
@@ -3169,46 +3233,16 @@
     if (row) row.style.display = visible ? "" : "none";
   }
 
-  // ============================================================
-  // Animated status
-  // ============================================================
-  let statusTimer = null;
-  function setStatus(text, animate = true) {
-    const el = document.getElementById("stch-status");
-    if (!el) return;
-    if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
-    if (!text) { el.textContent = ""; el.style.display = "none"; return; }
-    el.style.display = "";
-    if (!animate) { el.textContent = text; return; }
-    el.textContent = text;
-    let dots = 0;
-    statusTimer = setInterval(() => {
-      dots = (dots + 1) % 4;
-      el.textContent = text + " " + ".".repeat(dots);
-    }, 500);
-  }
+  const { setStatus: setOrderStatus } = createStatusController({
+    tag: "STCH Order",
+    statusId: "stch-order-status",
+  });
 
-  let orderStatusTimer = null;
   function orderLog(msg, type = "") {
     console.log("[STCH][Order]", msg);
     if (["ok", "warn", "err"].includes(type)) {
       setOrderStatus(msg.replace(/^\s*[✓✗]\s*/, ""), false);
     }
-  }
-
-  function setOrderStatus(text, animate = true) {
-    const el = document.getElementById("stch-order-status");
-    if (!el) return;
-    if (orderStatusTimer) { clearInterval(orderStatusTimer); orderStatusTimer = null; }
-    if (!text) { el.textContent = ""; el.style.display = "none"; return; }
-    el.style.display = "";
-    if (!animate) { el.textContent = text; return; }
-    el.textContent = text;
-    let dots = 0;
-    orderStatusTimer = setInterval(() => {
-      dots = (dots + 1) % 4;
-      el.textContent = text + " " + ".".repeat(dots);
-    }, 500);
   }
 
   function getOrderCacheDays() {
@@ -3315,8 +3349,6 @@
   // ============================================================
   // Seasonal badge purchasing
   // ============================================================
-  let seasonalStatusTimer = null;
-
   function sleepMs(ms) {
     return new Promise(resolve => setTimeout(resolve, Math.max(0, ms)));
   }
@@ -3327,53 +3359,19 @@
     return div.innerHTML;
   }
 
-  function seasonalLog(msg, type = "") {
-    const box = document.getElementById("stch-seasonal-log");
-    if (!box) { console.log("[STCH Seasonal]", msg); return; }
-    const line = document.createElement("div");
-    if (type) line.className = type;
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function setSeasonalStatus(text, animate = true) {
-    const el = document.getElementById("stch-seasonal-status");
-    if (!el) return;
-    if (seasonalStatusTimer) {
-      clearInterval(seasonalStatusTimer);
-      seasonalStatusTimer = null;
-    }
-    if (!text) {
-      el.textContent = "";
-      el.style.display = "none";
-      return;
-    }
-    el.style.display = "";
-    el.textContent = text;
-    if (!animate) return;
-    let dots = 0;
-    seasonalStatusTimer = setInterval(() => {
-      dots = (dots + 1) % 4;
-      el.textContent = text + " " + ".".repeat(dots);
-    }, 500);
-  }
-
-  function setSeasonalProgress(done, total, text = "") {
-    const wrap = document.getElementById("stch-seasonal-progress-wrap");
-    const bar = document.getElementById("stch-seasonal-progress-bar");
-    const label = document.getElementById("stch-seasonal-progress-text");
-    if (!wrap || !bar || !label) return;
-    wrap.style.display = "";
-    const pct = total > 0 ? Math.min(100, done / total * 100) : 0;
-    bar.style.width = `${pct}%`;
-    label.textContent = text || `${done}/${total}`;
-  }
-
-  function hideSeasonalProgress() {
-    const wrap = document.getElementById("stch-seasonal-progress-wrap");
-    if (wrap) wrap.style.display = "none";
-  }
+  const {
+    log: seasonalLog,
+    setStatus: setSeasonalStatus,
+    setProgress: setSeasonalProgress,
+    hideProgress: hideSeasonalProgress,
+  } = createStatusController({
+    tag: "STCH Seasonal",
+    logId: "stch-seasonal-log",
+    statusId: "stch-seasonal-status",
+    progressWrapId: "stch-seasonal-progress-wrap",
+    progressBarId: "stch-seasonal-progress-bar",
+    progressTextId: "stch-seasonal-progress-text",
+  });
 
   function clampNumber(value, min, max, fallback) {
     const parsed = parseInt(value, 10);
@@ -3795,55 +3793,19 @@
   // ============================================================
   // Badge crafting
   // ============================================================
-  let craftStatusTimer = null;
-
-  function craftLog(msg, type = "") {
-    const box = document.getElementById("stch-craft-log");
-    if (!box) { console.log("[STCH Craft]", msg); return; }
-    const line = document.createElement("div");
-    if (type) line.className = type;
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function setCraftStatus(text, animate = true) {
-    const el = document.getElementById("stch-craft-status");
-    if (!el) return;
-    if (craftStatusTimer) {
-      clearInterval(craftStatusTimer);
-      craftStatusTimer = null;
-    }
-    if (!text) {
-      el.textContent = "";
-      el.style.display = "none";
-      return;
-    }
-    el.style.display = "";
-    el.textContent = text;
-    if (!animate) return;
-    let dots = 0;
-    craftStatusTimer = setInterval(() => {
-      dots = (dots + 1) % 4;
-      el.textContent = text + " " + ".".repeat(dots);
-    }, 500);
-  }
-
-  function setCraftProgress(done, total, text = "") {
-    const wrap = document.getElementById("stch-craft-progress-wrap");
-    const bar = document.getElementById("stch-craft-progress-bar");
-    const label = document.getElementById("stch-craft-progress-text");
-    if (!wrap || !bar || !label) return;
-    wrap.style.display = "";
-    const pct = total > 0 ? Math.min(100, done / total * 100) : 0;
-    bar.style.width = `${pct}%`;
-    label.textContent = text || `${done}/${total}`;
-  }
-
-  function hideCraftProgress() {
-    const wrap = document.getElementById("stch-craft-progress-wrap");
-    if (wrap) wrap.style.display = "none";
-  }
+  const {
+    log: craftLog,
+    setStatus: setCraftStatus,
+    setProgress: setCraftProgress,
+    hideProgress: hideCraftProgress,
+  } = createStatusController({
+    tag: "STCH Craft",
+    logId: "stch-craft-log",
+    statusId: "stch-craft-status",
+    progressWrapId: "stch-craft-progress-wrap",
+    progressBarId: "stch-craft-progress-bar",
+    progressTextId: "stch-craft-progress-text",
+  });
 
   function getCraftPlan() {
     return state.craftResults
@@ -4598,55 +4560,19 @@
   // ============================================================
   // Surplus card detection
   // ============================================================
-  let surplusStatusTimer = null;
-
-  function surplusLog(msg, type = "") {
-    const box = document.getElementById("stch-surplus-log");
-    if (!box) { console.log("[STCH Surplus]", msg); return; }
-    const line = document.createElement("div");
-    if (type) line.className = type;
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function setSurplusStatus(text, animate = true) {
-    const el = document.getElementById("stch-surplus-status");
-    if (!el) return;
-    if (surplusStatusTimer) {
-      clearInterval(surplusStatusTimer);
-      surplusStatusTimer = null;
-    }
-    if (!text) {
-      el.textContent = "";
-      el.style.display = "none";
-      return;
-    }
-    el.style.display = "";
-    el.textContent = text;
-    if (!animate) return;
-    let dots = 0;
-    surplusStatusTimer = setInterval(() => {
-      dots = (dots + 1) % 4;
-      el.textContent = text + " " + ".".repeat(dots);
-    }, 500);
-  }
-
-  function setSurplusProgress(done, total, text = "") {
-    const wrap = document.getElementById("stch-surplus-progress-wrap");
-    const bar = document.getElementById("stch-surplus-progress-bar");
-    const label = document.getElementById("stch-surplus-progress-text");
-    if (!wrap || !bar || !label) return;
-    wrap.style.display = "";
-    const pct = total > 0 ? Math.min(100, done / total * 100) : 0;
-    bar.style.width = `${pct}%`;
-    label.textContent = text || `${done}/${total}`;
-  }
-
-  function hideSurplusProgress() {
-    const wrap = document.getElementById("stch-surplus-progress-wrap");
-    if (wrap) wrap.style.display = "none";
-  }
+  const {
+    log: surplusLog,
+    setStatus: setSurplusStatus,
+    setProgress: setSurplusProgress,
+    hideProgress: hideSurplusProgress,
+  } = createStatusController({
+    tag: "STCH Surplus",
+    logId: "stch-surplus-log",
+    statusId: "stch-surplus-status",
+    progressWrapId: "stch-surplus-progress-wrap",
+    progressBarId: "stch-surplus-progress-bar",
+    progressTextId: "stch-surplus-progress-text",
+  });
 
   function getDescriptionKey(item) {
     return `${item?.classid || ""}_${item?.instanceid || ""}`;
@@ -5196,55 +5122,19 @@
   // ============================================================
   // Surplus item grind recommendations
   // ============================================================
-  let grindStatusTimer = null;
-
-  function grindLog(msg, type = "") {
-    const box = document.getElementById("stch-grind-log");
-    if (!box) { console.log("[STCH Grind]", msg); return; }
-    const line = document.createElement("div");
-    if (type) line.className = type;
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    box.appendChild(line);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function setGrindStatus(text, animate = true) {
-    const el = document.getElementById("stch-grind-status");
-    if (!el) return;
-    if (grindStatusTimer) {
-      clearInterval(grindStatusTimer);
-      grindStatusTimer = null;
-    }
-    if (!text) {
-      el.textContent = "";
-      el.style.display = "none";
-      return;
-    }
-    el.style.display = "";
-    el.textContent = text;
-    if (!animate) return;
-    let dots = 0;
-    grindStatusTimer = setInterval(() => {
-      dots = (dots + 1) % 4;
-      el.textContent = text + " " + ".".repeat(dots);
-    }, 500);
-  }
-
-  function setGrindProgress(done, total, text = "") {
-    const wrap = document.getElementById("stch-grind-progress-wrap");
-    const bar = document.getElementById("stch-grind-progress-bar");
-    const label = document.getElementById("stch-grind-progress-text");
-    if (!wrap || !bar || !label) return;
-    wrap.style.display = "";
-    const pct = total > 0 ? Math.min(100, done / total * 100) : 0;
-    bar.style.width = `${pct}%`;
-    label.textContent = text || `${done}/${total}`;
-  }
-
-  function hideGrindProgress() {
-    const wrap = document.getElementById("stch-grind-progress-wrap");
-    if (wrap) wrap.style.display = "none";
-  }
+  const {
+    log: grindLog,
+    setStatus: setGrindStatus,
+    setProgress: setGrindProgress,
+    hideProgress: hideGrindProgress,
+  } = createStatusController({
+    tag: "STCH Grind",
+    logId: "stch-grind-log",
+    statusId: "stch-grind-status",
+    progressWrapId: "stch-grind-progress-wrap",
+    progressBarId: "stch-grind-progress-bar",
+    progressTextId: "stch-grind-progress-text",
+  });
 
   function getBlacklistAppids() {
     return new Set(
