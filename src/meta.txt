@@ -1,0 +1,30 @@
+// ==UserScript==
+// @name         Steam Trading Card Helper
+// @name:zh-CN   Steam 卡牌助手
+// @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
+// @version      __VERSION__
+// @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and suggest surplus item gem conversion
+// @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测多余卡牌和多余物品分解建议
+// @author       SpaceSyt
+// @homepageURL  https://github.com/SpaceSyt/Steam-Trading-Card-Helper
+// @supportURL   https://github.com/SpaceSyt/Steam-Trading-Card-Helper/issues
+// @downloadURL  https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper.user.js
+// @updateURL    https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper.user.js
+// @match        *://steamcommunity.com/*/badges*
+// @match        *://steamcommunity.com/id/*/badges*
+// @match        *://steamcommunity.com/profiles/*/badges*
+// @match        *://steamcommunity.com/*/inventory*
+// @match        *://steamcommunity.com/id/*/inventory*
+// @match        *://steamcommunity.com/profiles/*/inventory*
+// @match        *://steamcommunity.com/market/multibuy*
+// @match        *://store.steampowered.com/points/shop*
+// @grant        GM_addStyle
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
+// @connect      store.steampowered.com
+// @connect      steamcommunity.com
+// @connect      api.steampowered.com
+// @license      MIT
+// ==/UserScript==
