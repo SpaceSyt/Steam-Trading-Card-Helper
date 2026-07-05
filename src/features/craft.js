@@ -8,7 +8,7 @@ import { getResultKey } from "../services/result-info.js";
 
 import { formatCNY, formatInt } from "../utils/format.js";
 
-import { getBadgeTargetLevel, getBadgeModeLabel } from "../utils/badge.js";
+import { getBadgeTargetLevel, getBadgeModeLabel, getGameCardsUrl } from "../utils/badge.js";
 
 import { createTextSpan, createCheckboxHit } from "../utils/dom.js";
 
@@ -368,9 +368,8 @@ export { updateCraftActionState };
         );
         setCraftStatus(`读取卡组: ${candidate.gameName}`);
         try {
-          const suffix = candidate.isFoil ? "?border=1" : "";
           const response = await queue.fetch(
-            `${profileUrl}/gamecards/${candidate.appid}/${suffix}`
+            getGameCardsUrl(profileUrl, candidate.appid, candidate, { language: "english" })
           );
           const result = parseCraftableGameCardsHtml(
             response.text || "",

@@ -2,7 +2,7 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.9.0
+// @version      1.9.1
 // @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and suggest surplus item gem conversion
 // @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测多余卡牌和多余物品分解建议
 // @author       SpaceSyt
@@ -172,8 +172,16 @@
   function getBadgeTargetLevel(value) {
     return isFoilBadge(value) ? 1 : 5;
   }
-  function getBadgeUrlSuffix(value) {
-    return isFoilBadge(value) ? "?border=1" : "";
+  function getBadgeUrlSuffix(value, options = {}) {
+    const params = new URLSearchParams();
+    if (isFoilBadge(value)) params.set("border", "1");
+    if (options.language) params.set("l", options.language);
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  }
+  function getGameCardsUrl(profileUrl, appid, value, options = {}) {
+    const base = String(profileUrl || "").replace(/\/+$/, "");
+    return `${base}/gamecards/${appid}/${getBadgeUrlSuffix(value, options)}`;
   }
   function getBadgeModeLabel(value) {
     return isFoilBadge(value) ? "闪卡" : "普通卡";
@@ -499,8 +507,9 @@
   async function refreshResultInfo(existing, queue) {
     const profileUrl = getProfileUrl();
     if (!profileUrl) throw new Error("未找到 Profile URL");
-    const suffix = getBadgeUrlSuffix(existing);
-    const res = await queue.fetch(`${profileUrl}/gamecards/${existing.appid}/${suffix}`);
+    const res = await queue.fetch(
+      getGameCardsUrl(profileUrl, existing.appid, existing, { language: "english" })
+    );
     if (!res?.text?.includes("badge_card_set_card")) {
       throw new Error("未找到卡牌套组");
     }
@@ -2013,8 +2022,12 @@
       } else {
         sourceState.selected.delete(key);
       }
-      if (source === "order") updateOrderSummary();
-      updateBulkActionState();
+      if (source === "order") {
+        updateOrderSummary();
+        updateOrderActionState();
+      } else {
+        updateBulkActionState();
+      }
     };
     checkbox.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -2240,8 +2253,7 @@
           `阶段2: 获取卡牌详情 ${processed}/${badges.length} · ${b.gameName || b.appid}`
         );
         try {
-          const suffix = getBadgeUrlSuffix(b);
-          const url = `${profileUrl}/gamecards/${b.appid}/${suffix}`;
+          const url = getGameCardsUrl(profileUrl, b.appid, b, { language: "english" });
           let res;
           try {
             res = await queue.fetch(url);
@@ -2655,7 +2667,7 @@
   }
   async function loadActiveBuyOrders() {
     const response = await window.fetch(
-      "https://steamcommunity.com/market/mylistings?start=0&count=100",
+      "https://steamcommunity.com/market/mylistings?start=0&count=100&l=english",
       { credentials: "include" }
     );
     if (!response.ok) {
@@ -2709,7 +2721,7 @@
     if (Number.isFinite(cached?.priceCents) && cached.priceCents > 0 && Date.now() - cached.fetchedAt < 3e4) {
       return cached.priceCents;
     }
-    const listingUrl = `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}`;
+    const listingUrl = `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}?l=english`;
     const listingResponse = await window.fetch(listingUrl, { credentials: "include" });
     if (!listingResponse.ok) {
       throw new Error(`读取商品页失败 (${listingResponse.status})`);
@@ -2969,28 +2981,34 @@
   }
   async function submitBuyOrdersForSelection(source = "scan") {
     const isOrder = source === "order";
-    const selected = isOrder ? getSelectedOrderResults() : getSelectedResults();
-    if (selected.length === 0 || isSharedActionBusy()) return;
     const statusFn = isOrder ? setOrderStatus2 : setStatus3;
     const logFn = isOrder ? orderLog : log4;
     const ui = { setStatus: statusFn, log: logFn };
+    const selected = isOrder ? getSelectedOrderResults() : getSelectedResults();
+    if (isSharedActionBusy()) return;
+    if (selected.length === 0) {
+      statusFn("请先勾选要提交订购单的卡组", false);
+      return;
+    }
     state.bulkActionRunning = true;
     updateAllActionStates();
     let submitted = 0;
     let failed = 0;
+    let finalStatus = null;
     try {
       statusFn("读取现有订购单");
       const activeOrders = await loadActiveBuyOrders();
       const planData = await buildBuyOrderPlan(selected, activeOrders, ui);
       if (planData.plan.length === 0) {
-        logFn(
-          `无需提交订购单：已有订单已覆盖，或没有可用的${getOrderPriceSourceLabel(planData.priceSource)}`,
-          "warn"
-        );
+        finalStatus = `无需提交订购单：已有订单已覆盖，或没有可用的${getOrderPriceSourceLabel(planData.priceSource)}`;
+        logFn(finalStatus, "warn");
         return;
       }
       const confirmed = await showBuyOrderConfirmation(planData, selected.length);
-      if (!confirmed) return;
+      if (!confirmed) {
+        finalStatus = "已取消提交订购单";
+        return;
+      }
       for (let index = 0; index < planData.plan.length; index++) {
         const item = planData.plan[index];
         statusFn(`提交订购单 ${index + 1}/${planData.plan.length}: ${item.cardName}`);
@@ -3014,12 +3032,18 @@
         }
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
-      logFn(`长期订购单提交结束: 成功 ${submitted}, 失败 ${failed}`, failed ? "warn" : "ok");
+      finalStatus = `长期订购单提交结束: 成功 ${submitted}, 失败 ${failed}`;
+      logFn(finalStatus, failed ? "warn" : "ok");
     } catch (error) {
-      logFn(`无法提交长期订购单: ${error?.message || error}`, "err");
+      finalStatus = `无法提交长期订购单: ${error?.message || error}`;
+      logFn(finalStatus, "err");
     } finally {
       state.bulkActionRunning = false;
-      statusFn(null);
+      if (isOrder && finalStatus) {
+        statusFn(finalStatus, false);
+      } else {
+        statusFn(null);
+      }
       updateAllActionStates();
     }
   }
@@ -3304,9 +3328,8 @@
         );
         setCraftStatus(`读取卡组: ${candidate.gameName}`);
         try {
-          const suffix = candidate.isFoil ? "?border=1" : "";
           const response = await queue.fetch(
-            `${profileUrl}/gamecards/${candidate.appid}/${suffix}`
+            getGameCardsUrl(profileUrl, candidate.appid, candidate, { language: "english" })
           );
           const result = parseCraftableGameCardsHtml(
             response.text || "",
@@ -4211,8 +4234,9 @@
   // src/features/surplus.js
   var { log: surplusLog2, setStatus: setSurplusStatus2, setProgress: setSurplusProgress, hideProgress: hideSurplusProgress } = surplusStatus;
   async function resolveSurplusForBadge(group, profileUrl, queue) {
-    const suffix = group.isFoil ? "?border=1" : "";
-    const response = await queue.fetch(`${profileUrl}/gamecards/${group.appid}/${suffix}`);
+    const response = await queue.fetch(
+      getGameCardsUrl(profileUrl, group.appid, group, { language: "english" })
+    );
     if (!response?.text?.includes("badge_card_set_card")) {
       throw new Error("未找到卡牌套组");
     }
@@ -5396,7 +5420,7 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.9.0 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.9.1 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);

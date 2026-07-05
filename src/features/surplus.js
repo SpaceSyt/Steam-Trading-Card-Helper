@@ -4,7 +4,7 @@ import { RequestQueue } from "../request/queue.js";
 
 import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
-import { getBadgeTargetLevel } from "../utils/badge.js";
+import { getBadgeTargetLevel, getGameCardsUrl } from "../utils/badge.js";
 
 import { formatCNY, formatInt } from "../utils/format.js";
 
@@ -25,8 +25,9 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
 export { updateSurplusActionState };
 
   export async function resolveSurplusForBadge(group, profileUrl, queue) {
-    const suffix = group.isFoil ? "?border=1" : "";
-    const response = await queue.fetch(`${profileUrl}/gamecards/${group.appid}/${suffix}`);
+    const response = await queue.fetch(
+      getGameCardsUrl(profileUrl, group.appid, group, { language: "english" })
+    );
     if (!response?.text?.includes("badge_card_set_card")) {
       throw new Error("未找到卡牌套组");
     }

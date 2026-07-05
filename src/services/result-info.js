@@ -2,7 +2,7 @@ import { state } from "../state.js";
 
 import { getProfileUrl } from "../utils/steam.js";
 
-import { getBadgeUrlSuffix, getBadgeTargetLevel } from "../utils/badge.js";
+import { getGameCardsUrl, getBadgeTargetLevel } from "../utils/badge.js";
 
 import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
@@ -26,8 +26,9 @@ import { formatCNY } from "../utils/format.js";
     const profileUrl = getProfileUrl();
     if (!profileUrl) throw new Error("未找到 Profile URL");
 
-    const suffix = getBadgeUrlSuffix(existing);
-    const res = await queue.fetch(`${profileUrl}/gamecards/${existing.appid}/${suffix}`);
+    const res = await queue.fetch(
+      getGameCardsUrl(profileUrl, existing.appid, existing, { language: "english" })
+    );
     if (!res?.text?.includes("badge_card_set_card")) {
       throw new Error("未找到卡牌套组");
     }

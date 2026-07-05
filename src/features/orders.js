@@ -6,7 +6,7 @@ import { formatCNY } from "../utils/format.js";
 
 import { getMarketMinimumPriceCents, getSessionId } from "../utils/steam.js";
 
-import { getBadgeTargetLevel, getBadgeUrlSuffix } from "../utils/badge.js";
+import { getBadgeTargetLevel } from "../utils/badge.js";
 
 import { getMultibuyQuantity } from "./multibuy.js";
 
@@ -102,7 +102,7 @@ const { setStatus: setOrderStatus } = orderStatus;
 
   export async function loadActiveBuyOrders() {
     const response = await window.fetch(
-      "https://steamcommunity.com/market/mylistings?start=0&count=100",
+      "https://steamcommunity.com/market/mylistings?start=0&count=100&l=english",
       { credentials: "include" }
     );
     if (!response.ok) {
@@ -167,7 +167,7 @@ const { setStatus: setOrderStatus } = orderStatus;
     }
 
     const listingUrl =
-      `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}`;
+      `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}?l=english`;
     const listingResponse = await window.fetch(listingUrl, { credentials: "include" });
     if (!listingResponse.ok) {
       throw new Error(`读取商品页失败 (${listingResponse.status})`);
@@ -471,31 +471,36 @@ const { setStatus: setOrderStatus } = orderStatus;
 
   export async function submitBuyOrdersForSelection(source = "scan") {
     const isOrder = source === "order";
-    const selected = isOrder ? getSelectedOrderResults() : getSelectedResults();
-    if (selected.length === 0 || isSharedActionBusy()) return;
-
     const statusFn = isOrder ? setOrderStatus : setStatus;
     const logFn = isOrder ? orderLog : log;
     const ui = { setStatus: statusFn, log: logFn };
+    const selected = isOrder ? getSelectedOrderResults() : getSelectedResults();
+    if (isSharedActionBusy()) return;
+    if (selected.length === 0) {
+      statusFn("请先勾选要提交订购单的卡组", false);
+      return;
+    }
 
     state.bulkActionRunning = true;
     updateAllActionStates();
     let submitted = 0;
     let failed = 0;
+    let finalStatus = null;
     try {
       statusFn("读取现有订购单");
       const activeOrders = await loadActiveBuyOrders();
       const planData = await buildBuyOrderPlan(selected, activeOrders, ui);
       if (planData.plan.length === 0) {
-        logFn(
-          `无需提交订购单：已有订单已覆盖，或没有可用的${getOrderPriceSourceLabel(planData.priceSource)}`,
-          "warn"
-        );
+        finalStatus = `无需提交订购单：已有订单已覆盖，或没有可用的${getOrderPriceSourceLabel(planData.priceSource)}`;
+        logFn(finalStatus, "warn");
         return;
       }
 
       const confirmed = await showBuyOrderConfirmation(planData, selected.length);
-      if (!confirmed) return;
+      if (!confirmed) {
+        finalStatus = "已取消提交订购单";
+        return;
+      }
 
       for (let index = 0; index < planData.plan.length; index++) {
         const item = planData.plan[index];
@@ -521,12 +526,18 @@ const { setStatus: setOrderStatus } = orderStatus;
         }
         await new Promise(resolve => setTimeout(resolve, 500));
       }
-      logFn(`长期订购单提交结束: 成功 ${submitted}, 失败 ${failed}`, failed ? "warn" : "ok");
+      finalStatus = `长期订购单提交结束: 成功 ${submitted}, 失败 ${failed}`;
+      logFn(finalStatus, failed ? "warn" : "ok");
     } catch (error) {
-      logFn(`无法提交长期订购单: ${error?.message || error}`, "err");
+      finalStatus = `无法提交长期订购单: ${error?.message || error}`;
+      logFn(finalStatus, "err");
     } finally {
       state.bulkActionRunning = false;
-      statusFn(null);
+      if (isOrder && finalStatus) {
+        statusFn(finalStatus, false);
+      } else {
+        statusFn(null);
+      }
       updateAllActionStates();
     }
   }

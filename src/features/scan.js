@@ -16,7 +16,7 @@ import { priceCard, predictFullSetLowerBound, estimateMissingLevel5Cost } from "
 
 import { formatCNY } from "../utils/format.js";
 
-import { getBadgeModeLabel, getBadgeUrlSuffix, getBadgeTargetLevel } from "../utils/badge.js";
+import { getBadgeModeLabel, getGameCardsUrl, getBadgeTargetLevel } from "../utils/badge.js";
 
 import { getCachedOrderResult, upsertOrderResult, getOrderCacheAgeDays } from "../services/order-cache.js";
 
@@ -188,8 +188,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           `阶段2: 获取卡牌详情 ${processed}/${badges.length} · ${b.gameName || b.appid}`);
 
         try {
-          const suffix = getBadgeUrlSuffix(b);
-          const url = `${profileUrl}/gamecards/${b.appid}/${suffix}`;
+          const url = getGameCardsUrl(profileUrl, b.appid, b, { language: "english" });
           let res;
           try {
             res = await queue.fetch(url);

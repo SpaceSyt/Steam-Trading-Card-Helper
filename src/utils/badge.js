@@ -6,8 +6,17 @@
     return isFoilBadge(value) ? 1 : 5;
   }
 
-  export function getBadgeUrlSuffix(value) {
-    return isFoilBadge(value) ? "?border=1" : "";
+  export function getBadgeUrlSuffix(value, options = {}) {
+    const params = new URLSearchParams();
+    if (isFoilBadge(value)) params.set("border", "1");
+    if (options.language) params.set("l", options.language);
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  }
+
+  export function getGameCardsUrl(profileUrl, appid, value, options = {}) {
+    const base = String(profileUrl || "").replace(/\/+$/, "");
+    return `${base}/gamecards/${appid}/${getBadgeUrlSuffix(value, options)}`;
   }
 
   export function getBadgeModeLabel(value) {

@@ -285,8 +285,12 @@ import { updateResultColumns } from "../features/scan.js";
       } else {
         sourceState.selected.delete(key);
       }
-      if (source === "order") updateOrderSummary();
-      updateBulkActionState();
+      if (source === "order") {
+        updateOrderSummary();
+        updateOrderActionState();
+      } else {
+        updateBulkActionState();
+      }
     };
     checkbox.addEventListener("click", e => {
       e.stopPropagation();

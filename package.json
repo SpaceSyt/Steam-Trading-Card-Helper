@@ -1,6 +1,6 @@
 {
   "name": "steam-trading-card-helper",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and suggest surplus item gem conversion",
   "license": "MIT",
   "scripts": {
