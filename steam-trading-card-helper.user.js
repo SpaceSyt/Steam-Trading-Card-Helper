@@ -2,7 +2,7 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.9.1
+// @version      1.9.2
 // @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and suggest surplus item gem conversion
 // @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测多余卡牌和多余物品分解建议
 // @author       SpaceSyt
@@ -351,6 +351,11 @@
           card.marketHashName = mhn;
           break;
         }
+      }
+    });
+    cardList.forEach((card) => {
+      if (!card.marketHashName && appid && card.name) {
+        card.marketHashName = `${appid}-${card.name}`;
       }
     });
     const totalInSet = cardList.length;
@@ -5420,7 +5425,7 @@
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.9.1 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.9.2 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);

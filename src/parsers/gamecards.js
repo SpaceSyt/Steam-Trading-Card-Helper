@@ -90,6 +90,12 @@ import { getBadgeTargetLevel } from "../utils/badge.js";
         }
       }
     });
+
+    cardList.forEach(card => {
+      if (!card.marketHashName && appid && card.name) {
+        card.marketHashName = `${appid}-${card.name}`;
+      }
+    });
     const totalInSet = cardList.length;
     if (totalInSet === 0) {
       return { gameName, level, totalInSet: 0, dropsRemaining, cards: cardList, need: 0, setsToLevel5: 0, targetLevel };

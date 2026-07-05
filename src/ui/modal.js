@@ -405,7 +405,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.9.1 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.9.2 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
