@@ -100,6 +100,8 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
     );
     const onlyMaxed = document.getElementById("stch-surplus-only-maxed");
     if (onlyMaxed) onlyMaxed.disabled = surplusBusy || otherBusy;
+    const itemMode = document.getElementById("stch-surplus-item-mode");
+    if (itemMode) itemMode.disabled = surplusBusy || otherBusy;
   }
 
   export function updateGrindActionState() {
@@ -119,7 +121,7 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       "disabled",
       !grindBusy
     );
-    ["stch-grind-only-recommended", "stch-grind-include-surplus-cards"].forEach(id => {
+    ["stch-grind-only-recommended", "stch-grind-include-surplus-cards", "stch-surplus-item-mode"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = grindBusy || otherBusy;
     });

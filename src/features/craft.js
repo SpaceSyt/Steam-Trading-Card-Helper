@@ -152,7 +152,7 @@ export { updateCraftActionState };
         : Math.max(0, Math.min(result.maxCraftable, result.craftCount || 0));
       countInput.value = String(displayedCraftCount);
       countInput.title = state.cfg.craftMode === "max"
-        ? "一次升满使用 Steam 页面给出的原生最大次数"
+        ? "一次提交当前可合成最大次数"
         : "输入本次要逐级合成的次数";
       countInput.disabled = state.craftScanning
         || state.craftActionRunning

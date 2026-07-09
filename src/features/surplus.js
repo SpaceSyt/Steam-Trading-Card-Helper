@@ -37,7 +37,7 @@ export { updateSurplusActionState };
     info.isFoil = group.isFoil;
     info.gameName = info.gameName || group.gameName || "";
 
-    const targetLevel = group.isFoil ? 1 : 5;
+    const targetLevel = getBadgeTargetLevel(info);
     const level = Math.max(0, Number(info.level) || 0);
     const badgeMaxed = level >= targetLevel;
     const reservePerCard = Math.max(0, targetLevel - level);
@@ -205,7 +205,7 @@ export { updateSurplusActionState };
     }
 
     if (location.hostname !== "steamcommunity.com") {
-      surplusLog("请在 Steam 社区徽章页或库存页使用多余卡牌检测", "warn");
+      surplusLog("请在 Steam 社区徽章页或库存页使用多余物品处理", "warn");
       return;
     }
 

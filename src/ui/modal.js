@@ -140,8 +140,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
           <span class="stch-tab" data-tab="orders">订购卡牌</span>
           <span class="stch-tab" data-tab="craft">徽章合成</span>
           <span class="stch-tab" data-tab="blacklist">游戏/AppID黑名单</span>
-          <span class="stch-tab" data-tab="surplus">多余卡牌检测</span>
-          <span class="stch-tab" data-tab="grind">多余物品销毁</span>
+          <span class="stch-tab" data-tab="surplus">多余物品处理</span>
           <span class="stch-tab stch-tab-right" data-tab="settings">设置</span>
           `}
         </div>
@@ -163,7 +162,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
             </div>
             <div class="stch-onboarding-step">
               <b>4. 批量合成徽章</b>
-              在“徽章合成”页扫描已经收集齐全的卡组，可逐级升级或使用 Steam 原生的一次升满。
+              在“徽章合成”页扫描已经收集齐全的卡组，可逐级升级或一次提交当前可合成最大次数。
             </div>
             <div class="stch-onboarding-note">
               市场价格和满级成本均可能变化。提交购买、订购单或合成前，请检查数量和目标等级。
@@ -320,55 +319,62 @@ import { pruneOrderCache } from "../services/order-cache.js";
         </div>
         <div class="stch-tab-content" id="stch-tab-surplus">
           <div class="stch-toolbar">
-            <label>
-              <input id="stch-surplus-only-maxed" type="checkbox" ${state.cfg.surplusOnlyMaxed ? "checked" : ""}>
-              只显示当前已满级徽章
+            <label class="stch-primary-label">处理类型
+              <select id="stch-surplus-item-mode" class="stch-input" style="width:92px">
+                <option value="card" ${state.cfg.surplusItemMode === "card" ? "selected" : ""}>卡牌</option>
+                <option value="background" ${state.cfg.surplusItemMode === "background" ? "selected" : ""}>背景</option>
+                <option value="emoticon" ${state.cfg.surplusItemMode === "emoticon" ? "selected" : ""}>表情</option>
+              </select>
             </label>
-            <span style="color:#8f98a0;font-size:12px;">默认计算升满后仍会剩余的卡牌</span>
           </div>
-          <div class="stch-scan-actions">
-            <div class="stch-btn" id="stch-surplus-scan-btn">开始检测</div>
-            <div class="stch-btn alt disabled" id="stch-surplus-stop-btn">停止</div>
+          <div class="stch-surplus-mode-panel" id="stch-surplus-card-panel">
+            <div class="stch-toolbar">
+              <label>
+                <input id="stch-surplus-only-maxed" type="checkbox" ${state.cfg.surplusOnlyMaxed ? "checked" : ""}>
+                只显示当前已满级徽章
+              </label>
+              <span style="color:#8f98a0;font-size:12px;">默认计算升满后仍会剩余的卡牌</span>
+            </div>
+            <div class="stch-scan-actions">
+              <div class="stch-btn" id="stch-surplus-scan-btn">开始检测</div>
+              <div class="stch-btn alt disabled" id="stch-surplus-stop-btn">停止</div>
+            </div>
+            <div class="stch-progress" id="stch-surplus-progress-wrap" style="display:none">
+              <div class="stch-progress-bar" id="stch-surplus-progress-bar" style="width:0"></div>
+              <div class="stch-progress-text" id="stch-surplus-progress-text">0/0</div>
+            </div>
+            <div class="stch-summary" id="stch-surplus-summary-row" style="display:none">
+              <span class="stch-summary-text" id="stch-surplus-summary"></span>
+            </div>
+            <div class="stch-status-text" id="stch-surplus-status"></div>
+            <div class="stch-game-list stch-surplus-list" id="stch-surplus-list"></div>
+            <div class="stch-log-resizer" data-log="stch-surplus-log" data-content="stch-surplus-list" title="上下拖动调整日志区域"></div>
+            <div id="stch-surplus-log"></div>
           </div>
-          <div class="stch-progress" id="stch-surplus-progress-wrap" style="display:none">
-            <div class="stch-progress-bar" id="stch-surplus-progress-bar" style="width:0"></div>
-            <div class="stch-progress-text" id="stch-surplus-progress-text">0/0</div>
+          <div class="stch-surplus-mode-panel" id="stch-surplus-grind-panel">
+            <div class="stch-toolbar">
+              <label>
+                <input id="stch-grind-only-recommended" type="checkbox" ${state.cfg.grindOnlyRecommended ? "checked" : ""}>
+                只显示建议分解
+              </label>
+              <span style="color:#8f98a0;font-size:12px;">仅生成建议和资产 ID，不会自动销毁物品</span>
+            </div>
+            <div class="stch-scan-actions">
+              <div class="stch-btn" id="stch-grind-scan-btn">扫描可分解物品</div>
+              <div class="stch-btn alt disabled" id="stch-grind-stop-btn">停止</div>
+            </div>
+            <div class="stch-progress" id="stch-grind-progress-wrap" style="display:none">
+              <div class="stch-progress-bar" id="stch-grind-progress-bar" style="width:0"></div>
+              <div class="stch-progress-text" id="stch-grind-progress-text">0/0</div>
+            </div>
+            <div class="stch-summary" id="stch-grind-summary-row" style="display:none">
+              <span class="stch-summary-text" id="stch-grind-summary"></span>
+            </div>
+            <div class="stch-status-text" id="stch-grind-status"></div>
+            <div class="stch-game-list stch-grind-list" id="stch-grind-list"></div>
+            <div class="stch-log-resizer" data-log="stch-grind-log" data-content="stch-grind-list" title="上下拖动调整日志区域"></div>
+            <div id="stch-grind-log"></div>
           </div>
-          <div class="stch-summary" id="stch-surplus-summary-row" style="display:none">
-            <span class="stch-summary-text" id="stch-surplus-summary"></span>
-          </div>
-          <div class="stch-status-text" id="stch-surplus-status"></div>
-          <div class="stch-game-list stch-surplus-list" id="stch-surplus-list"></div>
-          <div class="stch-log-resizer" data-log="stch-surplus-log" data-content="stch-surplus-list" title="上下拖动调整日志区域"></div>
-          <div id="stch-surplus-log"></div>
-        </div>
-        <div class="stch-tab-content" id="stch-tab-grind">
-          <div class="stch-toolbar">
-            <label>
-              <input id="stch-grind-only-recommended" type="checkbox" ${state.cfg.grindOnlyRecommended ? "checked" : ""}>
-              只显示建议分解
-            </label>
-            <label>
-              <input id="stch-grind-include-surplus-cards" type="checkbox" ${state.cfg.grindIncludeSurplusCards ? "checked" : ""}>
-              包含已检测多余卡牌
-            </label>
-            <span style="color:#8f98a0;font-size:12px;">仅生成建议和资产 ID，不会自动销毁物品</span>
-          </div>
-          <div class="stch-scan-actions">
-            <div class="stch-btn" id="stch-grind-scan-btn">扫描可分解物品</div>
-            <div class="stch-btn alt disabled" id="stch-grind-stop-btn">停止</div>
-          </div>
-          <div class="stch-progress" id="stch-grind-progress-wrap" style="display:none">
-            <div class="stch-progress-bar" id="stch-grind-progress-bar" style="width:0"></div>
-            <div class="stch-progress-text" id="stch-grind-progress-text">0/0</div>
-          </div>
-          <div class="stch-summary" id="stch-grind-summary-row" style="display:none">
-            <span class="stch-summary-text" id="stch-grind-summary"></span>
-          </div>
-          <div class="stch-status-text" id="stch-grind-status"></div>
-          <div class="stch-game-list stch-grind-list" id="stch-grind-list"></div>
-          <div class="stch-log-resizer" data-log="stch-grind-log" data-content="stch-grind-list" title="上下拖动调整日志区域"></div>
-          <div id="stch-grind-log"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-settings">
           <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">卡牌价格扫描</div>
@@ -405,7 +411,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.9.2 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.9.3 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -423,7 +429,31 @@ import { pruneOrderCache } from "../services/order-cache.js";
       if (Number.isFinite(options.max)) value = Math.min(options.max, value);
       return value;
     };
+    const getSurplusItemMode = () => {
+      const value = document.getElementById("stch-surplus-item-mode")?.value
+        || state.cfg.surplusItemMode
+        || DEFAULT_CONFIG.surplusItemMode;
+      return ["card", "background", "emoticon"].includes(value) ? value : "card";
+    };
+    const applySurplusItemMode = () => {
+      const mode = getSurplusItemMode();
+      const cardPanel = document.getElementById("stch-surplus-card-panel");
+      const grindPanel = document.getElementById("stch-surplus-grind-panel");
+      cardPanel?.classList.toggle("active", mode === "card");
+      grindPanel?.classList.toggle("active", mode !== "card");
+      const grindButton = document.getElementById("stch-grind-scan-btn");
+      if (grindButton) {
+        grindButton.textContent = mode === "emoticon"
+          ? "扫描可分解表情"
+          : "扫描可分解背景";
+      }
+      renderSurplusResults();
+      renderGrindResults();
+      updateSurplusActionState();
+      updateGrindActionState();
+    };
     const syncConfigFromInputs = changedId => {
+      const previousSurplusItemMode = state.cfg.surplusItemMode || DEFAULT_CONFIG.surplusItemMode;
       state.cfg.threshold = readNumberInput(
         "stch-threshold",
         state.cfg.threshold ?? DEFAULT_CONFIG.threshold,
@@ -477,8 +507,12 @@ import { pruneOrderCache } from "../services/order-cache.js";
       );
       state.cfg.skipCachedOrderResults = !!document.getElementById("stch-skip-cached-orders")?.checked;
       state.cfg.surplusOnlyMaxed = !!document.getElementById("stch-surplus-only-maxed")?.checked;
+      state.cfg.surplusItemMode = getSurplusItemMode();
       state.cfg.grindOnlyRecommended = !!document.getElementById("stch-grind-only-recommended")?.checked;
-      state.cfg.grindIncludeSurplusCards = !!document.getElementById("stch-grind-include-surplus-cards")?.checked;
+      const includeSurplusCards = document.getElementById("stch-grind-include-surplus-cards");
+      if (includeSurplusCards) {
+        state.cfg.grindIncludeSurplusCards = !!includeSurplusCards.checked;
+      }
       state.cfg.craftInterval = readNumberInput(
         "stch-craft-interval",
         state.cfg.craftInterval ?? DEFAULT_CONFIG.craftInterval,
@@ -501,6 +535,13 @@ import { pruneOrderCache } from "../services/order-cache.js";
       }
       if (changedId === "stch-craft-mode") renderCraftResults();
       if (changedId === "stch-surplus-only-maxed") renderSurplusResults();
+      if (changedId === "stch-surplus-item-mode") {
+        if (state.cfg.surplusItemMode !== previousSurplusItemMode) {
+          state.grindResults = [];
+          state.grindGemPrice = null;
+        }
+        applySurplusItemMode();
+      }
       if (changedId?.startsWith("stch-grind-")) renderGrindResults();
       if (changedId?.startsWith("stch-seasonal-")) {
         normalizeSeasonalInputs();
@@ -514,7 +555,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
       "stch-order-price-source", "stch-price-adjustment",
       "stch-early-price-prediction", "stch-order-cache-days",
       "stch-skip-cached-orders", "stch-craft-interval",
-      "stch-craft-mode", "stch-seasonal-target",
+      "stch-craft-mode", "stch-seasonal-target", "stch-surplus-item-mode",
       "stch-surplus-only-maxed", "stch-grind-only-recommended",
       "stch-grind-include-surplus-cards"];
     cfgIds.forEach(id => {
@@ -533,7 +574,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
       });
       if (tabName === "blacklist") renderBlacklist();
       if (tabName === "orders") renderOrderResults();
-      if (tabName === "grind") renderGrindResults();
+      if (tabName === "surplus") applySurplusItemMode();
     };
     const showOnboarding = () => {
       GM_setValue(ONBOARDING_SEEN_KEY, true);
@@ -740,6 +781,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
     normalizeSeasonalInputs();
     updateSeasonalActionState();
     updateSeasonalSummary();
+    applySurplusItemMode();
     updateSurplusActionState();
     renderSurplusResults();
     updateGrindActionState();

@@ -26,6 +26,7 @@
     seasonalTargetLevel: 40,
     seasonalInterval: 200,
     surplusOnlyMaxed: false,
+    surplusItemMode: "card",
     grindOnlyRecommended: true,
     grindIncludeSurplusCards: true,
   };

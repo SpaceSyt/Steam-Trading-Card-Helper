@@ -1,8 +1,7 @@
-import { getBadgeTargetLevel } from "../utils/badge.js";
+import { getBadgeTargetLevel, isUnlimitedLevelBadge } from "../utils/badge.js";
 
   export function parseGameCardsHtml(html, appid, isFoil) {
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const targetLevel = getBadgeTargetLevel(isFoil);
 
     // game name from title
     let gameName = "";
@@ -17,8 +16,22 @@ import { getBadgeTargetLevel } from "../utils/badge.js";
     // level from meta description: "徽章（0 级）" or "Badge (Level 0)"
     let level = 0;
     const metaDesc = doc.querySelector('meta[name="Description"]')?.content || "";
-    const lm = metaDesc.match(/(?:徽章[（(](\d+)\s*级|Badge\s*\(Level\s*(\d+)\))/i);
-    if (lm) level = parseInt(lm[1] || lm[2], 10);
+    const lm = metaDesc.match(/(?:徽章[（(](\d+)\s*级|Badge\s*\(Level\s*(\d+)\)|Level\s*(\d+)\b)/i);
+    if (lm) level = parseInt(lm[1] || lm[2] || lm[3], 10);
+    const isUnlimitedLevelBadgeValue = !isFoil && isUnlimitedLevelBadge({
+      appid,
+      gameName,
+      level,
+      metaDescription: metaDesc,
+    });
+    const targetLevel = getBadgeTargetLevel({
+      isFoil,
+      level,
+      gameName,
+      appid,
+      metaDescription: metaDesc,
+      isUnlimitedLevelBadge: isUnlimitedLevelBadgeValue,
+    });
 
     // drops remaining
     let dropsRemaining = 0;
@@ -98,7 +111,17 @@ import { getBadgeTargetLevel } from "../utils/badge.js";
     });
     const totalInSet = cardList.length;
     if (totalInSet === 0) {
-      return { gameName, level, totalInSet: 0, dropsRemaining, cards: cardList, need: 0, setsToLevel5: 0, targetLevel };
+      return {
+        gameName,
+        level,
+        isUnlimitedLevelBadge: isUnlimitedLevelBadgeValue,
+        totalInSet: 0,
+        dropsRemaining,
+        cards: cardList,
+        need: 0,
+        setsToLevel5: 0,
+        targetLevel,
+      };
     }
 
     // single set calculation
@@ -109,6 +132,7 @@ import { getBadgeTargetLevel } from "../utils/badge.js";
     return {
       gameName,
       level,
+      isUnlimitedLevelBadge: isUnlimitedLevelBadgeValue,
       totalInSet,
       dropsRemaining,
       cards: cardList,
@@ -170,7 +194,9 @@ import { getBadgeTargetLevel } from "../utils/badge.js";
     const availableSets = info.cards.length > 0
       ? Math.min(...info.cards.map(card => Math.max(0, Number(card.owned) || 0)))
       : 0;
-    const maxCraftable = Math.min(availableSets, nativeMaxLevels);
+    const maxCraftable = info.isUnlimitedLevelBadge && nativeMaxLevels > 0
+      ? availableSets
+      : Math.min(availableSets, nativeMaxLevels);
 
     return {
       ...candidate,
@@ -178,6 +204,7 @@ import { getBadgeTargetLevel } from "../utils/badge.js";
       level: info.level,
       cards: info.cards,
       totalInSet: info.totalInSet,
+      isUnlimitedLevelBadge: info.isUnlimitedLevelBadge,
       availableSets,
       nativeMaxLevels,
       maxCraftable,

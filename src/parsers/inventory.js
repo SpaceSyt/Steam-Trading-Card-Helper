@@ -41,6 +41,21 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
     return !!findDescriptionTag(description, "item_class", "item_class_2");
   }
 
+  export function isProfileBackgroundDescription(description) {
+    return !!findDescriptionTag(description, "item_class", "item_class_3");
+  }
+
+  export function isEmoticonDescription(description) {
+    return !!findDescriptionTag(description, "item_class", "item_class_4");
+  }
+
+  export function getCommunityItemCategory(description) {
+    if (isTradingCardDescription(description)) return "card";
+    if (isProfileBackgroundDescription(description)) return "background";
+    if (isEmoticonDescription(description)) return "emoticon";
+    return "other";
+  }
+
   export function getCardGameAppid(description) {
     const feeApp = String(description?.market_fee_app || "").trim();
     if (/^\d+$/.test(feeApp)) return feeApp;

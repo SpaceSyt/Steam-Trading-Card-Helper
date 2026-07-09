@@ -14,7 +14,7 @@ import { loadSidebarGemPrice } from "../sidebar/gems.js";
 
 import { priceCard } from "../parsers/price.js";
 
-import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, isTradingCardDescription, isFoilCardDescription, getCardGameName, getCommunityItemType, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, normalizeInventoryText, addInventoryCard, getDescriptionKey } from "../parsers/inventory.js";
+import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, isTradingCardDescription, isFoilCardDescription, getCardGameName, getCommunityItemType, getCommunityItemCategory, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, normalizeInventoryText, addInventoryCard, getDescriptionKey } from "../parsers/inventory.js";
 
 import { getGemValueSellerNetCents, getGemBreakEvenBuyerPrice, getGemSackSellerNetCents, getSellerReceiveForBuyerPrice } from "../utils/market-fees.js";
 
@@ -134,6 +134,9 @@ export { updateGrindActionState };
     const language = unsafeWindow.g_strLanguage || "schinese";
     const surplusAllowance = getSurplusAssetAllowance();
     const includeCards = !!state.cfg.grindIncludeSurplusCards;
+    const itemMode = ["background", "emoticon"].includes(state.cfg.surplusItemMode)
+      ? state.cfg.surplusItemMode
+      : "background";
     let startAssetId = "";
     let page = 0;
     let totalInventoryCount = 0;
@@ -179,6 +182,9 @@ export { updateGrindActionState };
         }
         if (isBlacklistedAppid(getCardGameAppid(description))) {
           skipped.blacklisted += assetAmount;
+          continue;
+        }
+        if (getCommunityItemCategory(description) !== itemMode) {
           continue;
         }
         let amount = assetAmount;
@@ -410,7 +416,7 @@ export { updateGrindActionState };
     }
 
     if (location.hostname !== "steamcommunity.com") {
-      grindLog("请在 Steam 社区徽章页或库存页使用多余物品销毁", "warn");
+      grindLog("请在 Steam 社区徽章页或库存页使用多余物品处理", "warn");
       return;
     }
 
@@ -456,9 +462,8 @@ export { updateGrindActionState };
         "ok"
       );
 
-      if (cfg.grindIncludeSurplusCards && (state.surplusResults || []).length === 0) {
-        grindLog("未检测到多余卡牌结果：本次只会分析非卡牌库存物品；如需包含卡牌，请先跑“多余卡牌检测”", "warn");
-      }
+      const itemModeLabel = state.cfg.surplusItemMode === "emoticon" ? "表情" : "背景";
+      grindLog(`本次只分析${itemModeLabel}类社区物品`, "info");
 
       grindLog("【阶段 2/3】读取社区库存并识别可分解物品");
       setGrindProgress(0, 1, "阶段2: 读取库存");

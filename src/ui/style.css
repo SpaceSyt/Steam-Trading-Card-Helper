@@ -494,6 +494,15 @@
       min-height: 0;
       max-height: none;
     }
+    .stch-surplus-mode-panel {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+    .stch-surplus-mode-panel.active {
+      display: flex;
+    }
     .stch-surplus-row .stch-name {
       flex: 0 0 190px;
     }
