@@ -37,6 +37,19 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
     }) || null;
   }
 
+  export function getDescriptionImageUrl(description, size = "96fx96f") {
+    const rawIcon = String(description?.icon_url_large || description?.icon_url || "").trim();
+    if (!rawIcon) return "";
+    if (/^https?:\/\//i.test(rawIcon)) return rawIcon;
+    const suffix = size ? `/${size}` : "";
+    return `https://community.fastly.steamstatic.com/economy/image/${rawIcon}${suffix}`;
+  }
+
+  export function getDescriptionColor(description, field) {
+    const value = String(description?.[field] || "").trim();
+    return /^[0-9a-f]{6}$/i.test(value) ? `#${value}` : "";
+  }
+
   export function isTradingCardDescription(description) {
     return !!findDescriptionTag(description, "item_class", "item_class_2");
   }
@@ -111,6 +124,9 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
         gameName: group.gameName,
         name: String(description.name || marketHashName).trim(),
         marketHashName,
+        imageUrl: getDescriptionImageUrl(description),
+        nameColor: getDescriptionColor(description, "name_color"),
+        backgroundColor: getDescriptionColor(description, "background_color"),
         totalCount: 0,
         assets: [],
       };
@@ -126,6 +142,7 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
     group.totalCount += amount;
     card.assets.push({
       assetid: String(asset.assetid || ""),
+      contextid: String(asset.contextid || "6"),
       classid: String(asset.classid || ""),
       instanceid: String(asset.instanceid || ""),
       amount,

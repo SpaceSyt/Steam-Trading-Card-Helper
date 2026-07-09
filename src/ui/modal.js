@@ -18,9 +18,9 @@ import { startCraftScan, requestCraftStop, setAllCraftCounts, submitCraftPlan, r
 
 import { startSeasonalPurchase, requestSeasonalStop, normalizeSeasonalInputs, updateSeasonalSummary, updateSeasonalActionState } from "../features/seasonal.js";
 
-import { startSurplusScan, requestSurplusStop, renderSurplusResults, updateSurplusActionState } from "../features/surplus.js";
+import { startSurplusScan, requestSurplusStop, renderSurplusResults, updateSurplusActionState, openSelectedSurplusSellTargets, openSelectedSurplusGemTargets } from "../features/surplus.js";
 
-import { startGrindScan, requestGrindStop, renderGrindResults, updateGrindActionState } from "../features/grind.js";
+import { startGrindScan, requestGrindStop, renderGrindResults, updateGrindActionState, openSelectedGrindSellTargets, openSelectedGrindGemTargets } from "../features/grind.js";
 
 import { renderBlacklist, updateBlRow, addToBlacklist, lookupGameName } from "../features/blacklist.js";
 
@@ -318,7 +318,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
           <div class="stch-bl-count" id="stch-bl-count"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-surplus">
-          <div class="stch-toolbar">
+          <div class="stch-toolbar stch-surplus-main-toolbar">
             <label class="stch-primary-label">处理类型
               <select id="stch-surplus-item-mode" class="stch-input" style="width:92px">
                 <option value="card" ${state.cfg.surplusItemMode === "card" ? "selected" : ""}>卡牌</option>
@@ -326,15 +326,18 @@ import { pruneOrderCache } from "../services/order-cache.js";
                 <option value="emoticon" ${state.cfg.surplusItemMode === "emoticon" ? "selected" : ""}>表情</option>
               </select>
             </label>
+            <label class="stch-card-only-control">
+              <input id="stch-surplus-only-maxed" type="checkbox" ${state.cfg.surplusOnlyMaxed ? "checked" : ""}>
+              只显示当前已满级徽章
+            </label>
+            <span class="stch-card-only-control" style="color:#8f98a0;font-size:12px;">默认计算升满后仍会剩余的卡牌</span>
+            <span class="stch-selected-count stch-processing-selected-count" id="stch-surplus-selected-count">已选择 0 项</span>
+            <div class="stch-surplus-action-buttons">
+              <div class="stch-btn alt disabled" id="stch-surplus-sell-btn" title="打开选中项的市场页面，不会自动上架出售">出售</div>
+              <div class="stch-btn stch-btn-danger disabled" id="stch-surplus-gem-btn" title="打开选中项的库存定位入口，不会自动销毁物品">转化宝石</div>
+            </div>
           </div>
           <div class="stch-surplus-mode-panel" id="stch-surplus-card-panel">
-            <div class="stch-toolbar">
-              <label>
-                <input id="stch-surplus-only-maxed" type="checkbox" ${state.cfg.surplusOnlyMaxed ? "checked" : ""}>
-                只显示当前已满级徽章
-              </label>
-              <span style="color:#8f98a0;font-size:12px;">默认计算升满后仍会剩余的卡牌</span>
-            </div>
             <div class="stch-scan-actions">
               <div class="stch-btn" id="stch-surplus-scan-btn">开始检测</div>
               <div class="stch-btn alt disabled" id="stch-surplus-stop-btn">停止</div>
@@ -411,7 +414,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.9.3 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V1.9.4 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -441,6 +444,9 @@ import { pruneOrderCache } from "../services/order-cache.js";
       const grindPanel = document.getElementById("stch-surplus-grind-panel");
       cardPanel?.classList.toggle("active", mode === "card");
       grindPanel?.classList.toggle("active", mode !== "card");
+      modal.querySelectorAll(".stch-card-only-control").forEach(element => {
+        element.style.display = mode === "card" ? "" : "none";
+      });
       const grindButton = document.getElementById("stch-grind-scan-btn");
       if (grindButton) {
         grindButton.textContent = mode === "emoticon"
@@ -538,6 +544,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
       if (changedId === "stch-surplus-item-mode") {
         if (state.cfg.surplusItemMode !== previousSurplusItemMode) {
           state.grindResults = [];
+          state.selectedGrindResults = new Set();
           state.grindGemPrice = null;
         }
         applySurplusItemMode();
@@ -617,6 +624,18 @@ import { pruneOrderCache } from "../services/order-cache.js";
     document.getElementById("stch-surplus-stop-btn").addEventListener("click", requestSurplusStop);
     document.getElementById("stch-grind-scan-btn").addEventListener("click", startGrindScan);
     document.getElementById("stch-grind-stop-btn").addEventListener("click", requestGrindStop);
+    document.getElementById("stch-surplus-sell-btn").addEventListener("click", event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      if (getSurplusItemMode() === "card") openSelectedSurplusSellTargets();
+      else openSelectedGrindSellTargets();
+      updateAllActionStates();
+    });
+    document.getElementById("stch-surplus-gem-btn").addEventListener("click", event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      if (getSurplusItemMode() === "card") openSelectedSurplusGemTargets();
+      else openSelectedGrindGemTargets();
+      updateAllActionStates();
+    });
     const syncCraftMaxPages = event => {
       state.cfg.maxBadgePages = Math.max(
         1,

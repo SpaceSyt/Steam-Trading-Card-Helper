@@ -6,15 +6,13 @@ import { unsafeWindow } from "../globals.js";
 
 import { formatCNY, formatInt } from "../utils/format.js";
 
-import { createTextSpan } from "../utils/dom.js";
-
-import { getSteamId } from "../utils/steam.js";
+import { getProfileUrl, getSteamId } from "../utils/steam.js";
 
 import { loadSidebarGemPrice } from "../sidebar/gems.js";
 
 import { priceCard } from "../parsers/price.js";
 
-import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, isTradingCardDescription, isFoilCardDescription, getCardGameName, getCommunityItemType, getCommunityItemCategory, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, normalizeInventoryText, addInventoryCard, getDescriptionKey } from "../parsers/inventory.js";
+import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, isTradingCardDescription, isFoilCardDescription, getCardGameName, getCommunityItemType, getCommunityItemCategory, getDescriptionImageUrl, getDescriptionColor, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, normalizeInventoryText, addInventoryCard, getDescriptionKey } from "../parsers/inventory.js";
 
 import { getGemValueSellerNetCents, getGemBreakEvenBuyerPrice, getGemSackSellerNetCents, getSellerReceiveForBuyerPrice } from "../utils/market-fees.js";
 
@@ -102,6 +100,9 @@ export { updateGrindActionState };
         type: getCommunityItemType(description),
         itemName: String(description.name || marketHashName || "未知物品").trim(),
         marketHashName,
+        imageUrl: getDescriptionImageUrl(description),
+        nameColor: getDescriptionColor(description, "name_color"),
+        backgroundColor: getDescriptionColor(description, "background_color"),
         gemValue: unitGemValue,
         quantity: 0,
         totalGems: 0,
@@ -122,6 +123,7 @@ export { updateGrindActionState };
     if (tradable) item.tradableCount += amount;
     item.assets.push({
       assetid: String(asset.assetid || ""),
+      contextid: String(asset.contextid || "6"),
       amount,
       marketable,
       tradable,
@@ -279,6 +281,73 @@ export { updateGrindActionState };
     return all.filter(item => item.recommendationKey === "grind");
   }
 
+  export function getGrindResultKey(item) {
+    const assetKey = (item.assets || [])
+      .map(asset => `${asset.assetid || ""}x${asset.amount || 1}`)
+      .join(",");
+    return [
+      "item",
+      item.appid || "",
+      item.marketHashName || item.itemName || "",
+      item.gemValue || 0,
+      item.source || "",
+      assetKey,
+    ].join("|");
+  }
+
+  export function getSelectedGrindResults() {
+    const selected = state.selectedGrindResults || new Set();
+    return (state.grindResults || []).filter(item =>
+      selected.has(getGrindResultKey(item))
+    );
+  }
+
+  function pruneSelectedGrindResults(visible) {
+    const selected = state.selectedGrindResults || new Set();
+    const visibleKeys = new Set(visible.map(getGrindResultKey));
+    for (const key of [...selected]) {
+      if (!visibleKeys.has(key)) selected.delete(key);
+    }
+  }
+
+  function getFirstSelectedAsset(item) {
+    return (item.assets || []).find(asset => asset.assetid) || null;
+  }
+
+  function getInventoryAssetUrl(asset) {
+    const profileUrl = getProfileUrl();
+    const assetid = String(asset?.assetid || "");
+    if (!profileUrl || !assetid) return "";
+    const contextid = String(asset?.contextid || "6");
+    return `${profileUrl}/inventory#753_${contextid}_${assetid}`;
+  }
+
+  function openUrlBatch(urls, log) {
+    const uniqueUrls = [...new Set(urls.filter(Boolean))];
+    if (uniqueUrls.length === 0) return 0;
+    const openCount = Math.min(uniqueUrls.length, 8);
+    if (uniqueUrls.length > openCount) {
+      log(`已选择 ${uniqueUrls.length} 个入口，本次先打开前 ${openCount} 个，避免浏览器拦截`, "warn");
+    }
+    uniqueUrls.slice(0, openCount).forEach(url => window.open(url, "_blank"));
+    return openCount;
+  }
+
+  function copyAssetIds(items) {
+    const text = items
+      .flatMap(item => item.assets || [])
+      .map(asset => asset.amount > 1
+        ? `${asset.assetid}x${asset.amount}`
+        : asset.assetid
+      )
+      .filter(Boolean)
+      .join("\n");
+    if (text && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+    return text;
+  }
+
   export function updateGrindSummary() {
     const row = document.getElementById("stch-grind-summary-row");
     const summary = document.getElementById("stch-grind-summary");
@@ -294,6 +363,9 @@ export { updateGrindActionState };
     const visibleQuantity = visible.reduce((sum, item) => sum + item.quantity, 0);
     const recommendedQuantity = recommended.reduce((sum, item) => sum + item.quantity, 0);
     const recommendedGems = recommended.reduce((sum, item) => sum + item.totalGems, 0);
+    const selectedCount = getSelectedGrindResults().filter(item =>
+      visible.some(visibleItem => getGrindResultKey(visibleItem) === getGrindResultKey(item))
+    ).length;
     const gemPrice = state.grindGemPrice || {};
     const priceText = gemPrice.priceCents
       ? `宝石袋 ¥${formatCNY(gemPrice.priceCents)} / 税后 ¥${formatCNY(getGemSackSellerNetCents(gemPrice.priceCents))}`
@@ -301,7 +373,8 @@ export { updateGrindActionState };
     summary.innerHTML =
       `显示 <b>${visible.length}</b> 种 / <b>${visibleQuantity}</b> 件 · ` +
       `建议分解 <b>${recommended.length}</b> 种 / <b>${recommendedQuantity}</b> 件 · ` +
-      `预计 <b>${formatInt(recommendedGems)}</b> 宝石 · ${priceText}`;
+      `预计 <b>${formatInt(recommendedGems)}</b> 宝石 · ` +
+      `已选择 <b>${selectedCount}</b> 项 · ${priceText}`;
     row.style.display = "";
   }
 
@@ -309,11 +382,13 @@ export { updateGrindActionState };
     const list = document.getElementById("stch-grind-list");
     if (!list) return;
     list.innerHTML = "";
+    list.classList.add("stch-inventory-grid");
 
     const visible = getVisibleGrindResults();
+    pruneSelectedGrindResults(visible);
     if (visible.length === 0) {
       const empty = document.createElement("div");
-      empty.className = "stch-game-row";
+      empty.className = "stch-inventory-empty";
       empty.textContent = state.grindScanning
         ? "正在扫描可分解物品..."
         : state.grindResults.length > 0
@@ -325,36 +400,8 @@ export { updateGrindActionState };
       return;
     }
 
-    const header = document.createElement("div");
-    header.className = "stch-game-row stch-grind-row stch-row-header";
-    header.innerHTML = `
-      <span class="stch-appid">游戏ID</span>
-      <span class="stch-name">游戏名</span>
-      <span class="stch-grind-type">类型</span>
-      <span class="stch-grind-item">物品</span>
-      <span class="stch-grind-num">数量</span>
-      <span class="stch-grind-num">宝石</span>
-      <span class="stch-grind-price">市场</span>
-      <span class="stch-grind-price">临界</span>
-      <span class="stch-grind-action">建议</span>
-      <span class="stch-grind-assets">资产ID</span>
-    `;
-    list.appendChild(header);
-
     for (const item of visible) {
-      const row = document.createElement("div");
-      row.className = "stch-game-row stch-grind-row";
-      if (item.marketHashName) {
-        row.style.cursor = "pointer";
-        row.addEventListener("click", event => {
-          if (event.target.closest("a")) return;
-          window.open(
-            `https://steamcommunity.com/market/listings/753/${encodeURIComponent(item.marketHashName)}`,
-            "_blank"
-          );
-        });
-      }
-
+      const key = getGrindResultKey(item);
       const assetSummary = summarizeAssetIds(item.assets.map(asset => ({
         assetid: asset.assetid,
         selectedAmount: asset.amount,
@@ -367,38 +414,116 @@ export { updateGrindActionState };
       const marketTitle = item.priceCents
         ? `${item.priceSource || "市场价"}；卖出税后约 ¥${formatCNY(item.marketNetCents)}`
         : item.recommendationReason || "";
-      const action = createTextSpan(
-        `stch-grind-action ${item.recommendationClass || ""}`.trim(),
-        item.recommendationLabel || "—"
-      );
-      action.title = item.recommendationReason || "";
+      const breakEvenText = item.breakEvenPriceCents
+        ? `¥${formatCNY(item.breakEvenPriceCents)}`
+        : "—";
 
-      const appid = createTextSpan("stch-appid", item.appid || "—");
-      const gameName = createTextSpan("stch-name", item.gameName || "—");
-      gameName.title = item.gameName || "";
-      const type = createTextSpan("stch-grind-type", item.type || "物品");
-      const name = createTextSpan("stch-grind-item", item.itemName || item.marketHashName || "未知物品");
-      name.title = item.marketHashName || item.itemName || "";
-      const quantity = createTextSpan("stch-grind-num", item.quantity);
-      const gems = createTextSpan("stch-grind-num", item.totalGems);
+      const tile = document.createElement("div");
+      tile.className = "stch-inv-tile";
+      tile.dataset.key = key;
+      tile.classList.toggle("selected", state.selectedGrindResults?.has(key));
+      tile.title = [
+        `${item.gameName || "未知游戏"} · ${item.itemName || item.marketHashName || "未知物品"}`,
+        `类型 ${item.type || "物品"}；数量 ${item.quantity}`,
+        `${item.gemValue} 宝石/件，共 ${formatInt(item.totalGems)} 宝石`,
+        `市场 ${marketText}${marketTitle ? `；${marketTitle}` : ""}`,
+        `分解临界 ${breakEvenText}`,
+        item.recommendationReason ? `建议：${item.recommendationLabel || "—"}，${item.recommendationReason}` : "",
+        assetSummary.title ? `资产ID:\n${assetSummary.title}` : "",
+      ].filter(Boolean).join("\n");
+      if (item.nameColor) tile.style.borderColor = item.nameColor;
+      if (item.backgroundColor) tile.style.backgroundColor = item.backgroundColor;
+
+      if (item.imageUrl) {
+        const image = document.createElement("img");
+        image.src = item.imageUrl;
+        image.alt = item.itemName || item.marketHashName || "";
+        tile.appendChild(image);
+      } else {
+        const placeholder = document.createElement("div");
+        placeholder.className = "stch-inv-placeholder";
+        placeholder.textContent = item.itemName || "?";
+        tile.appendChild(placeholder);
+      }
+
+      const price = document.createElement("span");
+      price.className = "stch-inv-badge";
+      price.textContent = item.priceCents ? `¥${formatCNY(item.priceCents)}` : `x${item.quantity}`;
+      price.title = marketTitle || "数量";
+      tile.appendChild(price);
+
+      const action = document.createElement("span");
+      action.className = `stch-inv-badge stch-inv-badge-left ${item.recommendationClass || ""}`.trim();
+      action.textContent = item.recommendationLabel || "—";
+      action.title = item.recommendationReason || "";
+      tile.appendChild(action);
+
+      const gems = document.createElement("span");
+      gems.className = "stch-inv-gems";
+      gems.textContent = `${formatInt(item.totalGems)} 宝石`;
       gems.title = `${item.gemValue} 宝石/件`;
-      const market = createTextSpan("stch-grind-price", marketText);
-      market.title = marketTitle;
-      const breakEven = createTextSpan(
-        "stch-grind-price",
-        item.breakEvenPriceCents ? `¥${formatCNY(item.breakEvenPriceCents)}` : "—"
-      );
-      breakEven.title = item.breakEvenPriceCents
-        ? `${item.gemValue} 宝石/件的市场可见临界价，已计入物品卖出税`
-        : "";
-      const assets = createTextSpan("stch-grind-assets", assetSummary.text || "—");
-      assets.title = assetSummary.title || "";
-      row.append(appid, gameName, type, name, quantity, gems, market, breakEven, action, assets);
-      list.appendChild(row);
+      tile.appendChild(gems);
+
+      const name = document.createElement("div");
+      name.className = "stch-inv-name";
+      name.textContent = item.itemName || item.marketHashName || "未知物品";
+      tile.appendChild(name);
+
+      tile.addEventListener("click", () => {
+        if (!state.selectedGrindResults) state.selectedGrindResults = new Set();
+        if (state.selectedGrindResults.has(key)) {
+          state.selectedGrindResults.delete(key);
+          tile.classList.remove("selected");
+        } else {
+          state.selectedGrindResults.add(key);
+          tile.classList.add("selected");
+        }
+        updateGrindSummary();
+        updateGrindActionState();
+      });
+      list.appendChild(tile);
     }
 
     updateGrindSummary();
     updateGrindActionState();
+  }
+
+  export function openSelectedGrindSellTargets() {
+    const selected = getSelectedGrindResults();
+    if (selected.length === 0) {
+      grindLog("请先选择要出售的物品", "warn");
+      return;
+    }
+    const urls = selected
+      .filter(item => item.marketHashName && item.marketableCount > 0)
+      .map(item => `https://steamcommunity.com/market/listings/753/${encodeURIComponent(item.marketHashName)}`);
+    const opened = openUrlBatch(urls, grindLog);
+    if (opened > 0) {
+      grindLog(`已打开 ${opened} 个市场页面；不会自动上架出售，请在 Steam 页面确认价格和数量`, "ok");
+    } else {
+      grindLog("选中物品中没有可出售的市场条目", "warn");
+    }
+  }
+
+  export function openSelectedGrindGemTargets() {
+    const selected = getSelectedGrindResults();
+    if (selected.length === 0) {
+      grindLog("请先选择要转化宝石的物品", "warn");
+      return;
+    }
+    const assetText = copyAssetIds(selected);
+    const urls = selected
+      .map(getFirstSelectedAsset)
+      .map(getInventoryAssetUrl);
+    const opened = openUrlBatch(urls, grindLog);
+    if (opened > 0) {
+      grindLog(
+        `已打开 ${opened} 个库存定位入口${assetText ? "，并尝试复制资产 ID" : ""}；不会自动销毁物品，请在 Steam 页面确认转化宝石`,
+        "ok"
+      );
+    } else {
+      grindLog("没有找到可定位的资产 ID", "warn");
+    }
   }
 
   export async function startGrindScan() {
@@ -429,6 +554,7 @@ export { updateGrindActionState };
     state.grindScanning = true;
     state.grindStopRequested = false;
     state.grindResults = [];
+    state.selectedGrindResults = new Set();
     state.grindGemPrice = null;
     const logBox = document.getElementById("stch-grind-log");
     if (logBox) logBox.innerHTML = "";

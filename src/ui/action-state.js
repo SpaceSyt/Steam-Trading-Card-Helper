@@ -8,6 +8,26 @@ import { clampNumber } from "../utils/format.js";
 
 import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
 
+  function getSurplusProcessingMode() {
+    const value = document.getElementById("stch-surplus-item-mode")?.value
+      || state.cfg.surplusItemMode
+      || "card";
+    return ["card", "background", "emoticon"].includes(value) ? value : "card";
+  }
+
+  function updateSurplusProcessingActionState() {
+    const mode = getSurplusProcessingMode();
+    const selectedCount = mode === "card"
+      ? (state.selectedSurplusResults?.size || 0)
+      : (state.selectedGrindResults?.size || 0);
+    const selectedLabel = document.getElementById("stch-surplus-selected-count");
+    if (selectedLabel) selectedLabel.textContent = `已选择 ${selectedCount} 项`;
+
+    const disabled = selectedCount === 0 || isSharedActionBusy();
+    document.getElementById("stch-surplus-sell-btn")?.classList.toggle("disabled", disabled);
+    document.getElementById("stch-surplus-gem-btn")?.classList.toggle("disabled", disabled);
+  }
+
   export function updateSeasonalActionState() {
     const seasonalBusy = state.seasonalActionRunning;
     const otherBusy = state.scanning
@@ -102,6 +122,7 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
     if (onlyMaxed) onlyMaxed.disabled = surplusBusy || otherBusy;
     const itemMode = document.getElementById("stch-surplus-item-mode");
     if (itemMode) itemMode.disabled = surplusBusy || otherBusy;
+    updateSurplusProcessingActionState();
   }
 
   export function updateGrindActionState() {
@@ -125,6 +146,7 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       const el = document.getElementById(id);
       if (el) el.disabled = grindBusy || otherBusy;
     });
+    updateSurplusProcessingActionState();
   }
 
   export function isSharedActionBusy() {

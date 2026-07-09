@@ -6,10 +6,6 @@ import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
 import { getBadgeTargetLevel, getGameCardsUrl } from "../utils/badge.js";
 
-import { formatCNY, formatInt } from "../utils/format.js";
-
-import { createTextSpan } from "../utils/dom.js";
-
 import { getProfileUrl, getSteamId } from "../utils/steam.js";
 
 import { loadCommunityInventoryCards } from "../services/inventory.js";
@@ -69,6 +65,9 @@ export { updateSurplusActionState };
         badgeMaxed,
         cardName: badgeCard.name || inventoryCard.name,
         marketHashName: badgeCard.marketHashName || inventoryCard.marketHashName,
+        imageUrl: inventoryCard.imageUrl || "",
+        nameColor: inventoryCard.nameColor || "",
+        backgroundColor: inventoryCard.backgroundColor || "",
         inventoryCount: inventoryCard.totalCount,
         reservedCount: reservePerCard,
         surplusCount,
@@ -89,6 +88,72 @@ export { updateSurplusActionState };
     return all.filter(result => result.badgeMaxed);
   }
 
+  export function getSurplusResultKey(result) {
+    const assetKey = (result.assets || [])
+      .map(asset => `${asset.assetid || ""}x${asset.selectedAmount || asset.amount || 1}`)
+      .join(",");
+    return [
+      "card",
+      result.appid || "",
+      result.isFoil ? 1 : 0,
+      result.marketHashName || result.cardName || "",
+      assetKey,
+    ].join("|");
+  }
+
+  export function getSelectedSurplusResults() {
+    const selected = state.selectedSurplusResults || new Set();
+    return (state.surplusResults || []).filter(result =>
+      selected.has(getSurplusResultKey(result))
+    );
+  }
+
+  function pruneSelectedSurplusResults(visible) {
+    const selected = state.selectedSurplusResults || new Set();
+    const visibleKeys = new Set(visible.map(getSurplusResultKey));
+    for (const key of [...selected]) {
+      if (!visibleKeys.has(key)) selected.delete(key);
+    }
+  }
+
+  function getFirstSelectedAsset(result) {
+    return (result.assets || []).find(asset => asset.assetid) || null;
+  }
+
+  function getInventoryAssetUrl(asset) {
+    const profileUrl = getProfileUrl();
+    const assetid = String(asset?.assetid || "");
+    if (!profileUrl || !assetid) return "";
+    const contextid = String(asset?.contextid || "6");
+    return `${profileUrl}/inventory#753_${contextid}_${assetid}`;
+  }
+
+  function openUrlBatch(urls, log) {
+    const uniqueUrls = [...new Set(urls.filter(Boolean))];
+    if (uniqueUrls.length === 0) return 0;
+    const openCount = Math.min(uniqueUrls.length, 8);
+    if (uniqueUrls.length > openCount) {
+      log(`已选择 ${uniqueUrls.length} 个入口，本次先打开前 ${openCount} 个，避免浏览器拦截`, "warn");
+    }
+    uniqueUrls.slice(0, openCount).forEach(url => window.open(url, "_blank"));
+    return openCount;
+  }
+
+  function copyAssetIds(results) {
+    const text = results
+      .flatMap(result => result.assets || [])
+      .map(asset => asset.selectedAmount > 1
+        ? `${asset.assetid}x${asset.selectedAmount}`
+        : asset.assetid
+      )
+      .filter(Boolean)
+      .join("\n");
+    if (text && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+    return text;
+  }
+
   export function updateSurplusSummary() {
     const row = document.getElementById("stch-surplus-summary-row");
     const summary = document.getElementById("stch-surplus-summary");
@@ -105,12 +170,16 @@ export { updateSurplusActionState };
     const surplusTotal = visible.reduce((sum, result) => sum + result.surplusCount, 0);
     const marketableTotal = visible.reduce((sum, result) => sum + result.marketableCount, 0);
     const tradableTotal = visible.reduce((sum, result) => sum + result.tradableCount, 0);
+    const selectedCount = getSelectedSurplusResults().filter(result =>
+      visible.some(visibleResult => getSurplusResultKey(visibleResult) === getSurplusResultKey(result))
+    ).length;
     summary.innerHTML =
       `共 <b>${badgeCount}</b> 个徽章 · ` +
       `<b>${visible.length}</b> 种卡牌 · ` +
       `多余 <b>${surplusTotal}</b> 张 · ` +
       `可出售 <b>${marketableTotal}</b> 张 · ` +
-      `可交易 <b>${tradableTotal}</b> 张`;
+      `可交易 <b>${tradableTotal}</b> 张 · ` +
+      `已选择 <b>${selectedCount}</b> 项`;
     row.style.display = "";
   }
 
@@ -118,11 +187,13 @@ export { updateSurplusActionState };
     const list = document.getElementById("stch-surplus-list");
     if (!list) return;
     list.innerHTML = "";
+    list.classList.add("stch-inventory-grid");
 
     const visible = getVisibleSurplusResults();
+    pruneSelectedSurplusResults(visible);
     if (visible.length === 0) {
       const empty = document.createElement("div");
-      empty.className = "stch-game-row";
+      empty.className = "stch-inventory-empty";
       empty.textContent = state.surplusScanning
         ? "正在检测多余卡牌..."
         : state.surplusResults.length > 0
@@ -134,60 +205,107 @@ export { updateSurplusActionState };
       return;
     }
 
-    const header = document.createElement("div");
-    header.className = "stch-game-row stch-surplus-row stch-row-header";
-    header.innerHTML = `
-      <span class="stch-appid">游戏ID</span>
-      <span class="stch-name">游戏名</span>
-      <span class="stch-surplus-badge">徽章</span>
-      <span class="stch-surplus-card">卡牌</span>
-      <span class="stch-surplus-num">库存</span>
-      <span class="stch-surplus-num">预留</span>
-      <span class="stch-surplus-extra">多余</span>
-      <span class="stch-surplus-num">可售</span>
-      <span class="stch-surplus-num">可交易</span>
-      <span class="stch-surplus-assets">资产ID</span>
-    `;
-    list.appendChild(header);
-
     for (const result of visible) {
-      const row = document.createElement("div");
-      row.className = "stch-game-row stch-surplus-row";
-      row.style.cursor = "pointer";
-      row.dataset.appid = result.appid;
-      row.dataset.foil = result.isFoil ? 1 : 0;
+      const key = getSurplusResultKey(result);
+      const tile = document.createElement("div");
+      tile.className = "stch-inv-tile";
+      tile.dataset.key = key;
+      tile.classList.toggle("selected", state.selectedSurplusResults?.has(key));
+      tile.title = [
+        `${result.gameName || "未知游戏"} · ${result.cardName || result.marketHashName || "未知卡牌"}`,
+        `徽章 Lv${result.level}/${result.targetLevel}`,
+        `库存 ${result.inventoryCount}，预留 ${result.reservedCount}，多余 ${result.surplusCount}`,
+        `可出售 ${result.marketableCount}，可交易 ${result.tradableCount}`,
+        result.assetTitle ? `资产ID:\n${result.assetTitle}` : "",
+      ].filter(Boolean).join("\n");
+      if (result.nameColor) tile.style.borderColor = result.nameColor;
+      if (result.backgroundColor) tile.style.backgroundColor = result.backgroundColor;
 
-      const appid = createTextSpan("stch-appid", `${result.appid}${result.isFoil ? "(箔)" : ""}`);
-      const gameName = createTextSpan("stch-name", result.gameName || "(未知)");
-      gameName.title = result.gameName || "";
-      const badge = createTextSpan(
-        "stch-surplus-badge",
-        `Lv${result.level}/${result.targetLevel}`
-      );
-      const card = createTextSpan("stch-surplus-card", result.cardName || result.marketHashName);
-      card.title = result.marketHashName || result.cardName || "";
-      const inventory = createTextSpan("stch-surplus-num", result.inventoryCount);
-      const reserved = createTextSpan("stch-surplus-num", result.reservedCount);
-      const surplus = createTextSpan("stch-surplus-extra", result.surplusCount);
-      const marketable = createTextSpan("stch-surplus-num", result.marketableCount);
-      const tradable = createTextSpan("stch-surplus-num", result.tradableCount);
-      const assets = createTextSpan("stch-surplus-assets", result.assetText || "—");
-      assets.title = result.assetTitle || "";
-      row.append(appid, gameName, badge, card, inventory, reserved, surplus, marketable, tradable, assets);
+      if (result.imageUrl) {
+        const image = document.createElement("img");
+        image.src = result.imageUrl;
+        image.alt = result.cardName || result.marketHashName || "";
+        tile.appendChild(image);
+      } else {
+        const placeholder = document.createElement("div");
+        placeholder.className = "stch-inv-placeholder";
+        placeholder.textContent = result.cardName || "?";
+        tile.appendChild(placeholder);
+      }
 
-      row.addEventListener("click", event => {
-        if (event.target.closest("a")) return;
-        const profileUrl = getProfileUrl();
-        if (profileUrl) {
-          const suffix = result.isFoil ? "?border=1" : "";
-          window.open(`${profileUrl}/gamecards/${result.appid}/${suffix}`, "_blank");
+      const count = document.createElement("span");
+      count.className = "stch-inv-badge";
+      count.textContent = `x${result.surplusCount}`;
+      count.title = "多余数量";
+      tile.appendChild(count);
+
+      if (result.marketableCount > 0) {
+        const market = document.createElement("span");
+        market.className = "stch-inv-badge stch-inv-badge-left";
+        market.textContent = `可售 ${result.marketableCount}`;
+        tile.appendChild(market);
+      }
+
+      const name = document.createElement("div");
+      name.className = "stch-inv-name";
+      name.textContent = result.cardName || result.marketHashName || "未知卡牌";
+      tile.appendChild(name);
+
+      tile.addEventListener("click", () => {
+        if (!state.selectedSurplusResults) state.selectedSurplusResults = new Set();
+        if (state.selectedSurplusResults.has(key)) {
+          state.selectedSurplusResults.delete(key);
+          tile.classList.remove("selected");
+        } else {
+          state.selectedSurplusResults.add(key);
+          tile.classList.add("selected");
         }
+        updateSurplusSummary();
+        updateSurplusActionState();
       });
-      list.appendChild(row);
+      list.appendChild(tile);
     }
 
     updateSurplusSummary();
     updateSurplusActionState();
+  }
+
+  export function openSelectedSurplusSellTargets() {
+    const selected = getSelectedSurplusResults();
+    if (selected.length === 0) {
+      surplusLog("请先选择要出售的卡牌", "warn");
+      return;
+    }
+    const urls = selected
+      .filter(result => result.marketHashName && result.marketableCount > 0)
+      .map(result => `https://steamcommunity.com/market/listings/753/${encodeURIComponent(result.marketHashName)}`);
+    const opened = openUrlBatch(urls, surplusLog);
+    if (opened > 0) {
+      surplusLog(`已打开 ${opened} 个市场页面；不会自动上架出售，请在 Steam 页面确认价格和数量`, "ok");
+    } else {
+      surplusLog("选中卡牌中没有可出售的市场条目", "warn");
+    }
+  }
+
+  export function openSelectedSurplusGemTargets() {
+    const selected = getSelectedSurplusResults();
+    if (selected.length === 0) {
+      surplusLog("请先选择要转化宝石的卡牌", "warn");
+      return;
+    }
+    const assetText = copyAssetIds(selected);
+    const urls = selected
+      .map(getFirstSelectedAsset)
+      .map(getInventoryAssetUrl);
+    const opened = openUrlBatch(urls, surplusLog);
+    if (opened > 0) {
+      surplusLog(
+        `已打开 ${opened} 个库存定位入口${assetText ? "，并尝试复制资产 ID" : ""}；不会自动销毁物品，请在 Steam 页面确认转化宝石`,
+        "ok"
+      );
+    } else {
+      surplusLog("没有找到可定位的资产 ID", "warn");
+    }
   }
 
   export async function startSurplusScan() {
@@ -219,6 +337,7 @@ export { updateSurplusActionState };
     state.surplusScanning = true;
     state.surplusStopRequested = false;
     state.surplusResults = [];
+    state.selectedSurplusResults = new Set();
     const logBox = document.getElementById("stch-surplus-log");
     if (logBox) logBox.innerHTML = "";
     renderSurplusResults();
