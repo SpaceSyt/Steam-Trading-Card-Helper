@@ -496,6 +496,7 @@
     }
     .stch-surplus-main-toolbar {
       gap: 12px;
+      flex-wrap: nowrap;
     }
     .stch-surplus-action-row {
       gap: 12px;
@@ -539,10 +540,10 @@
     }
     .stch-inventory-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, 96px);
-      grid-auto-rows: 96px;
-      gap: 6px;
-      padding: 6px;
+      grid-template-columns: repeat(auto-fill, 88px);
+      grid-auto-rows: 88px;
+      gap: 4px;
+      padding: 4px;
       align-content: start;
       justify-content: start;
       box-sizing: border-box;
@@ -578,6 +579,22 @@
       border-color: #66c0f4 !important;
       box-shadow: inset 0 0 0 2px rgba(102, 192, 244, 0.85), 0 0 0 1px rgba(102, 192, 244, 0.55);
       background: #23384a;
+    }
+    .stch-inv-tile.stch-volume-zero::after,
+    .stch-inv-tile.stch-gem-better::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .stch-inv-tile.stch-volume-zero::after {
+      background: rgba(217, 166, 24, 0.28);
+      box-shadow: inset 0 0 0 2px rgba(255, 201, 2, 0.68);
+    }
+    .stch-inv-tile.stch-gem-better::after {
+      background: rgba(60, 153, 72, 0.30);
+      box-shadow: inset 0 0 0 2px rgba(117, 176, 34, 0.76);
     }
     .stch-inv-tile img {
       width: 100%;

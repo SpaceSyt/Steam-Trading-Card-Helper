@@ -384,10 +384,8 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     if (!response.ok) {
       throw new Error(getSteamResponseError(data, response, "转化宝石失败"));
     }
-    if (data?.success === false || data?.success === 0) {
-      throw new Error(getSteamResponseError(data, response, "转化宝石失败"));
-    }
-    return data || {};
+    if (data?.success === true || Number(data?.success) === 1) return data;
+    throw new Error(getSteamResponseError(data, response, "转化宝石失败"));
   }
 
   function showProcessingConfirmation(options) {

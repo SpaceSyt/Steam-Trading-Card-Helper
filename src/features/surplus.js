@@ -10,6 +10,14 @@ import { getProfileUrl, getSteamId } from "../utils/steam.js";
 
 import { loadCommunityInventoryCards } from "../services/inventory.js";
 
+import { loadSidebarGemPrice } from "../sidebar/gems.js";
+
+import { priceCard } from "../parsers/price.js";
+
+import { getGemValueSellerNetCents, getSellerReceiveForBuyerPrice } from "../utils/market-fees.js";
+
+import { formatCNY } from "../utils/format.js";
+
 import { findInventoryCardForBadgeCard, selectSurplusAssets, summarizeAssetIds } from "../parsers/inventory.js";
 
 import { updateAllActionStates, updateSurplusActionState } from "../ui/action-state.js";
@@ -19,6 +27,22 @@ import { surplusStatus } from "../status-controllers.js";
 const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusProgress, hideProgress: hideSurplusProgress } = surplusStatus;
 
 export { updateSurplusActionState };
+
+  function applySurplusMarketInfo(result, price, gemSackPriceCents) {
+    result.priceCents = price && !price.noPriceData ? price.lowestSellCents || 0 : 0;
+    result.medianCents = price && !price.noPriceData ? price.medianCents || 0 : 0;
+    result.volume = price ? price.volume : null;
+    result.priceSource = price?.priceSource || (price?.noPriceData ? "none" : "failed");
+    result.marketNetCents = result.priceCents
+      ? getSellerReceiveForBuyerPrice(result.priceCents)
+      : 0;
+    result.gemValueNetCents = getGemValueSellerNetCents(
+      result.gemValue,
+      gemSackPriceCents
+    );
+    result.gemBetter = result.marketNetCents > 0
+      && result.gemValueNetCents > result.marketNetCents;
+  }
 
   export async function resolveSurplusForBadge(group, profileUrl, queue) {
     const response = await queue.fetch(
@@ -188,6 +212,12 @@ export { updateSurplusActionState };
       const key = getSurplusResultKey(result);
       const tile = document.createElement("div");
       tile.className = "stch-inv-tile";
+      const volumeZero = result.volume === 0;
+      tile.classList.toggle("stch-volume-zero", volumeZero);
+      tile.classList.toggle(
+        "stch-gem-better",
+        state.cfg.surplusCompareGems && result.gemBetter
+      );
       tile.dataset.key = key;
       tile.classList.toggle("selected", state.selectedSurplusResults?.has(key));
       tile.title = [
@@ -195,6 +225,20 @@ export { updateSurplusActionState };
         `徽章 Lv${result.level}/${result.targetLevel}`,
         `库存 ${result.inventoryCount}，预留 ${result.reservedCount}，多余 ${result.surplusCount}`,
         `可出售 ${result.marketableCount}，可交易 ${result.tradableCount}`,
+        result.volume === 0
+          ? "市场成交量 0"
+          : Number.isFinite(result.volume)
+            ? `市场成交量 ${result.volume}`
+            : "市场价格尚未读取",
+        result.priceCents
+          ? `市场参考 ¥${formatCNY(result.priceCents)}，出售税后约 ¥${formatCNY(result.marketNetCents)}`
+          : "",
+        result.gemValueNetCents
+          ? `${result.gemValue} 宝石/张，税后折算约 ¥${formatCNY(result.gemValueNetCents)}`
+          : "",
+        state.cfg.surplusCompareGems && result.gemBetter
+          ? "宝石价值高于出售税后到手价"
+          : "",
         result.assetTitle ? `资产ID:\n${result.assetTitle}` : "",
       ].filter(Boolean).join("\n");
       if (result.nameColor) tile.style.borderColor = result.nameColor;
@@ -280,6 +324,7 @@ export { updateSurplusActionState };
     state.surplusStopRequested = false;
     state.surplusResults = [];
     state.selectedSurplusResults = new Set();
+    state.surplusGemPrice = null;
     const logBox = document.getElementById("stch-surplus-log");
     if (logBox) logBox.innerHTML = "";
     renderSurplusResults();
@@ -298,7 +343,7 @@ export { updateSurplusActionState };
     state.surplusQueue = queue;
 
     try {
-      surplusLog("【阶段 1/2】正在读取 Steam 社区库存");
+      surplusLog("【阶段 1/3】正在读取 Steam 社区库存");
       setSurplusProgress(0, 1, "阶段1: 读取库存");
       const inventory = await loadCommunityInventoryCards(steamId, queue);
       if (state.surplusStopRequested) {
@@ -318,7 +363,7 @@ export { updateSurplusActionState };
         `${inventory.groups.length} 个徽章候选`,
         "ok"
       );
-      surplusLog("【阶段 2/2】正在读取徽章等级并计算升满后剩余");
+      surplusLog("【阶段 2/3】正在读取徽章等级并计算升满后剩余");
 
       let scanned = 0;
       let failed = 0;
@@ -365,6 +410,60 @@ export { updateSurplusActionState };
         return (left.cardName || "").localeCompare(right.cardName || "", "zh-CN");
       });
       renderSurplusResults();
+
+      let priceFailed = 0;
+      let zeroVolume = 0;
+      if (!state.surplusStopRequested && state.surplusResults.length > 0) {
+        surplusLog("【阶段 3/3】正在查询市场成交量并计算宝石价值");
+        try {
+          state.surplusGemPrice = await loadSidebarGemPrice();
+          if (state.surplusGemPrice.priceCents) {
+            surplusLog(
+              `宝石袋 ${state.surplusGemPrice.source} ¥${formatCNY(state.surplusGemPrice.priceCents)}`,
+              "info"
+            );
+          }
+        } catch (error) {
+          surplusLog(`宝石袋价格读取失败: ${error?.message || error}`, "warn");
+        }
+
+        const priceCache = new Map();
+        for (let index = 0; index < state.surplusResults.length; index++) {
+          if (state.surplusStopRequested) break;
+          const result = state.surplusResults[index];
+          setSurplusProgress(
+            index,
+            state.surplusResults.length,
+            `阶段3: ${index + 1}/${state.surplusResults.length} · ${result.cardName || result.marketHashName}`
+          );
+          setSurplusStatus(`查询市场: ${result.cardName || result.marketHashName}`);
+
+          let price = null;
+          if (result.marketHashName) {
+            if (priceCache.has(result.marketHashName)) {
+              price = priceCache.get(result.marketHashName);
+            } else {
+              price = await priceCard(result.marketHashName, queue);
+              priceCache.set(result.marketHashName, price);
+            }
+          }
+          applySurplusMarketInfo(
+            result,
+            price,
+            state.surplusGemPrice?.priceCents || 0
+          );
+          if (!price) priceFailed++;
+          if (result.volume === 0) zeroVolume++;
+          renderSurplusResults();
+        }
+
+        if (!state.surplusStopRequested) {
+          surplusLog(
+            `市场比较完成：成交量为 0 的卡牌 ${zeroVolume} 种，查价失败 ${priceFailed} 种`,
+            priceFailed ? "warn" : "ok"
+          );
+        }
+      }
 
       if (state.surplusStopRequested) {
         surplusLog("已停止检测", "warn");

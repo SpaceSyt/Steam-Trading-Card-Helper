@@ -21,7 +21,7 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       ? (state.selectedSurplusResults?.size || 0)
       : (state.selectedGrindResults?.size || 0);
     const selectedLabel = document.getElementById("stch-surplus-selected-count");
-    if (selectedLabel) selectedLabel.textContent = `已选择 ${selectedCount} 项`;
+    if (selectedLabel) selectedLabel.textContent = `选择 ${selectedCount} 项`;
 
     const list = document.getElementById(mode === "card" ? "stch-surplus-list" : "stch-grind-list");
     const visibleTiles = list ? [...list.querySelectorAll(".stch-inv-tile")] : [];
@@ -137,6 +137,8 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
     );
     const onlyMaxed = document.getElementById("stch-surplus-only-maxed");
     if (onlyMaxed) onlyMaxed.disabled = surplusBusy || otherBusy;
+    const compareGems = document.getElementById("stch-surplus-compare-gems");
+    if (compareGems) compareGems.disabled = surplusBusy || otherBusy;
     const itemMode = document.getElementById("stch-surplus-item-mode");
     if (itemMode) itemMode.disabled = surplusBusy || otherBusy;
     updateSurplusProcessingActionState();

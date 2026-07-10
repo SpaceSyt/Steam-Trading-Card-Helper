@@ -393,6 +393,7 @@ export { updateGrindActionState };
 
       const tile = document.createElement("div");
       tile.className = "stch-inv-tile";
+      tile.classList.toggle("stch-volume-zero", item.volume === 0);
       tile.dataset.key = key;
       tile.classList.toggle("selected", state.selectedGrindResults?.has(key));
       tile.title = [
@@ -573,6 +574,7 @@ export { updateGrindActionState };
             item.priceSource = price.priceSource === "lowest" ? "在售最低" : "平均价格";
             priced++;
           } else if (price?.noPriceData) {
+            item.volume = 0;
             item.priceSource = "无可用价格";
           } else {
             failed++;

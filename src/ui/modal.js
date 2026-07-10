@@ -332,9 +332,14 @@ import { pruneOrderCache } from "../services/order-cache.js";
               <input id="stch-surplus-only-maxed" type="checkbox" ${state.cfg.surplusOnlyMaxed ? "checked" : ""}>
               只显示当前已满级徽章
             </label>
-            <span class="stch-card-only-control" style="color:#8f98a0;font-size:12px;">默认计算升满后仍会剩余的卡牌</span>
-          </div>
-          <div class="stch-scan-actions stch-surplus-action-row">
+            <label class="stch-card-only-control" title="按宝石袋税后价值与卡牌出售税后到手价比较；分解更值时以绿色覆盖">
+              <input id="stch-surplus-compare-gems" type="checkbox" ${state.cfg.surplusCompareGems ? "checked" : ""}>
+              宝石比较
+            </label>
+            <label class="stch-grind-only-control">
+              <input id="stch-grind-only-recommended" type="checkbox" ${state.cfg.grindOnlyRecommended ? "checked" : ""}>
+              只显示建议分解
+            </label>
             <label class="stch-primary-label">出售价格
               <span class="stch-help" title="在售最低：当前最低卖单价格&#10;平均价格：Steam 返回的 median_price&#10;求购最高：当前最高买单价格&#10;提交出售时会换算为 Steam 接口需要的卖家到手价">?</span>
               <select id="stch-surplus-sell-price-source" class="stch-input" style="width:118px">
@@ -344,19 +349,21 @@ import { pruneOrderCache } from "../services/order-cache.js";
               </select>
             </label>
             <label class="stch-primary-label">售价调整 ¥ <input id="stch-surplus-sell-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.surplusSellPriceAdjustment}" style="width:68px"></label>
+          </div>
+          <div class="stch-scan-actions stch-surplus-action-row">
+            <div class="stch-btn stch-card-scan-action" id="stch-surplus-scan-btn">开始检测</div>
+            <div class="stch-btn alt disabled stch-card-scan-action" id="stch-surplus-stop-btn">停止</div>
+            <div class="stch-btn stch-grind-scan-action" id="stch-grind-scan-btn">扫描可分解物品</div>
+            <div class="stch-btn alt disabled stch-grind-scan-action" id="stch-grind-stop-btn">停止</div>
             <div class="stch-surplus-action-spacer"></div>
+            <span class="stch-selected-count stch-processing-selected-count" id="stch-surplus-selected-count">选择 0 项</span>
             <div class="stch-btn alt disabled" id="stch-surplus-select-all-btn">全选</div>
-            <span class="stch-selected-count stch-processing-selected-count" id="stch-surplus-selected-count">已选择 0 项</span>
             <div class="stch-surplus-action-buttons">
               <div class="stch-btn alt disabled" id="stch-surplus-sell-btn" title="按所选价格源提交 Steam 市场出售请求">出售</div>
               <div class="stch-btn stch-btn-danger disabled" id="stch-surplus-gem-btn" title="读取 Steam 当前宝石值后提交转化宝石请求">转化宝石</div>
             </div>
           </div>
           <div class="stch-surplus-mode-panel" id="stch-surplus-card-panel">
-            <div class="stch-scan-actions">
-              <div class="stch-btn" id="stch-surplus-scan-btn">开始检测</div>
-              <div class="stch-btn alt disabled" id="stch-surplus-stop-btn">停止</div>
-            </div>
             <div class="stch-progress" id="stch-surplus-progress-wrap" style="display:none">
               <div class="stch-progress-bar" id="stch-surplus-progress-bar" style="width:0"></div>
               <div class="stch-progress-text" id="stch-surplus-progress-text">0/0</div>
@@ -370,17 +377,6 @@ import { pruneOrderCache } from "../services/order-cache.js";
             <div id="stch-surplus-log"></div>
           </div>
           <div class="stch-surplus-mode-panel" id="stch-surplus-grind-panel">
-            <div class="stch-toolbar">
-              <label>
-                <input id="stch-grind-only-recommended" type="checkbox" ${state.cfg.grindOnlyRecommended ? "checked" : ""}>
-                只显示建议分解
-              </label>
-              <span style="color:#8f98a0;font-size:12px;">扫描后可选择出售或转化宝石，提交前会显示确认窗口</span>
-            </div>
-            <div class="stch-scan-actions">
-              <div class="stch-btn" id="stch-grind-scan-btn">扫描可分解物品</div>
-              <div class="stch-btn alt disabled" id="stch-grind-stop-btn">停止</div>
-            </div>
             <div class="stch-progress" id="stch-grind-progress-wrap" style="display:none">
               <div class="stch-progress-bar" id="stch-grind-progress-bar" style="width:0"></div>
               <div class="stch-progress-text" id="stch-grind-progress-text">0/0</div>
@@ -462,6 +458,15 @@ import { pruneOrderCache } from "../services/order-cache.js";
       modal.querySelectorAll(".stch-card-only-control").forEach(element => {
         element.style.display = mode === "card" ? "" : "none";
       });
+      modal.querySelectorAll(".stch-grind-only-control").forEach(element => {
+        element.style.display = mode === "card" ? "none" : "";
+      });
+      modal.querySelectorAll(".stch-card-scan-action").forEach(element => {
+        element.style.display = mode === "card" ? "" : "none";
+      });
+      modal.querySelectorAll(".stch-grind-scan-action").forEach(element => {
+        element.style.display = mode === "card" ? "none" : "";
+      });
       const grindButton = document.getElementById("stch-grind-scan-btn");
       if (grindButton) {
         grindButton.textContent = mode === "emoticon"
@@ -528,6 +533,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
       );
       state.cfg.skipCachedOrderResults = !!document.getElementById("stch-skip-cached-orders")?.checked;
       state.cfg.surplusOnlyMaxed = !!document.getElementById("stch-surplus-only-maxed")?.checked;
+      state.cfg.surplusCompareGems = !!document.getElementById("stch-surplus-compare-gems")?.checked;
       state.cfg.surplusItemMode = getSurplusItemMode();
       state.cfg.surplusSellPriceSource = document.getElementById("stch-surplus-sell-price-source")?.value
         || state.cfg.surplusSellPriceSource
@@ -562,7 +568,9 @@ import { pruneOrderCache } from "../services/order-cache.js";
         renderOrderResults();
       }
       if (changedId === "stch-craft-mode") renderCraftResults();
-      if (changedId === "stch-surplus-only-maxed") renderSurplusResults();
+      if (["stch-surplus-only-maxed", "stch-surplus-compare-gems"].includes(changedId)) {
+        renderSurplusResults();
+      }
       if (changedId === "stch-surplus-item-mode") {
         if (state.cfg.surplusItemMode !== previousSurplusItemMode) {
           state.grindResults = [];
@@ -585,7 +593,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
       "stch-early-price-prediction", "stch-order-cache-days",
       "stch-skip-cached-orders", "stch-craft-interval",
       "stch-craft-mode", "stch-seasonal-target", "stch-surplus-item-mode",
-      "stch-surplus-only-maxed", "stch-surplus-sell-price-source",
+      "stch-surplus-only-maxed", "stch-surplus-compare-gems", "stch-surplus-sell-price-source",
       "stch-surplus-sell-adjustment", "stch-grind-only-recommended",
       "stch-grind-include-surplus-cards"];
     cfgIds.forEach(id => {
