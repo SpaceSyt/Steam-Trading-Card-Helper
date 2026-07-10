@@ -23,9 +23,23 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
     const selectedLabel = document.getElementById("stch-surplus-selected-count");
     if (selectedLabel) selectedLabel.textContent = `已选择 ${selectedCount} 项`;
 
+    const list = document.getElementById(mode === "card" ? "stch-surplus-list" : "stch-grind-list");
+    const visibleTiles = list ? [...list.querySelectorAll(".stch-inv-tile")] : [];
+    const selectedVisibleCount = visibleTiles.filter(tile => tile.classList.contains("selected")).length;
+    const allVisibleSelected = visibleTiles.length > 0 && selectedVisibleCount === visibleTiles.length;
+    const selectAll = document.getElementById("stch-surplus-select-all-btn");
+    if (selectAll) {
+      selectAll.textContent = allVisibleSelected ? "取消全选" : "全选";
+      selectAll.classList.toggle("disabled", visibleTiles.length === 0 || isSharedActionBusy());
+    }
+
     const disabled = selectedCount === 0 || isSharedActionBusy();
     document.getElementById("stch-surplus-sell-btn")?.classList.toggle("disabled", disabled);
     document.getElementById("stch-surplus-gem-btn")?.classList.toggle("disabled", disabled);
+    ["stch-surplus-sell-price-source", "stch-surplus-sell-adjustment"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = isSharedActionBusy();
+    });
   }
 
   export function updateSeasonalActionState() {
@@ -35,6 +49,7 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
+      || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning;
     const plan = (() => {
@@ -69,6 +84,7 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       || state.bulkActionRunning
       || state.orderActionRunning
       || state.seasonalActionRunning
+      || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning;
     const hasResults = state.craftResults.length > 0;
@@ -109,6 +125,7 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
+      || state.surplusActionRunning
       || state.grindScanning;
     document.getElementById("stch-surplus-scan-btn")?.classList.toggle(
       "disabled",
@@ -133,6 +150,7 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
+      || state.surplusActionRunning
       || state.surplusScanning;
     document.getElementById("stch-grind-scan-btn")?.classList.toggle(
       "disabled",
@@ -156,6 +174,7 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
+      || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning;
   }

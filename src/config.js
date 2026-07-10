@@ -1,5 +1,5 @@
   export const DEFAULT_CONFIG = {
-    configVersion: 13,
+    configVersion: 14,
     threshold: 5,
     scanInterval: 0,
     requestInterval: 330,
@@ -27,6 +27,8 @@
     seasonalInterval: 200,
     surplusOnlyMaxed: false,
     surplusItemMode: "card",
+    surplusSellPriceSource: "lowest",
+    surplusSellPriceAdjustment: 0,
     grindOnlyRecommended: true,
     grindIncludeSurplusCards: true,
   };

@@ -497,6 +497,18 @@
     .stch-surplus-main-toolbar {
       gap: 12px;
     }
+    .stch-surplus-action-row {
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .stch-surplus-action-spacer {
+      flex: 1 1 auto;
+      min-width: 16px;
+    }
+    .stch-surplus-action-row .stch-processing-selected-count {
+      margin-left: 0;
+    }
     .stch-processing-selected-count {
       width: auto;
       min-width: 78px;
@@ -1104,6 +1116,12 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    .stch-processing-dialog-item.sell {
+      grid-template-columns: minmax(0, 1fr) 58px 95px 95px;
+    }
+    .stch-processing-dialog-item.gem {
+      grid-template-columns: minmax(0, 1fr) 115px 78px;
     }
     .stch-craft-dialog-item {
       grid-template-columns: minmax(0, 1fr) 70px 70px 70px;

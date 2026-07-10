@@ -18,9 +18,11 @@ import { startCraftScan, requestCraftStop, setAllCraftCounts, submitCraftPlan, r
 
 import { startSeasonalPurchase, requestSeasonalStop, normalizeSeasonalInputs, updateSeasonalSummary, updateSeasonalActionState } from "../features/seasonal.js";
 
-import { startSurplusScan, requestSurplusStop, renderSurplusResults, updateSurplusActionState, openSelectedSurplusSellTargets, openSelectedSurplusGemTargets } from "../features/surplus.js";
+import { startSurplusScan, requestSurplusStop, renderSurplusResults, updateSurplusActionState, setAllVisibleSurplusSelection } from "../features/surplus.js";
 
-import { startGrindScan, requestGrindStop, renderGrindResults, updateGrindActionState, openSelectedGrindSellTargets, openSelectedGrindGemTargets } from "../features/grind.js";
+import { startGrindScan, requestGrindStop, renderGrindResults, updateGrindActionState, setAllVisibleGrindSelection } from "../features/grind.js";
+
+import { submitSelectedProcessingSell, submitSelectedProcessingGems } from "../features/item-actions.js";
 
 import { renderBlacklist, updateBlRow, addToBlacklist, lookupGameName } from "../features/blacklist.js";
 
@@ -331,10 +333,23 @@ import { pruneOrderCache } from "../services/order-cache.js";
               只显示当前已满级徽章
             </label>
             <span class="stch-card-only-control" style="color:#8f98a0;font-size:12px;">默认计算升满后仍会剩余的卡牌</span>
+          </div>
+          <div class="stch-scan-actions stch-surplus-action-row">
+            <label class="stch-primary-label">出售价格
+              <span class="stch-help" title="在售最低：当前最低卖单价格&#10;平均价格：Steam 返回的 median_price&#10;求购最高：当前最高买单价格&#10;提交出售时会换算为 Steam 接口需要的卖家到手价">?</span>
+              <select id="stch-surplus-sell-price-source" class="stch-input" style="width:118px">
+                <option value="lowest" ${state.cfg.surplusSellPriceSource === "lowest" ? "selected" : ""}>在售最低</option>
+                <option value="median" ${state.cfg.surplusSellPriceSource === "median" ? "selected" : ""}>平均价格</option>
+                <option value="highest" ${state.cfg.surplusSellPriceSource === "highest" ? "selected" : ""}>求购最高</option>
+              </select>
+            </label>
+            <label class="stch-primary-label">售价调整 ¥ <input id="stch-surplus-sell-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.surplusSellPriceAdjustment}" style="width:68px"></label>
+            <div class="stch-surplus-action-spacer"></div>
+            <div class="stch-btn alt disabled" id="stch-surplus-select-all-btn">全选</div>
             <span class="stch-selected-count stch-processing-selected-count" id="stch-surplus-selected-count">已选择 0 项</span>
             <div class="stch-surplus-action-buttons">
-              <div class="stch-btn alt disabled" id="stch-surplus-sell-btn" title="打开选中项的市场页面，不会自动上架出售">出售</div>
-              <div class="stch-btn stch-btn-danger disabled" id="stch-surplus-gem-btn" title="打开选中项的库存定位入口，不会自动销毁物品">转化宝石</div>
+              <div class="stch-btn alt disabled" id="stch-surplus-sell-btn" title="按所选价格源提交 Steam 市场出售请求">出售</div>
+              <div class="stch-btn stch-btn-danger disabled" id="stch-surplus-gem-btn" title="读取 Steam 当前宝石值后提交转化宝石请求">转化宝石</div>
             </div>
           </div>
           <div class="stch-surplus-mode-panel" id="stch-surplus-card-panel">
@@ -360,7 +375,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
                 <input id="stch-grind-only-recommended" type="checkbox" ${state.cfg.grindOnlyRecommended ? "checked" : ""}>
                 只显示建议分解
               </label>
-              <span style="color:#8f98a0;font-size:12px;">仅生成建议和资产 ID，不会自动销毁物品</span>
+              <span style="color:#8f98a0;font-size:12px;">扫描后可选择出售或转化宝石，提交前会显示确认窗口</span>
             </div>
             <div class="stch-scan-actions">
               <div class="stch-btn" id="stch-grind-scan-btn">扫描可分解物品</div>
@@ -414,7 +429,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.9.4 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V2.0.0 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -514,6 +529,13 @@ import { pruneOrderCache } from "../services/order-cache.js";
       state.cfg.skipCachedOrderResults = !!document.getElementById("stch-skip-cached-orders")?.checked;
       state.cfg.surplusOnlyMaxed = !!document.getElementById("stch-surplus-only-maxed")?.checked;
       state.cfg.surplusItemMode = getSurplusItemMode();
+      state.cfg.surplusSellPriceSource = document.getElementById("stch-surplus-sell-price-source")?.value
+        || state.cfg.surplusSellPriceSource
+        || DEFAULT_CONFIG.surplusSellPriceSource;
+      state.cfg.surplusSellPriceAdjustment = readNumberInput(
+        "stch-surplus-sell-adjustment",
+        state.cfg.surplusSellPriceAdjustment ?? DEFAULT_CONFIG.surplusSellPriceAdjustment
+      );
       state.cfg.grindOnlyRecommended = !!document.getElementById("stch-grind-only-recommended")?.checked;
       const includeSurplusCards = document.getElementById("stch-grind-include-surplus-cards");
       if (includeSurplusCards) {
@@ -563,7 +585,8 @@ import { pruneOrderCache } from "../services/order-cache.js";
       "stch-early-price-prediction", "stch-order-cache-days",
       "stch-skip-cached-orders", "stch-craft-interval",
       "stch-craft-mode", "stch-seasonal-target", "stch-surplus-item-mode",
-      "stch-surplus-only-maxed", "stch-grind-only-recommended",
+      "stch-surplus-only-maxed", "stch-surplus-sell-price-source",
+      "stch-surplus-sell-adjustment", "stch-grind-only-recommended",
       "stch-grind-include-surplus-cards"];
     cfgIds.forEach(id => {
       const el = document.getElementById(id);
@@ -624,16 +647,24 @@ import { pruneOrderCache } from "../services/order-cache.js";
     document.getElementById("stch-surplus-stop-btn").addEventListener("click", requestSurplusStop);
     document.getElementById("stch-grind-scan-btn").addEventListener("click", startGrindScan);
     document.getElementById("stch-grind-stop-btn").addEventListener("click", requestGrindStop);
+    document.getElementById("stch-surplus-select-all-btn").addEventListener("click", event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      const mode = getSurplusItemMode();
+      const list = document.getElementById(mode === "card" ? "stch-surplus-list" : "stch-grind-list");
+      const tiles = list ? [...list.querySelectorAll(".stch-inv-tile")] : [];
+      const allSelected = tiles.length > 0 && tiles.every(tile => tile.classList.contains("selected"));
+      if (mode === "card") setAllVisibleSurplusSelection(!allSelected);
+      else setAllVisibleGrindSelection(!allSelected);
+      updateAllActionStates();
+    });
     document.getElementById("stch-surplus-sell-btn").addEventListener("click", event => {
       if (event.currentTarget.classList.contains("disabled")) return;
-      if (getSurplusItemMode() === "card") openSelectedSurplusSellTargets();
-      else openSelectedGrindSellTargets();
+      submitSelectedProcessingSell();
       updateAllActionStates();
     });
     document.getElementById("stch-surplus-gem-btn").addEventListener("click", event => {
       if (event.currentTarget.classList.contains("disabled")) return;
-      if (getSurplusItemMode() === "card") openSelectedSurplusGemTargets();
-      else openSelectedGrindGemTargets();
+      submitSelectedProcessingGems();
       updateAllActionStates();
     });
     const syncCraftMaxPages = event => {

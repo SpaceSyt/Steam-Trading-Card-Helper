@@ -99,6 +99,7 @@ export { updateCraftActionState };
     selectAll.disabled = state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
+      || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning;
     const applyCraftSelectAll = checked => {
@@ -157,6 +158,7 @@ export { updateCraftActionState };
       countInput.disabled = state.craftScanning
         || state.craftActionRunning
         || state.seasonalActionRunning
+        || state.surplusActionRunning
         || state.surplusScanning
         || state.grindScanning
         || state.cfg.craftMode === "max"
@@ -180,6 +182,7 @@ export { updateCraftActionState };
       checkbox.disabled = state.craftScanning
         || state.craftActionRunning
         || state.seasonalActionRunning
+        || state.surplusActionRunning
         || state.surplusScanning
         || state.grindScanning
         || result.maxCraftable <= 0;
@@ -238,6 +241,7 @@ export { updateCraftActionState };
       || state.bulkActionRunning
       || state.orderActionRunning
       || state.seasonalActionRunning
+      || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning
     ) {
@@ -265,6 +269,7 @@ export { updateCraftActionState };
       || state.bulkActionRunning
       || state.orderActionRunning
       || state.seasonalActionRunning
+      || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning
     ) {
@@ -568,6 +573,7 @@ export { updateCraftActionState };
       || state.bulkActionRunning
       || state.orderActionRunning
       || state.seasonalActionRunning
+      || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning
     ) {

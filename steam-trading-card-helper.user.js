@@ -2,9 +2,9 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      1.9.4
-// @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and suggest surplus item gem conversion
-// @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测多余卡牌和多余物品分解建议
+// @version      2.0.0
+// @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and process surplus items
+// @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测和处理多余卡牌/背景/表情
 // @author       SpaceSyt
 // @homepageURL  https://github.com/SpaceSyt/Steam-Trading-Card-Helper
 // @supportURL   https://github.com/SpaceSyt/Steam-Trading-Card-Helper/issues
@@ -32,7 +32,7 @@
 "use strict";
 (() => {
   // src/ui/style.css
-  var style_default = '    .stch-btn-entry {\n      display: inline-block;\n      padding: 6px 12px;\n      margin-left: 10px;\n      background: rgba(67, 137, 179, 0.85);\n      color: #fff;\n      border-radius: 3px;\n      cursor: pointer;\n      font-size: 13px;\n    }\n    .stch-btn-entry:hover { background: rgba(87, 157, 199, 1); }\n    .stch-store-entry-wrap {\n      margin-top: 8px;\n    }\n    .stch-store-entry-wrap .stch-btn-entry {\n      margin-left: 0;\n    }\n    .inventory_rightnav .stch-btn-entry.stch-inventory-entry {\n      margin: 0 12px 0 0;\n      padding: 0 12px;\n      height: 30px;\n      line-height: 30px;\n      vertical-align: top;\n    }\n\n    #stch-sidebar {\n      position: fixed;\n      left: 0;\n      top: 122px;\n      width: 304px;\n      max-height: calc(100vh - 170px);\n      min-height: 360px;\n      transform: translateX(-272px);\n      transition: transform 160ms ease;\n      z-index: 10002;\n      color: #c7d5e0;\n      font-family: "Motiva Sans", Arial, sans-serif;\n      font-size: 13px;\n      filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));\n    }\n    #stch-sidebar:hover,\n    #stch-sidebar.pinned {\n      transform: translateX(0);\n    }\n    .stch-sidebar-panel {\n      width: 272px;\n      min-height: 360px;\n      max-height: calc(100vh - 170px);\n      overflow: hidden;\n      background: #172435;\n      border: 1px solid #31445b;\n      border-left: 0;\n      border-radius: 0 4px 4px 0;\n      display: flex;\n      flex-direction: column;\n    }\n    .stch-sidebar-handle {\n      position: absolute;\n      top: 0;\n      right: 0;\n      width: 32px;\n      height: 100%;\n      background: linear-gradient(180deg, #25445d, #1a2d40);\n      border: 1px solid #3f617b;\n      border-left: 0;\n      border-radius: 0 5px 5px 0;\n      color: #66c0f4;\n      cursor: pointer;\n      writing-mode: vertical-rl;\n      text-orientation: mixed;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      letter-spacing: 0;\n      user-select: none;\n      font-weight: bold;\n    }\n    .stch-sidebar-head {\n      display: flex;\n      align-items: center;\n      gap: 10px;\n      padding: 12px;\n      background: #202f43;\n      border-bottom: 1px solid #31445b;\n    }\n    .stch-sidebar-avatar {\n      width: 46px;\n      height: 46px;\n      object-fit: cover;\n      border: 1px solid #66c0f4;\n      background: #0b141f;\n      flex-shrink: 0;\n    }\n    .stch-sidebar-title {\n      min-width: 0;\n      flex: 1;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n    }\n    .stch-sidebar-name {\n      color: #fff;\n      font-size: 15px;\n      font-weight: bold;\n      line-height: 1.25;\n      text-align: center;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-sidebar-pin {\n      margin-left: auto;\n      background: #0e1621;\n      border: 1px solid #45556b;\n      color: #c7d5e0;\n      border-radius: 2px;\n      padding: 4px 7px;\n      cursor: pointer;\n      font-size: 12px;\n      flex-shrink: 0;\n    }\n    .stch-sidebar-pin:hover,\n    #stch-sidebar.pinned .stch-sidebar-pin {\n      color: #fff;\n      border-color: #66c0f4;\n    }\n    .stch-sidebar-body {\n      padding: 10px 12px 12px;\n      overflow-y: auto;\n      min-height: 0;\n    }\n    .stch-sidebar-row {\n      display: flex;\n      justify-content: space-between;\n      gap: 10px;\n      padding: 7px 0;\n      border-bottom: 1px solid rgba(69, 85, 107, 0.55);\n    }\n    .stch-sidebar-row:last-child {\n      border-bottom: 0;\n    }\n    .stch-sidebar-key {\n      color: #8f98a0;\n      white-space: nowrap;\n    }\n    .stch-sidebar-value {\n      color: #fff;\n      text-align: right;\n      min-width: 0;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-sidebar-progress {\n      height: 6px;\n      background: #0e1621;\n      border-radius: 6px;\n      overflow: hidden;\n      margin-top: 4px;\n      border: 1px solid #31445b;\n    }\n    .stch-sidebar-progress-bar {\n      height: 100%;\n      width: 0;\n      background: linear-gradient(90deg, #75b022, #66c0f4);\n    }\n    .stch-sidebar-status {\n      color: #8f98a0;\n      font-size: 12px;\n      margin-top: 9px;\n      line-height: 1.4;\n    }\n    .stch-sidebar-actions {\n      display: flex;\n      justify-content: flex-end;\n      margin-top: 10px;\n    }\n    .stch-sidebar-refresh {\n      background: linear-gradient(to bottom, #67c1f5 5%, #417a9b 95%);\n      color: #fff;\n      border: 0;\n      border-radius: 2px;\n      cursor: pointer;\n      padding: 5px 10px;\n      font-size: 12px;\n    }\n    .stch-sidebar-refresh:disabled {\n      opacity: 0.55;\n      cursor: not-allowed;\n    }\n\n    #stch-backdrop {\n      position: fixed;\n      inset: 0;\n      background: rgba(0,0,0,0.6);\n      z-index: 10000;\n      display: none;\n    }\n    #stch-modal {\n      position: fixed;\n      left: 50%; top: 20px;\n      transform: translateX(-50%);\n      width: 1060px; max-width: 95vw;\n      height: 92vh;\n      background: #1b2838;\n      color: #c6d4df;\n      z-index: 10001;\n      border-radius: 4px;\n      overflow: hidden;\n      display: flex;\n      flex-direction: column;\n      font-family: "Motiva Sans", Arial, sans-serif;\n      font-size: 14px;\n      box-shadow: 0 0 30px rgba(0,0,0,0.6);\n    }\n    #stch-modal .stch-header {\n      padding: 10px 16px;\n      border-bottom: 1px solid #45556b;\n      display: flex;\n      align-items: center;\n      background: #171a21;\n    }\n    #stch-modal .stch-header h2 {\n      margin: 0; font-size: 20px; flex: 1; color: #fff;\n    }\n    #stch-modal .stch-close {\n      cursor: pointer; font-size: 22px; color: #8f98a0;\n    }\n    #stch-modal .stch-close:hover { color: #fff; }\n    #stch-modal .stch-body {\n      flex: 1; overflow-y: hidden; padding: 12px 16px;\n      display: flex; flex-direction: column;\n      min-height: 0;\n    }\n    #stch-modal .stch-footer {\n      padding: 10px 16px;\n      background: #171a21;\n      border-top: 1px solid #45556b;\n      display: flex;\n      gap: 10px;\n      align-items: center;\n      flex-wrap: wrap;\n      font-size: 13px;\n    }\n    .stch-input {\n      background: #0e1621;\n      color: #fff;\n      border: 1px solid #45556b;\n      padding: 5px 8px;\n      border-radius: 2px;\n      width: 80px;\n      font-size: 14px;\n    }\n    .stch-input:focus { border-color: #66c0f4; outline: none; }\n    .stch-label { font-size: 14px; color: #8f98a0; }\n    .stch-btn {\n      padding: 8px 16px;\n      background: linear-gradient(to bottom, #75b022 5%, #588a1b 95%);\n      color: #fff;\n      border-radius: 2px;\n      cursor: pointer;\n      font-size: 15px;\n      user-select: none;\n    }\n    .stch-btn:hover { background: linear-gradient(to bottom, #8ed629 5%, #6aa621 95%); }\n    .stch-btn.disabled {\n      background: #2a3f5a;\n      color: #667;\n      cursor: not-allowed;\n      opacity: 0.6;\n    }\n    .stch-btn.alt {\n      background: linear-gradient(to bottom, #67c1f5 5%, #417a9b 95%);\n    }\n    .stch-btn.alt:hover {\n      background: linear-gradient(to bottom, #8ed8ff 5%, #5297b7 95%);\n    }\n    .stch-btn.stch-btn-danger {\n      background: linear-gradient(to bottom, #c04040 5%, #8b2020 95%);\n    }\n    .stch-btn.stch-btn-danger:hover {\n      background: linear-gradient(to bottom, #e05050 5%, #a03030 95%);\n    }\n\n    .stch-game-list {\n      max-height: 30vh;\n      overflow-y: auto;\n      border: 1px solid #2a3f5a;\n      border-radius: 3px;\n      background: rgba(0,0,0,0.2);\n    }\n    #stch-tab-scan.stch-foil-mode {\n      background: linear-gradient(180deg, rgba(70, 31, 82, 0.46), rgba(27, 40, 56, 0.98) 260px);\n      box-shadow: inset 0 0 0 1px rgba(193, 91, 196, 0.24);\n      border-radius: 3px;\n    }\n    #stch-tab-scan.stch-foil-mode .stch-game-list {\n      border-color: rgba(193, 91, 196, 0.42);\n      background: rgba(20, 11, 27, 0.34);\n    }\n    #stch-tab-scan.stch-foil-mode #stch-log {\n      background: #120d1b;\n      border: 1px solid rgba(193, 91, 196, 0.22);\n    }\n    #stch-tab-scan.stch-foil-mode .stch-progress-bar {\n      background: linear-gradient(to right, #8f55c2, #cf73c9);\n    }\n    #stch-tab-scan.stch-foil-mode .stch-cost,\n    #stch-tab-scan.stch-foil-mode .stch-appid {\n      color: #d78be8;\n    }\n    .stch-game-row {\n      padding: 6px 14px;\n      border-bottom: 1px solid rgba(69,85,107,0.4);\n      display: flex;\n      align-items: center;\n      gap: 12px;\n      font-size: 14px;\n      line-height: 1.4;\n    }\n    .stch-row-header {\n      color: #8f98a0;\n      font-size: 12px;\n      font-weight: bold;\n      border-bottom: 2px solid #45556b;\n      padding-bottom: 6px;\n      margin-bottom: 2px;\n    }\n    .stch-game-row:hover { background: rgba(103,193,245,0.08); }\n    .stch-game-row .stch-appid {\n      width: 56px;\n      flex-shrink: 0;\n      color: #66c0f4;\n      font-family: monospace;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-name {\n      flex: 1;\n      color: #e2e2e2;\n      font-size: 13px;\n      min-width: 0;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-game-row .stch-level {\n      width: 42px;\n      flex-shrink: 0;\n      color: #a1b053;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-cards {\n      width: 36px;\n      flex-shrink: 0;\n      color: #c6d4df;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-cost {\n      width: 68px;\n      flex-shrink: 0;\n      color: #75b022;\n      font-weight: bold;\n      font-size: 13px;\n      text-align: center;\n    }\n    .stch-game-row .stch-full {\n      width: 68px;\n      flex-shrink: 0;\n      color: #ffc902;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-lv5 {\n      width: 84px;\n      flex-shrink: 0;\n      color: #e74c3c;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-drops {\n      width: 36px;\n      flex-shrink: 0;\n      color: #8db7d7;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-order-cache-age {\n      width: 38px;\n      flex-shrink: 0;\n      color: #8f98a0;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-buy {\n      width: 60px;\n      flex-shrink: 0;\n      text-align: center;\n    }\n    .stch-game-row .stch-check {\n      width: 24px;\n      flex-shrink: 0;\n      text-align: center;\n      position: relative;\n      align-self: stretch;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      overflow: visible;\n    }\n    .stch-game-list:not(.stch-show-drops) .stch-drops { display: none; }\n    .stch-result-cb {\n      margin: 0;\n      cursor: pointer;\n      accent-color: #75b022;\n    }\n    .stch-check-hit {\n      position: absolute;\n      left: 50%;\n      top: 50%;\n      width: 36px;\n      height: 32px;\n      transform: translate(-50%, -50%);\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      cursor: pointer;\n      z-index: 1;\n    }\n    .stch-check-hit .stch-result-cb {\n      position: relative;\n      z-index: 2;\n    }\n    .stch-craft-list {\n      flex: 1;\n      min-height: 0;\n      max-height: none;\n    }\n    .stch-order-page-list {\n      flex: 1;\n      min-height: 0;\n      max-height: none;\n      width: 100%;\n      box-sizing: border-box;\n    }\n    .stch-order-tools {\n      margin-left: auto;\n    }\n    .stch-craft-row .stch-craft-available {\n      width: 64px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #ffc902;\n      font-size: 12px;\n    }\n    .stch-craft-row .stch-craft-count {\n      width: 74px;\n      flex-shrink: 0;\n      text-align: center;\n    }\n    .stch-craft-row .stch-craft-count input {\n      width: 48px;\n      box-sizing: border-box;\n      text-align: center;\n      padding: 4px;\n    }\n    .stch-craft-row .stch-craft-target {\n      width: 54px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #a1b053;\n      font-size: 12px;\n    }\n    .stch-craft-row .stch-craft-status {\n      width: 72px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #8f98a0;\n      font-size: 12px;\n    }\n    .stch-craft-row .stch-craft-status.ok { color: #75b022; }\n    .stch-craft-row .stch-craft-status.warn { color: #ffc902; }\n    .stch-craft-row .stch-craft-status.err { color: #c04040; }\n    .stch-craft-actions {\n      display: flex;\n      align-items: center;\n      gap: 10px;\n      margin-left: auto;\n    }\n    .stch-surplus-list {\n      flex: 1;\n      min-height: 0;\n      max-height: none;\n    }\n    .stch-surplus-main-toolbar {\n      gap: 12px;\n    }\n    .stch-processing-selected-count {\n      width: auto;\n      min-width: 78px;\n      margin-left: auto;\n      margin-right: 0;\n      justify-content: flex-end;\n    }\n    .stch-surplus-action-buttons {\n      display: flex;\n      align-items: center;\n      gap: 8px;\n    }\n    .stch-surplus-action-buttons .stch-btn {\n      padding: 7px 12px;\n      font-size: 13px;\n      min-width: 56px;\n      text-align: center;\n      box-sizing: border-box;\n    }\n    .stch-surplus-mode-panel {\n      display: none;\n      flex-direction: column;\n      flex: 1;\n      min-height: 0;\n    }\n    .stch-surplus-mode-panel.active {\n      display: flex;\n    }\n    .stch-inventory-grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fill, 96px);\n      grid-auto-rows: 96px;\n      gap: 6px;\n      padding: 6px;\n      align-content: start;\n      justify-content: start;\n      box-sizing: border-box;\n    }\n    .stch-inventory-empty {\n      grid-column: 1 / -1;\n      min-height: 120px;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      color: #8f98a0;\n      font-size: 13px;\n    }\n    .stch-inv-tile {\n      position: relative;\n      aspect-ratio: 1 / 1;\n      min-width: 0;\n      background: #20252d;\n      border: 1px solid #3a3a3a;\n      cursor: pointer;\n      overflow: hidden;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.32);\n      user-select: none;\n    }\n    .stch-inv-tile:hover {\n      border-color: #66c0f4;\n      box-shadow: inset 0 0 14px rgba(102, 192, 244, 0.22), 0 0 0 1px rgba(102, 192, 244, 0.22);\n    }\n    .stch-inv-tile.selected {\n      border-color: #66c0f4 !important;\n      box-shadow: inset 0 0 0 2px rgba(102, 192, 244, 0.85), 0 0 0 1px rgba(102, 192, 244, 0.55);\n      background: #23384a;\n    }\n    .stch-inv-tile img {\n      width: 100%;\n      height: 100%;\n      object-fit: contain;\n      display: block;\n      pointer-events: none;\n    }\n    .stch-inv-placeholder {\n      padding: 8px;\n      color: #c7d5e0;\n      font-size: 12px;\n      line-height: 1.3;\n      text-align: center;\n      word-break: break-word;\n    }\n    .stch-inv-badge {\n      position: absolute;\n      right: 0;\n      top: 0;\n      max-width: calc(100% - 8px);\n      padding: 2px 5px;\n      background: rgba(52, 122, 166, 0.92);\n      color: #fff;\n      font-size: 12px;\n      line-height: 1.25;\n      font-weight: bold;\n      text-shadow: 0 1px 1px #000;\n      white-space: nowrap;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      z-index: 2;\n    }\n    .stch-inv-badge-left {\n      left: 0;\n      right: auto;\n      background: rgba(20, 27, 35, 0.86);\n      color: #8db7d7;\n    }\n    .stch-inv-badge-left.ok { color: #75b022; }\n    .stch-inv-badge-left.warn { color: #ffc902; }\n    .stch-inv-badge-left.info { color: #66c0f4; }\n    .stch-inv-gems {\n      position: absolute;\n      left: 0;\n      right: 0;\n      bottom: 20px;\n      color: #c7d5e0;\n      background: rgba(0, 0, 0, 0.42);\n      font-size: 11px;\n      line-height: 17px;\n      text-align: center;\n      text-shadow: 0 1px 1px #000;\n      z-index: 2;\n    }\n    .stch-inv-name {\n      position: absolute;\n      left: 0;\n      right: 0;\n      bottom: 0;\n      height: 20px;\n      padding: 2px 4px;\n      box-sizing: border-box;\n      color: #dfe3e6;\n      background: linear-gradient(180deg, rgba(10, 14, 20, 0.2), rgba(10, 14, 20, 0.88));\n      font-size: 11px;\n      line-height: 16px;\n      text-align: center;\n      white-space: nowrap;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      text-shadow: 0 1px 1px #000;\n      z-index: 2;\n    }\n    .stch-surplus-row .stch-name {\n      flex: 0 0 190px;\n    }\n    .stch-surplus-row .stch-surplus-card {\n      flex: 1;\n      min-width: 120px;\n      color: #e2e2e2;\n      font-size: 13px;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-surplus-row .stch-surplus-badge {\n      width: 72px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #a1b053;\n      font-size: 12px;\n    }\n    .stch-surplus-row .stch-surplus-num {\n      width: 48px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #c6d4df;\n      font-size: 12px;\n    }\n    .stch-surplus-row .stch-surplus-extra {\n      width: 70px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #75b022;\n      font-size: 12px;\n      font-weight: bold;\n    }\n    .stch-surplus-row .stch-surplus-assets {\n      width: 150px;\n      flex-shrink: 0;\n      color: #8db7d7;\n      font-family: "Courier New", monospace;\n      font-size: 11px;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-grind-list {\n      flex: 1;\n      min-height: 0;\n      max-height: none;\n    }\n    .stch-grind-row .stch-name {\n      flex: 0 0 150px;\n    }\n    .stch-grind-row .stch-grind-type {\n      width: 66px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #8db7d7;\n      font-size: 12px;\n    }\n    .stch-grind-row .stch-grind-item {\n      flex: 1;\n      min-width: 120px;\n      color: #e2e2e2;\n      font-size: 13px;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-grind-row .stch-grind-num {\n      width: 48px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #c6d4df;\n      font-size: 12px;\n    }\n    .stch-grind-row .stch-grind-price {\n      width: 70px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #ffc902;\n      font-size: 12px;\n    }\n    .stch-grind-row .stch-grind-action {\n      width: 72px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #8f98a0;\n      font-size: 12px;\n      font-weight: bold;\n    }\n    .stch-grind-row .stch-grind-action.ok { color: #75b022; }\n    .stch-grind-row .stch-grind-action.warn { color: #ffc902; }\n    .stch-grind-row .stch-grind-action.info { color: #66c0f4; }\n    .stch-grind-row .stch-grind-assets {\n      width: 132px;\n      flex-shrink: 0;\n      color: #8db7d7;\n      font-family: "Courier New", monospace;\n      font-size: 11px;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-seasonal-panel {\n      border: 1px solid #2a3f5a;\n      border-radius: 3px;\n      background: rgba(0,0,0,0.2);\n      padding: 12px;\n      margin-bottom: 10px;\n      color: #c6d4df;\n      line-height: 1.6;\n    }\n    .stch-seasonal-panel b { color: #fff; }\n    .stch-seasonal-note {\n      color: #8f98a0;\n      font-size: 12px;\n      margin-top: 8px;\n    }\n    .stch-seasonal-warning {\n      color: #ffc902;\n      font-size: 12px;\n      margin-top: 4px;\n    }\n    .stch-scan-actions {\n      display: flex;\n      align-items: center;\n      gap: 10px;\n      margin-bottom: 8px;\n    }\n    .stch-bulk-actions {\n      display: flex;\n      align-items: center;\n      gap: 10px;\n      margin-left: auto;\n    }\n    .stch-selected-count {\n      color: #8f98a0;\n      margin-left: auto;\n      width: 24px;\n      margin-right: 14px;\n      flex-shrink: 0;\n      display: flex;\n      justify-content: center;\n      white-space: nowrap;\n    }\n    .stch-selected-count.stch-processing-selected-count {\n      width: auto;\n      min-width: 78px;\n      margin-left: auto;\n      margin-right: 0;\n      justify-content: flex-end;\n    }\n    .stch-help {\n      cursor: help;\n      color: #8f98a0;\n      font-size: 12px;\n    }\n    .stch-sortable {\n      cursor: pointer;\n      user-select: none;\n    }\n    .stch-sortable:hover { color: #fff; }\n    .stch-sort-arrow { font-size: 10px; }\n    .stch-toolbar {\n      display: flex;\n      gap: 14px;\n      align-items: center;\n      margin-bottom: 8px;\n      flex-wrap: wrap;\n      font-size: 14px;\n      color: #8f98a0;\n    }\n    .stch-toolbar label { display: flex; align-items: center; gap: 4px; cursor: pointer; }\n    .stch-primary-label { color: #fff !important; font-weight: bold; }\n    .stch-foil-mode-label {\n      color: #d9a4e8;\n      font-weight: bold;\n    }\n    .stch-foil-mode-label input {\n      accent-color: #b75ac7;\n    }\n    .stch-foil-mode-label.active {\n      color: #f0c4f7;\n      text-shadow: 0 0 10px rgba(207, 115, 201, 0.35);\n    }\n    .stch-control-disabled {\n      color: #687682 !important;\n      font-weight: normal !important;\n    }\n    .stch-control-disabled .stch-input,\n    .stch-input:disabled {\n      color: #687682;\n      background: #111a25;\n      border-color: #2f3f51;\n      cursor: not-allowed;\n      opacity: 0.75;\n    }\n    .stch-foil-mode-label.disabled {\n      color: #7d6685;\n      text-shadow: none;\n      cursor: not-allowed;\n    }\n\n    .stch-status-text { color: #8db7d7; font-size: 13px; padding: 6px 0; min-height: 20px; }\n\n    .stch-tabs {\n      display: flex;\n      gap: 2px;\n      margin-bottom: 10px;\n      border-bottom: 1px solid #45556b;\n    }\n    .stch-tab {\n      padding: 6px 16px;\n      background: rgba(0,0,0,0.3);\n      color: #8f98a0;\n      cursor: pointer;\n      border-radius: 3px 3px 0 0;\n      font-size: 14px;\n      user-select: none;\n    }\n    .stch-tab:hover { color: #fff; background: rgba(103,193,245,0.1); }\n    .stch-tab.active { color: #fff; background: #1b2838; border: 1px solid #45556b; border-bottom-color: #1b2838; }\n    .stch-tab-disabled { color: #555; cursor: not-allowed; opacity: 0.5; pointer-events: none; }\n    .stch-tab-right { margin-left: auto; }\n    .stch-tab-content { display: none; position: relative; }\n    .stch-tab-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }\n\n    .stch-onboarding {\n      position: absolute;\n      inset: 0;\n      z-index: 10;\n      display: flex;\n      flex-direction: column;\n      overflow-y: auto;\n      background: #1b2838;\n      padding: 24px 28px;\n    }\n    .stch-onboarding h3 {\n      margin: 0 0 8px;\n      color: #fff;\n      font-size: 22px;\n    }\n    .stch-onboarding-intro {\n      margin: 0 0 20px;\n      color: #8db7d7;\n      line-height: 1.7;\n    }\n    .stch-onboarding-step {\n      padding: 12px 0;\n      border-top: 1px solid #2a3f5a;\n      line-height: 1.65;\n    }\n    .stch-onboarding-step b {\n      display: block;\n      margin-bottom: 2px;\n      color: #fff;\n      font-size: 15px;\n    }\n    .stch-onboarding-note {\n      margin-top: 8px;\n      padding: 10px 12px;\n      border-left: 3px solid #ffc902;\n      background: rgba(0,0,0,0.2);\n      color: #c6d4df;\n      line-height: 1.6;\n    }\n    .stch-onboarding-actions {\n      display: flex;\n      justify-content: flex-end;\n      margin-top: auto;\n      padding-top: 20px;\n    }\n\n    .stch-bl-form {\n      display: flex;\n      gap: 10px;\n      align-items: center;\n      margin-bottom: 10px;\n      flex-wrap: wrap;\n    }\n    .stch-bl-list {\n      flex: 1;\n      min-height: 0;\n      overflow-y: auto;\n      border: 1px solid #2a3f5a;\n      border-radius: 3px;\n      background: rgba(0,0,0,0.2);\n    }\n    .stch-bl-row {\n      padding: 6px 14px;\n      border-bottom: 1px solid rgba(69,85,107,0.4);\n      display: flex;\n      align-items: center;\n      gap: 12px;\n      font-size: 14px;\n    }\n    .stch-bl-row:hover { background: rgba(103,193,245,0.08); }\n    .stch-bl-row .stch-bl-id { width: 70px; color: #66c0f4; font-family: monospace; }\n    .stch-bl-row .stch-bl-name { flex: 1; color: #e2e2e2; }\n    .stch-bl-row .stch-bl-source { width: 50px; color: #8f98a0; font-size: 12px; text-align: center; }\n    .stch-bl-row .stch-bl-fixed-col { width: 40px; color: #75b022; font-size: 12px; text-align: center; }\n    .stch-bl-row .stch-bl-days { width: 45px; color: #8f98a0; font-size: 12px; text-align: center; }\n    .stch-bl-row .stch-bl-cb-hd { width: 24px; flex-shrink: 0; text-align: center; }\n    .stch-bl-cb { cursor: pointer; accent-color: #75b022; }\n    .stch-bl-count { color: #8f98a0; font-size: 12px; margin-top: 6px; }\n    .stch-bl-sep { color: #45556b; font-size: 12px; margin: 4px 0; padding-left: 8px; }\n    .stch-bl-fixed { color: #75b022; }\n\n    .stch-bl-result { color: #75b022; font-size: 14px; }\n\n    .stch-log-resizer {\n      flex: 0 0 9px;\n      height: 9px;\n      margin: 6px 0 4px;\n      cursor: row-resize;\n      position: relative;\n      border-radius: 3px;\n    }\n    .stch-log-resizer::before {\n      content: "";\n      position: absolute;\n      left: 0;\n      right: 0;\n      top: 4px;\n      height: 1px;\n      background: #45556b;\n    }\n    .stch-log-resizer::after {\n      content: "";\n      position: absolute;\n      left: 50%;\n      top: 2px;\n      width: 42px;\n      height: 5px;\n      transform: translateX(-50%);\n      border-top: 1px solid #66c0f4;\n      border-bottom: 1px solid #66c0f4;\n      opacity: 0.55;\n    }\n    .stch-log-resizer:hover,\n    .stch-log-resizer.dragging {\n      background: rgba(103, 193, 245, 0.08);\n    }\n    body.stch-log-resizing {\n      cursor: row-resize;\n      user-select: none;\n    }\n\n    #stch-log,\n    #stch-craft-log,\n    #stch-seasonal-log,\n    #stch-surplus-log,\n    #stch-grind-log {\n      margin-top: 0;\n      flex: 1;\n      min-height: 0;\n      overflow-y: auto;\n      background: #0e1621;\n      border-radius: 3px;\n      padding: 10px;\n      font-family: "Courier New", monospace;\n      font-size: 13px;\n      line-height: 1.5;\n      color: #b0c3d9;\n      white-space: pre-wrap;\n      word-break: break-all;\n    }\n    #stch-craft-log,\n    #stch-seasonal-log,\n    #stch-surplus-log,\n    #stch-grind-log {\n      flex: 0 0 19vh;\n    }\n    #stch-log .ok, #stch-craft-log .ok, #stch-seasonal-log .ok, #stch-surplus-log .ok, #stch-grind-log .ok { color: #75b022; }\n    #stch-log .warn, #stch-craft-log .warn, #stch-seasonal-log .warn, #stch-surplus-log .warn, #stch-grind-log .warn { color: #ffc902; }\n    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-seasonal-log .warn-ip, #stch-surplus-log .warn-ip, #stch-grind-log .warn-ip { color: #fff; }\n    #stch-log .err, #stch-craft-log .err, #stch-seasonal-log .err, #stch-surplus-log .err, #stch-grind-log .err { color: #c04040; }\n    #stch-log .info, #stch-craft-log .info, #stch-seasonal-log .info, #stch-surplus-log .info, #stch-grind-log .info { color: #67c1f5; }\n\n    .stch-progress {\n      height: 20px;\n      background: #0e1621;\n      border-radius: 2px;\n      overflow: hidden;\n      margin: 8px 0;\n      position: relative;\n    }\n    .stch-progress-bar {\n      height: 100%;\n      background: linear-gradient(to right, #75b022, #8ed629);\n      transition: width 0.2s;\n    }\n    .stch-progress-text {\n      position: absolute;\n      inset: 0;\n      text-align: center;\n      font-size: 13px;\n      line-height: 20px;\n      color: #fff;\n    }\n\n    .stch-summary {\n      font-size: 14px;\n      color: #8f98a0;\n      margin: 8px 0;\n      display: flex;\n      align-items: center;\n      gap: 12px;\n    }\n    .stch-summary-text { min-width: 0; }\n    .stch-summary b { color: #fff; }\n\n    #stch-order-dialog-backdrop {\n      position: fixed;\n      inset: 0;\n      z-index: 10020;\n      background: rgba(0,0,0,0.65);\n      display: flex;\n      align-items: center;\n      justify-content: center;\n    }\n    .stch-order-dialog {\n      width: 620px;\n      max-width: 92vw;\n      max-height: 82vh;\n      display: flex;\n      flex-direction: column;\n      background: #1b2838;\n      border: 1px solid #45556b;\n      border-radius: 4px;\n      box-shadow: 0 12px 40px rgba(0,0,0,0.7);\n      color: #c6d4df;\n    }\n    .stch-order-dialog h3 {\n      margin: 0;\n      padding: 14px 16px;\n      color: #fff;\n      font-size: 18px;\n      border-bottom: 1px solid #45556b;\n    }\n    .stch-order-summary {\n      padding: 12px 16px;\n      line-height: 1.7;\n    }\n    .stch-order-summary b { color: #fff; }\n    .stch-order-list {\n      margin: 0 16px;\n      max-height: 42vh;\n      overflow-y: auto;\n      border: 1px solid #2a3f5a;\n      background: #0e1621;\n    }\n    .stch-order-item {\n      display: grid;\n      grid-template-columns: minmax(0, 1fr) 55px 70px;\n      gap: 10px;\n      padding: 7px 10px;\n      border-bottom: 1px solid rgba(69,85,107,0.4);\n      font-size: 12px;\n    }\n    .stch-order-item span:first-child {\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-craft-dialog-item {\n      grid-template-columns: minmax(0, 1fr) 70px 70px 70px;\n    }\n    .stch-order-note {\n      padding: 10px 16px;\n      color: #ffc902;\n      font-size: 12px;\n    }\n    .stch-order-dialog-actions {\n      display: flex;\n      justify-content: flex-end;\n      gap: 10px;\n      padding: 12px 16px;\n      border-top: 1px solid #45556b;\n    }\n';
+  var style_default = '    .stch-btn-entry {\n      display: inline-block;\n      padding: 6px 12px;\n      margin-left: 10px;\n      background: rgba(67, 137, 179, 0.85);\n      color: #fff;\n      border-radius: 3px;\n      cursor: pointer;\n      font-size: 13px;\n    }\n    .stch-btn-entry:hover { background: rgba(87, 157, 199, 1); }\n    .stch-store-entry-wrap {\n      margin-top: 8px;\n    }\n    .stch-store-entry-wrap .stch-btn-entry {\n      margin-left: 0;\n    }\n    .inventory_rightnav .stch-btn-entry.stch-inventory-entry {\n      margin: 0 12px 0 0;\n      padding: 0 12px;\n      height: 30px;\n      line-height: 30px;\n      vertical-align: top;\n    }\n\n    #stch-sidebar {\n      position: fixed;\n      left: 0;\n      top: 122px;\n      width: 304px;\n      max-height: calc(100vh - 170px);\n      min-height: 360px;\n      transform: translateX(-272px);\n      transition: transform 160ms ease;\n      z-index: 10002;\n      color: #c7d5e0;\n      font-family: "Motiva Sans", Arial, sans-serif;\n      font-size: 13px;\n      filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));\n    }\n    #stch-sidebar:hover,\n    #stch-sidebar.pinned {\n      transform: translateX(0);\n    }\n    .stch-sidebar-panel {\n      width: 272px;\n      min-height: 360px;\n      max-height: calc(100vh - 170px);\n      overflow: hidden;\n      background: #172435;\n      border: 1px solid #31445b;\n      border-left: 0;\n      border-radius: 0 4px 4px 0;\n      display: flex;\n      flex-direction: column;\n    }\n    .stch-sidebar-handle {\n      position: absolute;\n      top: 0;\n      right: 0;\n      width: 32px;\n      height: 100%;\n      background: linear-gradient(180deg, #25445d, #1a2d40);\n      border: 1px solid #3f617b;\n      border-left: 0;\n      border-radius: 0 5px 5px 0;\n      color: #66c0f4;\n      cursor: pointer;\n      writing-mode: vertical-rl;\n      text-orientation: mixed;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      letter-spacing: 0;\n      user-select: none;\n      font-weight: bold;\n    }\n    .stch-sidebar-head {\n      display: flex;\n      align-items: center;\n      gap: 10px;\n      padding: 12px;\n      background: #202f43;\n      border-bottom: 1px solid #31445b;\n    }\n    .stch-sidebar-avatar {\n      width: 46px;\n      height: 46px;\n      object-fit: cover;\n      border: 1px solid #66c0f4;\n      background: #0b141f;\n      flex-shrink: 0;\n    }\n    .stch-sidebar-title {\n      min-width: 0;\n      flex: 1;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n    }\n    .stch-sidebar-name {\n      color: #fff;\n      font-size: 15px;\n      font-weight: bold;\n      line-height: 1.25;\n      text-align: center;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-sidebar-pin {\n      margin-left: auto;\n      background: #0e1621;\n      border: 1px solid #45556b;\n      color: #c7d5e0;\n      border-radius: 2px;\n      padding: 4px 7px;\n      cursor: pointer;\n      font-size: 12px;\n      flex-shrink: 0;\n    }\n    .stch-sidebar-pin:hover,\n    #stch-sidebar.pinned .stch-sidebar-pin {\n      color: #fff;\n      border-color: #66c0f4;\n    }\n    .stch-sidebar-body {\n      padding: 10px 12px 12px;\n      overflow-y: auto;\n      min-height: 0;\n    }\n    .stch-sidebar-row {\n      display: flex;\n      justify-content: space-between;\n      gap: 10px;\n      padding: 7px 0;\n      border-bottom: 1px solid rgba(69, 85, 107, 0.55);\n    }\n    .stch-sidebar-row:last-child {\n      border-bottom: 0;\n    }\n    .stch-sidebar-key {\n      color: #8f98a0;\n      white-space: nowrap;\n    }\n    .stch-sidebar-value {\n      color: #fff;\n      text-align: right;\n      min-width: 0;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-sidebar-progress {\n      height: 6px;\n      background: #0e1621;\n      border-radius: 6px;\n      overflow: hidden;\n      margin-top: 4px;\n      border: 1px solid #31445b;\n    }\n    .stch-sidebar-progress-bar {\n      height: 100%;\n      width: 0;\n      background: linear-gradient(90deg, #75b022, #66c0f4);\n    }\n    .stch-sidebar-status {\n      color: #8f98a0;\n      font-size: 12px;\n      margin-top: 9px;\n      line-height: 1.4;\n    }\n    .stch-sidebar-actions {\n      display: flex;\n      justify-content: flex-end;\n      margin-top: 10px;\n    }\n    .stch-sidebar-refresh {\n      background: linear-gradient(to bottom, #67c1f5 5%, #417a9b 95%);\n      color: #fff;\n      border: 0;\n      border-radius: 2px;\n      cursor: pointer;\n      padding: 5px 10px;\n      font-size: 12px;\n    }\n    .stch-sidebar-refresh:disabled {\n      opacity: 0.55;\n      cursor: not-allowed;\n    }\n\n    #stch-backdrop {\n      position: fixed;\n      inset: 0;\n      background: rgba(0,0,0,0.6);\n      z-index: 10000;\n      display: none;\n    }\n    #stch-modal {\n      position: fixed;\n      left: 50%; top: 20px;\n      transform: translateX(-50%);\n      width: 1060px; max-width: 95vw;\n      height: 92vh;\n      background: #1b2838;\n      color: #c6d4df;\n      z-index: 10001;\n      border-radius: 4px;\n      overflow: hidden;\n      display: flex;\n      flex-direction: column;\n      font-family: "Motiva Sans", Arial, sans-serif;\n      font-size: 14px;\n      box-shadow: 0 0 30px rgba(0,0,0,0.6);\n    }\n    #stch-modal .stch-header {\n      padding: 10px 16px;\n      border-bottom: 1px solid #45556b;\n      display: flex;\n      align-items: center;\n      background: #171a21;\n    }\n    #stch-modal .stch-header h2 {\n      margin: 0; font-size: 20px; flex: 1; color: #fff;\n    }\n    #stch-modal .stch-close {\n      cursor: pointer; font-size: 22px; color: #8f98a0;\n    }\n    #stch-modal .stch-close:hover { color: #fff; }\n    #stch-modal .stch-body {\n      flex: 1; overflow-y: hidden; padding: 12px 16px;\n      display: flex; flex-direction: column;\n      min-height: 0;\n    }\n    #stch-modal .stch-footer {\n      padding: 10px 16px;\n      background: #171a21;\n      border-top: 1px solid #45556b;\n      display: flex;\n      gap: 10px;\n      align-items: center;\n      flex-wrap: wrap;\n      font-size: 13px;\n    }\n    .stch-input {\n      background: #0e1621;\n      color: #fff;\n      border: 1px solid #45556b;\n      padding: 5px 8px;\n      border-radius: 2px;\n      width: 80px;\n      font-size: 14px;\n    }\n    .stch-input:focus { border-color: #66c0f4; outline: none; }\n    .stch-label { font-size: 14px; color: #8f98a0; }\n    .stch-btn {\n      padding: 8px 16px;\n      background: linear-gradient(to bottom, #75b022 5%, #588a1b 95%);\n      color: #fff;\n      border-radius: 2px;\n      cursor: pointer;\n      font-size: 15px;\n      user-select: none;\n    }\n    .stch-btn:hover { background: linear-gradient(to bottom, #8ed629 5%, #6aa621 95%); }\n    .stch-btn.disabled {\n      background: #2a3f5a;\n      color: #667;\n      cursor: not-allowed;\n      opacity: 0.6;\n    }\n    .stch-btn.alt {\n      background: linear-gradient(to bottom, #67c1f5 5%, #417a9b 95%);\n    }\n    .stch-btn.alt:hover {\n      background: linear-gradient(to bottom, #8ed8ff 5%, #5297b7 95%);\n    }\n    .stch-btn.stch-btn-danger {\n      background: linear-gradient(to bottom, #c04040 5%, #8b2020 95%);\n    }\n    .stch-btn.stch-btn-danger:hover {\n      background: linear-gradient(to bottom, #e05050 5%, #a03030 95%);\n    }\n\n    .stch-game-list {\n      max-height: 30vh;\n      overflow-y: auto;\n      border: 1px solid #2a3f5a;\n      border-radius: 3px;\n      background: rgba(0,0,0,0.2);\n    }\n    #stch-tab-scan.stch-foil-mode {\n      background: linear-gradient(180deg, rgba(70, 31, 82, 0.46), rgba(27, 40, 56, 0.98) 260px);\n      box-shadow: inset 0 0 0 1px rgba(193, 91, 196, 0.24);\n      border-radius: 3px;\n    }\n    #stch-tab-scan.stch-foil-mode .stch-game-list {\n      border-color: rgba(193, 91, 196, 0.42);\n      background: rgba(20, 11, 27, 0.34);\n    }\n    #stch-tab-scan.stch-foil-mode #stch-log {\n      background: #120d1b;\n      border: 1px solid rgba(193, 91, 196, 0.22);\n    }\n    #stch-tab-scan.stch-foil-mode .stch-progress-bar {\n      background: linear-gradient(to right, #8f55c2, #cf73c9);\n    }\n    #stch-tab-scan.stch-foil-mode .stch-cost,\n    #stch-tab-scan.stch-foil-mode .stch-appid {\n      color: #d78be8;\n    }\n    .stch-game-row {\n      padding: 6px 14px;\n      border-bottom: 1px solid rgba(69,85,107,0.4);\n      display: flex;\n      align-items: center;\n      gap: 12px;\n      font-size: 14px;\n      line-height: 1.4;\n    }\n    .stch-row-header {\n      color: #8f98a0;\n      font-size: 12px;\n      font-weight: bold;\n      border-bottom: 2px solid #45556b;\n      padding-bottom: 6px;\n      margin-bottom: 2px;\n    }\n    .stch-game-row:hover { background: rgba(103,193,245,0.08); }\n    .stch-game-row .stch-appid {\n      width: 56px;\n      flex-shrink: 0;\n      color: #66c0f4;\n      font-family: monospace;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-name {\n      flex: 1;\n      color: #e2e2e2;\n      font-size: 13px;\n      min-width: 0;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-game-row .stch-level {\n      width: 42px;\n      flex-shrink: 0;\n      color: #a1b053;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-cards {\n      width: 36px;\n      flex-shrink: 0;\n      color: #c6d4df;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-cost {\n      width: 68px;\n      flex-shrink: 0;\n      color: #75b022;\n      font-weight: bold;\n      font-size: 13px;\n      text-align: center;\n    }\n    .stch-game-row .stch-full {\n      width: 68px;\n      flex-shrink: 0;\n      color: #ffc902;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-lv5 {\n      width: 84px;\n      flex-shrink: 0;\n      color: #e74c3c;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-drops {\n      width: 36px;\n      flex-shrink: 0;\n      color: #8db7d7;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-order-cache-age {\n      width: 38px;\n      flex-shrink: 0;\n      color: #8f98a0;\n      font-size: 12px;\n      text-align: center;\n    }\n    .stch-game-row .stch-buy {\n      width: 60px;\n      flex-shrink: 0;\n      text-align: center;\n    }\n    .stch-game-row .stch-check {\n      width: 24px;\n      flex-shrink: 0;\n      text-align: center;\n      position: relative;\n      align-self: stretch;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      overflow: visible;\n    }\n    .stch-game-list:not(.stch-show-drops) .stch-drops { display: none; }\n    .stch-result-cb {\n      margin: 0;\n      cursor: pointer;\n      accent-color: #75b022;\n    }\n    .stch-check-hit {\n      position: absolute;\n      left: 50%;\n      top: 50%;\n      width: 36px;\n      height: 32px;\n      transform: translate(-50%, -50%);\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      cursor: pointer;\n      z-index: 1;\n    }\n    .stch-check-hit .stch-result-cb {\n      position: relative;\n      z-index: 2;\n    }\n    .stch-craft-list {\n      flex: 1;\n      min-height: 0;\n      max-height: none;\n    }\n    .stch-order-page-list {\n      flex: 1;\n      min-height: 0;\n      max-height: none;\n      width: 100%;\n      box-sizing: border-box;\n    }\n    .stch-order-tools {\n      margin-left: auto;\n    }\n    .stch-craft-row .stch-craft-available {\n      width: 64px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #ffc902;\n      font-size: 12px;\n    }\n    .stch-craft-row .stch-craft-count {\n      width: 74px;\n      flex-shrink: 0;\n      text-align: center;\n    }\n    .stch-craft-row .stch-craft-count input {\n      width: 48px;\n      box-sizing: border-box;\n      text-align: center;\n      padding: 4px;\n    }\n    .stch-craft-row .stch-craft-target {\n      width: 54px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #a1b053;\n      font-size: 12px;\n    }\n    .stch-craft-row .stch-craft-status {\n      width: 72px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #8f98a0;\n      font-size: 12px;\n    }\n    .stch-craft-row .stch-craft-status.ok { color: #75b022; }\n    .stch-craft-row .stch-craft-status.warn { color: #ffc902; }\n    .stch-craft-row .stch-craft-status.err { color: #c04040; }\n    .stch-craft-actions {\n      display: flex;\n      align-items: center;\n      gap: 10px;\n      margin-left: auto;\n    }\n    .stch-surplus-list {\n      flex: 1;\n      min-height: 0;\n      max-height: none;\n    }\n    .stch-surplus-main-toolbar {\n      gap: 12px;\n    }\n    .stch-surplus-action-row {\n      gap: 12px;\n      flex-wrap: wrap;\n      align-items: center;\n    }\n    .stch-surplus-action-spacer {\n      flex: 1 1 auto;\n      min-width: 16px;\n    }\n    .stch-surplus-action-row .stch-processing-selected-count {\n      margin-left: 0;\n    }\n    .stch-processing-selected-count {\n      width: auto;\n      min-width: 78px;\n      margin-left: auto;\n      margin-right: 0;\n      justify-content: flex-end;\n    }\n    .stch-surplus-action-buttons {\n      display: flex;\n      align-items: center;\n      gap: 8px;\n    }\n    .stch-surplus-action-buttons .stch-btn {\n      padding: 7px 12px;\n      font-size: 13px;\n      min-width: 56px;\n      text-align: center;\n      box-sizing: border-box;\n    }\n    .stch-surplus-mode-panel {\n      display: none;\n      flex-direction: column;\n      flex: 1;\n      min-height: 0;\n    }\n    .stch-surplus-mode-panel.active {\n      display: flex;\n    }\n    .stch-inventory-grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fill, 96px);\n      grid-auto-rows: 96px;\n      gap: 6px;\n      padding: 6px;\n      align-content: start;\n      justify-content: start;\n      box-sizing: border-box;\n    }\n    .stch-inventory-empty {\n      grid-column: 1 / -1;\n      min-height: 120px;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      color: #8f98a0;\n      font-size: 13px;\n    }\n    .stch-inv-tile {\n      position: relative;\n      aspect-ratio: 1 / 1;\n      min-width: 0;\n      background: #20252d;\n      border: 1px solid #3a3a3a;\n      cursor: pointer;\n      overflow: hidden;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.32);\n      user-select: none;\n    }\n    .stch-inv-tile:hover {\n      border-color: #66c0f4;\n      box-shadow: inset 0 0 14px rgba(102, 192, 244, 0.22), 0 0 0 1px rgba(102, 192, 244, 0.22);\n    }\n    .stch-inv-tile.selected {\n      border-color: #66c0f4 !important;\n      box-shadow: inset 0 0 0 2px rgba(102, 192, 244, 0.85), 0 0 0 1px rgba(102, 192, 244, 0.55);\n      background: #23384a;\n    }\n    .stch-inv-tile img {\n      width: 100%;\n      height: 100%;\n      object-fit: contain;\n      display: block;\n      pointer-events: none;\n    }\n    .stch-inv-placeholder {\n      padding: 8px;\n      color: #c7d5e0;\n      font-size: 12px;\n      line-height: 1.3;\n      text-align: center;\n      word-break: break-word;\n    }\n    .stch-inv-badge {\n      position: absolute;\n      right: 0;\n      top: 0;\n      max-width: calc(100% - 8px);\n      padding: 2px 5px;\n      background: rgba(52, 122, 166, 0.92);\n      color: #fff;\n      font-size: 12px;\n      line-height: 1.25;\n      font-weight: bold;\n      text-shadow: 0 1px 1px #000;\n      white-space: nowrap;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      z-index: 2;\n    }\n    .stch-inv-badge-left {\n      left: 0;\n      right: auto;\n      background: rgba(20, 27, 35, 0.86);\n      color: #8db7d7;\n    }\n    .stch-inv-badge-left.ok { color: #75b022; }\n    .stch-inv-badge-left.warn { color: #ffc902; }\n    .stch-inv-badge-left.info { color: #66c0f4; }\n    .stch-inv-gems {\n      position: absolute;\n      left: 0;\n      right: 0;\n      bottom: 20px;\n      color: #c7d5e0;\n      background: rgba(0, 0, 0, 0.42);\n      font-size: 11px;\n      line-height: 17px;\n      text-align: center;\n      text-shadow: 0 1px 1px #000;\n      z-index: 2;\n    }\n    .stch-inv-name {\n      position: absolute;\n      left: 0;\n      right: 0;\n      bottom: 0;\n      height: 20px;\n      padding: 2px 4px;\n      box-sizing: border-box;\n      color: #dfe3e6;\n      background: linear-gradient(180deg, rgba(10, 14, 20, 0.2), rgba(10, 14, 20, 0.88));\n      font-size: 11px;\n      line-height: 16px;\n      text-align: center;\n      white-space: nowrap;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      text-shadow: 0 1px 1px #000;\n      z-index: 2;\n    }\n    .stch-surplus-row .stch-name {\n      flex: 0 0 190px;\n    }\n    .stch-surplus-row .stch-surplus-card {\n      flex: 1;\n      min-width: 120px;\n      color: #e2e2e2;\n      font-size: 13px;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-surplus-row .stch-surplus-badge {\n      width: 72px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #a1b053;\n      font-size: 12px;\n    }\n    .stch-surplus-row .stch-surplus-num {\n      width: 48px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #c6d4df;\n      font-size: 12px;\n    }\n    .stch-surplus-row .stch-surplus-extra {\n      width: 70px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #75b022;\n      font-size: 12px;\n      font-weight: bold;\n    }\n    .stch-surplus-row .stch-surplus-assets {\n      width: 150px;\n      flex-shrink: 0;\n      color: #8db7d7;\n      font-family: "Courier New", monospace;\n      font-size: 11px;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-grind-list {\n      flex: 1;\n      min-height: 0;\n      max-height: none;\n    }\n    .stch-grind-row .stch-name {\n      flex: 0 0 150px;\n    }\n    .stch-grind-row .stch-grind-type {\n      width: 66px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #8db7d7;\n      font-size: 12px;\n    }\n    .stch-grind-row .stch-grind-item {\n      flex: 1;\n      min-width: 120px;\n      color: #e2e2e2;\n      font-size: 13px;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-grind-row .stch-grind-num {\n      width: 48px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #c6d4df;\n      font-size: 12px;\n    }\n    .stch-grind-row .stch-grind-price {\n      width: 70px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #ffc902;\n      font-size: 12px;\n    }\n    .stch-grind-row .stch-grind-action {\n      width: 72px;\n      flex-shrink: 0;\n      text-align: center;\n      color: #8f98a0;\n      font-size: 12px;\n      font-weight: bold;\n    }\n    .stch-grind-row .stch-grind-action.ok { color: #75b022; }\n    .stch-grind-row .stch-grind-action.warn { color: #ffc902; }\n    .stch-grind-row .stch-grind-action.info { color: #66c0f4; }\n    .stch-grind-row .stch-grind-assets {\n      width: 132px;\n      flex-shrink: 0;\n      color: #8db7d7;\n      font-family: "Courier New", monospace;\n      font-size: 11px;\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-seasonal-panel {\n      border: 1px solid #2a3f5a;\n      border-radius: 3px;\n      background: rgba(0,0,0,0.2);\n      padding: 12px;\n      margin-bottom: 10px;\n      color: #c6d4df;\n      line-height: 1.6;\n    }\n    .stch-seasonal-panel b { color: #fff; }\n    .stch-seasonal-note {\n      color: #8f98a0;\n      font-size: 12px;\n      margin-top: 8px;\n    }\n    .stch-seasonal-warning {\n      color: #ffc902;\n      font-size: 12px;\n      margin-top: 4px;\n    }\n    .stch-scan-actions {\n      display: flex;\n      align-items: center;\n      gap: 10px;\n      margin-bottom: 8px;\n    }\n    .stch-bulk-actions {\n      display: flex;\n      align-items: center;\n      gap: 10px;\n      margin-left: auto;\n    }\n    .stch-selected-count {\n      color: #8f98a0;\n      margin-left: auto;\n      width: 24px;\n      margin-right: 14px;\n      flex-shrink: 0;\n      display: flex;\n      justify-content: center;\n      white-space: nowrap;\n    }\n    .stch-selected-count.stch-processing-selected-count {\n      width: auto;\n      min-width: 78px;\n      margin-left: auto;\n      margin-right: 0;\n      justify-content: flex-end;\n    }\n    .stch-help {\n      cursor: help;\n      color: #8f98a0;\n      font-size: 12px;\n    }\n    .stch-sortable {\n      cursor: pointer;\n      user-select: none;\n    }\n    .stch-sortable:hover { color: #fff; }\n    .stch-sort-arrow { font-size: 10px; }\n    .stch-toolbar {\n      display: flex;\n      gap: 14px;\n      align-items: center;\n      margin-bottom: 8px;\n      flex-wrap: wrap;\n      font-size: 14px;\n      color: #8f98a0;\n    }\n    .stch-toolbar label { display: flex; align-items: center; gap: 4px; cursor: pointer; }\n    .stch-primary-label { color: #fff !important; font-weight: bold; }\n    .stch-foil-mode-label {\n      color: #d9a4e8;\n      font-weight: bold;\n    }\n    .stch-foil-mode-label input {\n      accent-color: #b75ac7;\n    }\n    .stch-foil-mode-label.active {\n      color: #f0c4f7;\n      text-shadow: 0 0 10px rgba(207, 115, 201, 0.35);\n    }\n    .stch-control-disabled {\n      color: #687682 !important;\n      font-weight: normal !important;\n    }\n    .stch-control-disabled .stch-input,\n    .stch-input:disabled {\n      color: #687682;\n      background: #111a25;\n      border-color: #2f3f51;\n      cursor: not-allowed;\n      opacity: 0.75;\n    }\n    .stch-foil-mode-label.disabled {\n      color: #7d6685;\n      text-shadow: none;\n      cursor: not-allowed;\n    }\n\n    .stch-status-text { color: #8db7d7; font-size: 13px; padding: 6px 0; min-height: 20px; }\n\n    .stch-tabs {\n      display: flex;\n      gap: 2px;\n      margin-bottom: 10px;\n      border-bottom: 1px solid #45556b;\n    }\n    .stch-tab {\n      padding: 6px 16px;\n      background: rgba(0,0,0,0.3);\n      color: #8f98a0;\n      cursor: pointer;\n      border-radius: 3px 3px 0 0;\n      font-size: 14px;\n      user-select: none;\n    }\n    .stch-tab:hover { color: #fff; background: rgba(103,193,245,0.1); }\n    .stch-tab.active { color: #fff; background: #1b2838; border: 1px solid #45556b; border-bottom-color: #1b2838; }\n    .stch-tab-disabled { color: #555; cursor: not-allowed; opacity: 0.5; pointer-events: none; }\n    .stch-tab-right { margin-left: auto; }\n    .stch-tab-content { display: none; position: relative; }\n    .stch-tab-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }\n\n    .stch-onboarding {\n      position: absolute;\n      inset: 0;\n      z-index: 10;\n      display: flex;\n      flex-direction: column;\n      overflow-y: auto;\n      background: #1b2838;\n      padding: 24px 28px;\n    }\n    .stch-onboarding h3 {\n      margin: 0 0 8px;\n      color: #fff;\n      font-size: 22px;\n    }\n    .stch-onboarding-intro {\n      margin: 0 0 20px;\n      color: #8db7d7;\n      line-height: 1.7;\n    }\n    .stch-onboarding-step {\n      padding: 12px 0;\n      border-top: 1px solid #2a3f5a;\n      line-height: 1.65;\n    }\n    .stch-onboarding-step b {\n      display: block;\n      margin-bottom: 2px;\n      color: #fff;\n      font-size: 15px;\n    }\n    .stch-onboarding-note {\n      margin-top: 8px;\n      padding: 10px 12px;\n      border-left: 3px solid #ffc902;\n      background: rgba(0,0,0,0.2);\n      color: #c6d4df;\n      line-height: 1.6;\n    }\n    .stch-onboarding-actions {\n      display: flex;\n      justify-content: flex-end;\n      margin-top: auto;\n      padding-top: 20px;\n    }\n\n    .stch-bl-form {\n      display: flex;\n      gap: 10px;\n      align-items: center;\n      margin-bottom: 10px;\n      flex-wrap: wrap;\n    }\n    .stch-bl-list {\n      flex: 1;\n      min-height: 0;\n      overflow-y: auto;\n      border: 1px solid #2a3f5a;\n      border-radius: 3px;\n      background: rgba(0,0,0,0.2);\n    }\n    .stch-bl-row {\n      padding: 6px 14px;\n      border-bottom: 1px solid rgba(69,85,107,0.4);\n      display: flex;\n      align-items: center;\n      gap: 12px;\n      font-size: 14px;\n    }\n    .stch-bl-row:hover { background: rgba(103,193,245,0.08); }\n    .stch-bl-row .stch-bl-id { width: 70px; color: #66c0f4; font-family: monospace; }\n    .stch-bl-row .stch-bl-name { flex: 1; color: #e2e2e2; }\n    .stch-bl-row .stch-bl-source { width: 50px; color: #8f98a0; font-size: 12px; text-align: center; }\n    .stch-bl-row .stch-bl-fixed-col { width: 40px; color: #75b022; font-size: 12px; text-align: center; }\n    .stch-bl-row .stch-bl-days { width: 45px; color: #8f98a0; font-size: 12px; text-align: center; }\n    .stch-bl-row .stch-bl-cb-hd { width: 24px; flex-shrink: 0; text-align: center; }\n    .stch-bl-cb { cursor: pointer; accent-color: #75b022; }\n    .stch-bl-count { color: #8f98a0; font-size: 12px; margin-top: 6px; }\n    .stch-bl-sep { color: #45556b; font-size: 12px; margin: 4px 0; padding-left: 8px; }\n    .stch-bl-fixed { color: #75b022; }\n\n    .stch-bl-result { color: #75b022; font-size: 14px; }\n\n    .stch-log-resizer {\n      flex: 0 0 9px;\n      height: 9px;\n      margin: 6px 0 4px;\n      cursor: row-resize;\n      position: relative;\n      border-radius: 3px;\n    }\n    .stch-log-resizer::before {\n      content: "";\n      position: absolute;\n      left: 0;\n      right: 0;\n      top: 4px;\n      height: 1px;\n      background: #45556b;\n    }\n    .stch-log-resizer::after {\n      content: "";\n      position: absolute;\n      left: 50%;\n      top: 2px;\n      width: 42px;\n      height: 5px;\n      transform: translateX(-50%);\n      border-top: 1px solid #66c0f4;\n      border-bottom: 1px solid #66c0f4;\n      opacity: 0.55;\n    }\n    .stch-log-resizer:hover,\n    .stch-log-resizer.dragging {\n      background: rgba(103, 193, 245, 0.08);\n    }\n    body.stch-log-resizing {\n      cursor: row-resize;\n      user-select: none;\n    }\n\n    #stch-log,\n    #stch-craft-log,\n    #stch-seasonal-log,\n    #stch-surplus-log,\n    #stch-grind-log {\n      margin-top: 0;\n      flex: 1;\n      min-height: 0;\n      overflow-y: auto;\n      background: #0e1621;\n      border-radius: 3px;\n      padding: 10px;\n      font-family: "Courier New", monospace;\n      font-size: 13px;\n      line-height: 1.5;\n      color: #b0c3d9;\n      white-space: pre-wrap;\n      word-break: break-all;\n    }\n    #stch-craft-log,\n    #stch-seasonal-log,\n    #stch-surplus-log,\n    #stch-grind-log {\n      flex: 0 0 19vh;\n    }\n    #stch-log .ok, #stch-craft-log .ok, #stch-seasonal-log .ok, #stch-surplus-log .ok, #stch-grind-log .ok { color: #75b022; }\n    #stch-log .warn, #stch-craft-log .warn, #stch-seasonal-log .warn, #stch-surplus-log .warn, #stch-grind-log .warn { color: #ffc902; }\n    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-seasonal-log .warn-ip, #stch-surplus-log .warn-ip, #stch-grind-log .warn-ip { color: #fff; }\n    #stch-log .err, #stch-craft-log .err, #stch-seasonal-log .err, #stch-surplus-log .err, #stch-grind-log .err { color: #c04040; }\n    #stch-log .info, #stch-craft-log .info, #stch-seasonal-log .info, #stch-surplus-log .info, #stch-grind-log .info { color: #67c1f5; }\n\n    .stch-progress {\n      height: 20px;\n      background: #0e1621;\n      border-radius: 2px;\n      overflow: hidden;\n      margin: 8px 0;\n      position: relative;\n    }\n    .stch-progress-bar {\n      height: 100%;\n      background: linear-gradient(to right, #75b022, #8ed629);\n      transition: width 0.2s;\n    }\n    .stch-progress-text {\n      position: absolute;\n      inset: 0;\n      text-align: center;\n      font-size: 13px;\n      line-height: 20px;\n      color: #fff;\n    }\n\n    .stch-summary {\n      font-size: 14px;\n      color: #8f98a0;\n      margin: 8px 0;\n      display: flex;\n      align-items: center;\n      gap: 12px;\n    }\n    .stch-summary-text { min-width: 0; }\n    .stch-summary b { color: #fff; }\n\n    #stch-order-dialog-backdrop {\n      position: fixed;\n      inset: 0;\n      z-index: 10020;\n      background: rgba(0,0,0,0.65);\n      display: flex;\n      align-items: center;\n      justify-content: center;\n    }\n    .stch-order-dialog {\n      width: 620px;\n      max-width: 92vw;\n      max-height: 82vh;\n      display: flex;\n      flex-direction: column;\n      background: #1b2838;\n      border: 1px solid #45556b;\n      border-radius: 4px;\n      box-shadow: 0 12px 40px rgba(0,0,0,0.7);\n      color: #c6d4df;\n    }\n    .stch-order-dialog h3 {\n      margin: 0;\n      padding: 14px 16px;\n      color: #fff;\n      font-size: 18px;\n      border-bottom: 1px solid #45556b;\n    }\n    .stch-order-summary {\n      padding: 12px 16px;\n      line-height: 1.7;\n    }\n    .stch-order-summary b { color: #fff; }\n    .stch-order-list {\n      margin: 0 16px;\n      max-height: 42vh;\n      overflow-y: auto;\n      border: 1px solid #2a3f5a;\n      background: #0e1621;\n    }\n    .stch-order-item {\n      display: grid;\n      grid-template-columns: minmax(0, 1fr) 55px 70px;\n      gap: 10px;\n      padding: 7px 10px;\n      border-bottom: 1px solid rgba(69,85,107,0.4);\n      font-size: 12px;\n    }\n    .stch-order-item span:first-child {\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .stch-processing-dialog-item.sell {\n      grid-template-columns: minmax(0, 1fr) 58px 95px 95px;\n    }\n    .stch-processing-dialog-item.gem {\n      grid-template-columns: minmax(0, 1fr) 115px 78px;\n    }\n    .stch-craft-dialog-item {\n      grid-template-columns: minmax(0, 1fr) 70px 70px 70px;\n    }\n    .stch-order-note {\n      padding: 10px 16px;\n      color: #ffc902;\n      font-size: 12px;\n    }\n    .stch-order-dialog-actions {\n      display: flex;\n      justify-content: flex-end;\n      gap: 10px;\n      padding: 12px 16px;\n      border-top: 1px solid #45556b;\n    }\n';
 
   // src/globals.js
   var unsafeWindow = typeof globalThis.unsafeWindow !== "undefined" ? globalThis.unsafeWindow : window;
@@ -40,7 +40,7 @@
 
   // src/config.js
   var DEFAULT_CONFIG = {
-    configVersion: 13,
+    configVersion: 14,
     threshold: 5,
     scanInterval: 0,
     requestInterval: 330,
@@ -68,6 +68,8 @@
     seasonalInterval: 200,
     surplusOnlyMaxed: false,
     surplusItemMode: "card",
+    surplusSellPriceSource: "lowest",
+    surplusSellPriceAdjustment: 0,
     grindOnlyRecommended: true,
     grindIncludeSurplusCards: true
   };
@@ -130,6 +132,7 @@
     surplusScanning: false,
     surplusStopRequested: false,
     surplusQueue: null,
+    surplusActionRunning: false,
     grindResults: [],
     selectedGrindResults: /* @__PURE__ */ new Set(),
     grindScanning: false,
@@ -1675,13 +1678,26 @@
     const selectedCount = mode === "card" ? state.selectedSurplusResults?.size || 0 : state.selectedGrindResults?.size || 0;
     const selectedLabel = document.getElementById("stch-surplus-selected-count");
     if (selectedLabel) selectedLabel.textContent = `已选择 ${selectedCount} 项`;
+    const list = document.getElementById(mode === "card" ? "stch-surplus-list" : "stch-grind-list");
+    const visibleTiles = list ? [...list.querySelectorAll(".stch-inv-tile")] : [];
+    const selectedVisibleCount = visibleTiles.filter((tile) => tile.classList.contains("selected")).length;
+    const allVisibleSelected = visibleTiles.length > 0 && selectedVisibleCount === visibleTiles.length;
+    const selectAll = document.getElementById("stch-surplus-select-all-btn");
+    if (selectAll) {
+      selectAll.textContent = allVisibleSelected ? "取消全选" : "全选";
+      selectAll.classList.toggle("disabled", visibleTiles.length === 0 || isSharedActionBusy());
+    }
     const disabled = selectedCount === 0 || isSharedActionBusy();
     document.getElementById("stch-surplus-sell-btn")?.classList.toggle("disabled", disabled);
     document.getElementById("stch-surplus-gem-btn")?.classList.toggle("disabled", disabled);
+    ["stch-surplus-sell-price-source", "stch-surplus-sell-adjustment"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = isSharedActionBusy();
+    });
   }
   function updateSeasonalActionState() {
     const seasonalBusy = state.seasonalActionRunning;
-    const otherBusy = state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.surplusScanning || state.grindScanning;
+    const otherBusy = state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.surplusActionRunning || state.surplusScanning || state.grindScanning;
     const plan = (() => {
       const targetLevel = clampNumber(
         document.getElementById("stch-seasonal-target")?.value,
@@ -1708,7 +1724,7 @@
   }
   function updateCraftActionState() {
     const craftBusy = state.craftScanning || state.craftActionRunning;
-    const otherBusy = state.scanning || state.bulkActionRunning || state.orderActionRunning || state.seasonalActionRunning || state.surplusScanning || state.grindScanning;
+    const otherBusy = state.scanning || state.bulkActionRunning || state.orderActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.surplusScanning || state.grindScanning;
     const hasResults = state.craftResults.length > 0;
     const hasPlan = state.craftResults.some((r) => r.selected && r.maxCraftable > 0 && (state.cfg.craftMode === "max" ? r.maxCraftable : parseInt(r.craftCount, 10) || 0) > 0);
     document.getElementById("stch-craft-scan-btn")?.classList.toggle(
@@ -1737,7 +1753,7 @@
   }
   function updateSurplusActionState() {
     const surplusBusy = state.surplusScanning;
-    const otherBusy = state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.grindScanning;
+    const otherBusy = state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.grindScanning;
     document.getElementById("stch-surplus-scan-btn")?.classList.toggle(
       "disabled",
       surplusBusy || otherBusy
@@ -1754,7 +1770,7 @@
   }
   function updateGrindActionState() {
     const grindBusy = state.grindScanning;
-    const otherBusy = state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusScanning;
+    const otherBusy = state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.surplusScanning;
     document.getElementById("stch-grind-scan-btn")?.classList.toggle(
       "disabled",
       grindBusy || otherBusy
@@ -1770,7 +1786,7 @@
     updateSurplusProcessingActionState();
   }
   function isSharedActionBusy() {
-    return state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusScanning || state.grindScanning;
+    return state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.surplusScanning || state.grindScanning;
   }
   function updateBulkActionState() {
     const selectedCount = getSelectedResults().length;
@@ -3177,7 +3193,7 @@
     const selectedCount = state.craftResults.filter((result) => result.selected).length;
     selectAll.checked = selectedCount === state.craftResults.length;
     selectAll.indeterminate = selectedCount > 0 && selectedCount < state.craftResults.length;
-    selectAll.disabled = state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusScanning || state.grindScanning;
+    selectAll.disabled = state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.surplusScanning || state.grindScanning;
     const applyCraftSelectAll = (checked) => {
       state.craftResults.forEach((result) => {
         if (result.maxCraftable <= 0) return;
@@ -3224,7 +3240,7 @@
       const displayedCraftCount = state.cfg.craftMode === "max" ? result.maxCraftable : Math.max(0, Math.min(result.maxCraftable, result.craftCount || 0));
       countInput.value = String(displayedCraftCount);
       countInput.title = state.cfg.craftMode === "max" ? "一次提交当前可合成最大次数" : "输入本次要逐级合成的次数";
-      countInput.disabled = state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusScanning || state.grindScanning || state.cfg.craftMode === "max" || result.maxCraftable <= 0;
+      countInput.disabled = state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.surplusScanning || state.grindScanning || state.cfg.craftMode === "max" || result.maxCraftable <= 0;
       countCell.appendChild(countInput);
       const target = createTextSpan(
         "stch-craft-target",
@@ -3240,7 +3256,7 @@
       checkbox.className = "stch-result-cb";
       checkbox.type = "checkbox";
       checkbox.checked = !!result.selected;
-      checkbox.disabled = state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusScanning || state.grindScanning || result.maxCraftable <= 0;
+      checkbox.disabled = state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.surplusScanning || state.grindScanning || result.maxCraftable <= 0;
       checkCell.appendChild(createCheckboxHit(checkbox));
       const applyCraftChecked = (checked) => {
         result.selected = checked;
@@ -3284,7 +3300,7 @@
     updateCraftActionState();
   }
   function setAllCraftCounts(mode) {
-    if (state.craftScanning || state.craftActionRunning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.seasonalActionRunning || state.surplusScanning || state.grindScanning) {
+    if (state.craftScanning || state.craftActionRunning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.surplusScanning || state.grindScanning) {
       return;
     }
     if (mode === "one" && state.cfg.craftMode === "max") return;
@@ -3300,7 +3316,7 @@
     renderCraftResults();
   }
   async function startCraftScan() {
-    if (state.craftScanning || state.craftActionRunning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.seasonalActionRunning || state.surplusScanning || state.grindScanning) {
+    if (state.craftScanning || state.craftActionRunning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.surplusScanning || state.grindScanning) {
       return;
     }
     const profileUrl = getProfileUrl();
@@ -3564,7 +3580,7 @@
     throw error;
   }
   async function submitCraftPlan() {
-    if (state.craftScanning || state.craftActionRunning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.seasonalActionRunning || state.surplusScanning || state.grindScanning) {
+    if (state.craftScanning || state.craftActionRunning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.surplusScanning || state.grindScanning) {
       return;
     }
     const plan = getCraftPlan();
@@ -3954,7 +3970,7 @@
     return data;
   }
   async function startSeasonalPurchase() {
-    if (state.seasonalActionRunning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.surplusScanning || state.grindScanning) {
+    if (state.seasonalActionRunning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.surplusActionRunning || state.surplusScanning || state.grindScanning) {
       return;
     }
     const plan = getSeasonalPlan();
@@ -4136,6 +4152,7 @@
       groupMap.set(badgeKey, group);
     }
     if (!group.gameName) group.gameName = getCardGameName(description);
+    const gemValue = parseGemValueFromDescription(description);
     let card = group.cardsByHash.get(marketHashName);
     if (!card) {
       card = {
@@ -4147,6 +4164,7 @@
         imageUrl: getDescriptionImageUrl(description),
         nameColor: getDescriptionColor(description, "name_color"),
         backgroundColor: getDescriptionColor(description, "background_color"),
+        gemValue,
         totalCount: 0,
         assets: []
       };
@@ -4155,6 +4173,8 @@
       if (nameKey && !group.cardsByName.has(nameKey)) {
         group.cardsByName.set(nameKey, card);
       }
+    } else if (!card.gemValue && gemValue) {
+      card.gemValue = gemValue;
     }
     const amount = getAssetAmount(asset);
     card.totalCount += amount;
@@ -4165,6 +4185,7 @@
       classid: String(asset.classid || ""),
       instanceid: String(asset.instanceid || ""),
       amount,
+      gemValue,
       marketable: Number(description.marketable) === 1,
       tradable: Number(description.tradable) === 1
     });
@@ -4355,6 +4376,10 @@
         0
       );
       const assetSummary = summarizeAssetIds(surplusAssets);
+      const totalGems = surplusAssets.reduce(
+        (sum, asset) => sum + (asset.selectedAmount || 0) * (asset.gemValue || inventoryCard.gemValue || 0),
+        0
+      );
       results.push({
         appid: group.appid,
         isFoil: group.isFoil,
@@ -4367,6 +4392,8 @@
         imageUrl: inventoryCard.imageUrl || "",
         nameColor: inventoryCard.nameColor || "",
         backgroundColor: inventoryCard.backgroundColor || "",
+        gemValue: inventoryCard.gemValue || 0,
+        totalGems,
         inventoryCount: inventoryCard.totalCount,
         reservedCount: reservePerCard,
         surplusCount,
@@ -4400,42 +4427,22 @@
       (result) => selected.has(getSurplusResultKey(result))
     );
   }
+  function setAllVisibleSurplusSelection(selected) {
+    if (!state.selectedSurplusResults) state.selectedSurplusResults = /* @__PURE__ */ new Set();
+    const visible = getVisibleSurplusResults();
+    for (const result of visible) {
+      const key = getSurplusResultKey(result);
+      if (selected) state.selectedSurplusResults.add(key);
+      else state.selectedSurplusResults.delete(key);
+    }
+    renderSurplusResults();
+  }
   function pruneSelectedSurplusResults(visible) {
     const selected = state.selectedSurplusResults || /* @__PURE__ */ new Set();
     const visibleKeys = new Set(visible.map(getSurplusResultKey));
     for (const key of [...selected]) {
       if (!visibleKeys.has(key)) selected.delete(key);
     }
-  }
-  function getFirstSelectedAsset(result) {
-    return (result.assets || []).find((asset) => asset.assetid) || null;
-  }
-  function getInventoryAssetUrl(asset) {
-    const profileUrl = getProfileUrl();
-    const assetid = String(asset?.assetid || "");
-    if (!profileUrl || !assetid) return "";
-    const contextid = String(asset?.contextid || "6");
-    return `${profileUrl}/inventory#753_${contextid}_${assetid}`;
-  }
-  function openUrlBatch(urls, log5) {
-    const uniqueUrls = [...new Set(urls.filter(Boolean))];
-    if (uniqueUrls.length === 0) return 0;
-    const openCount = Math.min(uniqueUrls.length, 8);
-    if (uniqueUrls.length > openCount) {
-      log5(`已选择 ${uniqueUrls.length} 个入口，本次先打开前 ${openCount} 个，避免浏览器拦截`, "warn");
-    }
-    uniqueUrls.slice(0, openCount).forEach((url) => window.open(url, "_blank"));
-    return openCount;
-  }
-  function copyAssetIds(results) {
-    const text = results.flatMap((result) => result.assets || []).map(
-      (asset) => asset.selectedAmount > 1 ? `${asset.assetid}x${asset.selectedAmount}` : asset.assetid
-    ).filter(Boolean).join("\n");
-    if (text && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch(() => {
-      });
-    }
-    return text;
   }
   function updateSurplusSummary() {
     const row = document.getElementById("stch-surplus-summary-row");
@@ -4532,40 +4539,8 @@ ${result.assetTitle}` : ""
     updateSurplusSummary();
     updateSurplusActionState();
   }
-  function openSelectedSurplusSellTargets() {
-    const selected = getSelectedSurplusResults();
-    if (selected.length === 0) {
-      surplusLog2("请先选择要出售的卡牌", "warn");
-      return;
-    }
-    const urls = selected.filter((result) => result.marketHashName && result.marketableCount > 0).map((result) => `https://steamcommunity.com/market/listings/753/${encodeURIComponent(result.marketHashName)}`);
-    const opened = openUrlBatch(urls, surplusLog2);
-    if (opened > 0) {
-      surplusLog2(`已打开 ${opened} 个市场页面；不会自动上架出售，请在 Steam 页面确认价格和数量`, "ok");
-    } else {
-      surplusLog2("选中卡牌中没有可出售的市场条目", "warn");
-    }
-  }
-  function openSelectedSurplusGemTargets() {
-    const selected = getSelectedSurplusResults();
-    if (selected.length === 0) {
-      surplusLog2("请先选择要转化宝石的卡牌", "warn");
-      return;
-    }
-    const assetText = copyAssetIds(selected);
-    const urls = selected.map(getFirstSelectedAsset).map(getInventoryAssetUrl);
-    const opened = openUrlBatch(urls, surplusLog2);
-    if (opened > 0) {
-      surplusLog2(
-        `已打开 ${opened} 个库存定位入口${assetText ? "，并尝试复制资产 ID" : ""}；不会自动销毁物品，请在 Steam 页面确认转化宝石`,
-        "ok"
-      );
-    } else {
-      surplusLog2("没有找到可定位的资产 ID", "warn");
-    }
-  }
   async function startSurplusScan() {
-    if (state.surplusScanning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.grindScanning) {
+    if (state.surplusScanning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.grindScanning) {
       return;
     }
     if (location.hostname !== "steamcommunity.com") {
@@ -5040,42 +5015,22 @@ ${result.assetTitle}` : ""
       (item) => selected.has(getGrindResultKey(item))
     );
   }
+  function setAllVisibleGrindSelection(selected) {
+    if (!state.selectedGrindResults) state.selectedGrindResults = /* @__PURE__ */ new Set();
+    const visible = getVisibleGrindResults();
+    for (const item of visible) {
+      const key = getGrindResultKey(item);
+      if (selected) state.selectedGrindResults.add(key);
+      else state.selectedGrindResults.delete(key);
+    }
+    renderGrindResults();
+  }
   function pruneSelectedGrindResults(visible) {
     const selected = state.selectedGrindResults || /* @__PURE__ */ new Set();
     const visibleKeys = new Set(visible.map(getGrindResultKey));
     for (const key of [...selected]) {
       if (!visibleKeys.has(key)) selected.delete(key);
     }
-  }
-  function getFirstSelectedAsset2(item) {
-    return (item.assets || []).find((asset) => asset.assetid) || null;
-  }
-  function getInventoryAssetUrl2(asset) {
-    const profileUrl = getProfileUrl();
-    const assetid = String(asset?.assetid || "");
-    if (!profileUrl || !assetid) return "";
-    const contextid = String(asset?.contextid || "6");
-    return `${profileUrl}/inventory#753_${contextid}_${assetid}`;
-  }
-  function openUrlBatch2(urls, log5) {
-    const uniqueUrls = [...new Set(urls.filter(Boolean))];
-    if (uniqueUrls.length === 0) return 0;
-    const openCount = Math.min(uniqueUrls.length, 8);
-    if (uniqueUrls.length > openCount) {
-      log5(`已选择 ${uniqueUrls.length} 个入口，本次先打开前 ${openCount} 个，避免浏览器拦截`, "warn");
-    }
-    uniqueUrls.slice(0, openCount).forEach((url) => window.open(url, "_blank"));
-    return openCount;
-  }
-  function copyAssetIds2(items) {
-    const text = items.flatMap((item) => item.assets || []).map(
-      (asset) => asset.amount > 1 ? `${asset.assetid}x${asset.amount}` : asset.assetid
-    ).filter(Boolean).join("\n");
-    if (text && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch(() => {
-      });
-    }
-    return text;
   }
   function updateGrindSummary() {
     const row = document.getElementById("stch-grind-summary-row");
@@ -5187,40 +5142,8 @@ ${assetSummary.title}` : ""
     updateGrindSummary();
     updateGrindActionState();
   }
-  function openSelectedGrindSellTargets() {
-    const selected = getSelectedGrindResults();
-    if (selected.length === 0) {
-      grindLog("请先选择要出售的物品", "warn");
-      return;
-    }
-    const urls = selected.filter((item) => item.marketHashName && item.marketableCount > 0).map((item) => `https://steamcommunity.com/market/listings/753/${encodeURIComponent(item.marketHashName)}`);
-    const opened = openUrlBatch2(urls, grindLog);
-    if (opened > 0) {
-      grindLog(`已打开 ${opened} 个市场页面；不会自动上架出售，请在 Steam 页面确认价格和数量`, "ok");
-    } else {
-      grindLog("选中物品中没有可出售的市场条目", "warn");
-    }
-  }
-  function openSelectedGrindGemTargets() {
-    const selected = getSelectedGrindResults();
-    if (selected.length === 0) {
-      grindLog("请先选择要转化宝石的物品", "warn");
-      return;
-    }
-    const assetText = copyAssetIds2(selected);
-    const urls = selected.map(getFirstSelectedAsset2).map(getInventoryAssetUrl2);
-    const opened = openUrlBatch2(urls, grindLog);
-    if (opened > 0) {
-      grindLog(
-        `已打开 ${opened} 个库存定位入口${assetText ? "，并尝试复制资产 ID" : ""}；不会自动销毁物品，请在 Steam 页面确认转化宝石`,
-        "ok"
-      );
-    } else {
-      grindLog("没有找到可定位的资产 ID", "warn");
-    }
-  }
   async function startGrindScan() {
-    if (state.grindScanning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusScanning) {
+    if (state.grindScanning || state.scanning || state.bulkActionRunning || state.orderActionRunning || state.craftScanning || state.craftActionRunning || state.seasonalActionRunning || state.surplusActionRunning || state.surplusScanning) {
       return;
     }
     if (location.hostname !== "steamcommunity.com") {
@@ -5358,6 +5281,526 @@ ${assetSummary.title}` : ""
     state.grindQueue?.stop();
     grindLog("已请求停止扫描", "warn");
     updateGrindActionState();
+  }
+
+  // src/features/item-actions.js
+  function getProcessingMode() {
+    const value = document.getElementById("stch-surplus-item-mode")?.value || state.cfg.surplusItemMode || "card";
+    return ["card", "background", "emoticon"].includes(value) ? value : "card";
+  }
+  function getProcessingUi(mode = getProcessingMode()) {
+    return mode === "card" ? {
+      log: surplusStatus.log,
+      setStatus: surplusStatus.setStatus,
+      emptySell: "请先选择要出售的卡牌",
+      emptyGem: "请先选择要转化宝石的卡牌"
+    } : {
+      log: grindStatus.log,
+      setStatus: grindStatus.setStatus,
+      emptySell: "请先选择要出售的物品",
+      emptyGem: "请先选择要转化宝石的物品"
+    };
+  }
+  function getSellPriceControls() {
+    const configuredPriceSource = document.getElementById("stch-surplus-sell-price-source")?.value || state.cfg.surplusSellPriceSource || "lowest";
+    const priceSource = ["lowest", "median", "highest"].includes(configuredPriceSource) ? configuredPriceSource : "lowest";
+    const adjustmentInput = document.getElementById("stch-surplus-sell-adjustment");
+    const adjustmentValue = adjustmentInput ? parseFloat(adjustmentInput.value) : state.cfg.surplusSellPriceAdjustment;
+    const adjustmentCents = Math.round(
+      (Number.isFinite(adjustmentValue) ? adjustmentValue : 0) * 100
+    );
+    return { priceSource, adjustmentCents };
+  }
+  function getActionQueue(ui) {
+    const cfg = state.cfg;
+    return new RequestQueue(
+      cfg.requestInterval,
+      cfg.batchSize,
+      cfg.batchPause,
+      state,
+      ui.setStatus,
+      ui.log,
+      cfg.scanInterval
+    );
+  }
+  function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  function getAssetQuantity(asset, field = "amount") {
+    return Math.max(1, parseInt(asset?.[field], 10) || 1);
+  }
+  function getSelectedGroups(mode) {
+    return mode === "card" ? getSelectedSurplusResults() : getSelectedGrindResults();
+  }
+  function clearSelection(mode) {
+    if (mode === "card") {
+      state.selectedSurplusResults = /* @__PURE__ */ new Set();
+      renderSurplusResults();
+    } else {
+      state.selectedGrindResults = /* @__PURE__ */ new Set();
+      renderGrindResults();
+    }
+  }
+  function makeSellGroups(mode) {
+    const selected = getSelectedGroups(mode);
+    if (mode === "card") {
+      return selected.map((result) => {
+        const assets = (result.assets || []).filter((asset) => asset.assetid && asset.marketable).map((asset) => ({
+          assetid: String(asset.assetid || ""),
+          contextid: String(asset.contextid || "6"),
+          amount: getAssetQuantity(asset, "selectedAmount")
+        }));
+        return {
+          gameName: result.gameName || "",
+          itemName: result.cardName || result.marketHashName || "未知卡牌",
+          marketHashName: result.marketHashName || "",
+          quantity: assets.reduce((sum, asset) => sum + asset.amount, 0),
+          assets
+        };
+      });
+    }
+    return selected.map((item) => {
+      const assets = (item.assets || []).filter((asset) => asset.assetid && asset.marketable).map((asset) => ({
+        assetid: String(asset.assetid || ""),
+        contextid: String(asset.contextid || "6"),
+        amount: getAssetQuantity(asset, "amount")
+      }));
+      return {
+        gameName: item.gameName || "",
+        itemName: item.itemName || item.marketHashName || "未知物品",
+        marketHashName: item.marketHashName || "",
+        quantity: assets.reduce((sum, asset) => sum + asset.amount, 0),
+        assets
+      };
+    });
+  }
+  function makeGemAssets(mode) {
+    const selected = getSelectedGroups(mode);
+    if (mode === "card") {
+      return selected.flatMap(
+        (result) => (result.assets || []).map((asset) => ({
+          gameName: result.gameName || "",
+          itemName: result.cardName || result.marketHashName || "未知卡牌",
+          assetid: String(asset.assetid || ""),
+          contextid: String(asset.contextid || "6"),
+          selectedAmount: getAssetQuantity(asset, "selectedAmount"),
+          assetAmount: getAssetQuantity(asset, "amount"),
+          estimatedGems: (asset.gemValue || result.gemValue || 0) * getAssetQuantity(asset, "selectedAmount")
+        }))
+      );
+    }
+    return selected.flatMap(
+      (item) => (item.assets || []).map((asset) => ({
+        gameName: item.gameName || "",
+        itemName: item.itemName || item.marketHashName || "未知物品",
+        assetid: String(asset.assetid || ""),
+        contextid: String(asset.contextid || "6"),
+        selectedAmount: getAssetQuantity(asset, "amount"),
+        assetAmount: getAssetQuantity(asset, "amount"),
+        estimatedGems: (item.gemValue || 0) * getAssetQuantity(asset, "amount")
+      }))
+    );
+  }
+  async function getSellBasePrice(group, priceSource, queue, ui, index, total, cache) {
+    if (cache.has(group.marketHashName)) return cache.get(group.marketHashName);
+    let basePriceCents = null;
+    if (priceSource === "highest") {
+      ui.setStatus(`读取求购最高 ${index + 1}/${total}: ${group.itemName}`);
+      basePriceCents = await fetchHighestBuyPrice(group.marketHashName);
+    } else {
+      ui.setStatus(`读取出售参考价 ${index + 1}/${total}: ${group.itemName}`);
+      const price = await priceCard(group.marketHashName, queue);
+      if (priceSource === "lowest") {
+        basePriceCents = price?.priceSource === "lowest" ? price.lowestSellCents : null;
+      } else {
+        basePriceCents = Number.isFinite(price?.medianCents) && price.medianCents > 0 ? price.medianCents : null;
+      }
+    }
+    const value = Number.isFinite(basePriceCents) && basePriceCents > 0 ? basePriceCents : null;
+    cache.set(group.marketHashName, value);
+    return value;
+  }
+  async function buildSellPlan(mode, ui, queue) {
+    const { priceSource, adjustmentCents } = getSellPriceControls();
+    const minimumBuyerCents = getMarketMinimumPriceCents();
+    const priceCache = /* @__PURE__ */ new Map();
+    const plan = [];
+    const skipped = {
+      missingHash: 0,
+      unmarketable: 0,
+      missingPrice: 0,
+      clamped: 0,
+      failedPrice: 0
+    };
+    const candidates = makeSellGroups(mode).filter((group) => {
+      if (!group.marketHashName) {
+        skipped.missingHash++;
+        return false;
+      }
+      if (!group.assets.length || group.quantity <= 0) {
+        skipped.unmarketable++;
+        return false;
+      }
+      return true;
+    });
+    for (let index = 0; index < candidates.length; index++) {
+      const group = candidates[index];
+      let basePriceCents = null;
+      try {
+        basePriceCents = await getSellBasePrice(
+          group,
+          priceSource,
+          queue,
+          ui,
+          index,
+          candidates.length,
+          priceCache
+        );
+      } catch (error) {
+        skipped.failedPrice++;
+        ui.log(`  ${group.itemName}: ${error?.message || error}，已跳过`, "warn");
+      }
+      if (!basePriceCents) {
+        skipped.missingPrice++;
+        continue;
+      }
+      const targetBuyerCents = basePriceCents + adjustmentCents;
+      const clampedBuyerCents = Math.max(minimumBuyerCents, targetBuyerCents);
+      if (clampedBuyerCents !== targetBuyerCents) skipped.clamped++;
+      const sellerReceiveCents = getSellerReceiveForBuyerPrice(clampedBuyerCents);
+      if (sellerReceiveCents <= 0) {
+        skipped.missingPrice++;
+        continue;
+      }
+      const unitBuyerCents = getBuyerPriceForSellerReceive(sellerReceiveCents);
+      plan.push({
+        ...group,
+        priceSource,
+        basePriceCents,
+        targetBuyerCents,
+        unitBuyerCents,
+        sellerReceiveCents,
+        totalBuyerCents: unitBuyerCents * group.quantity,
+        totalReceiveCents: sellerReceiveCents * group.quantity
+      });
+    }
+    return { plan, skipped, priceSource, adjustmentCents, minimumBuyerCents };
+  }
+  function getProfileActionBaseUrl() {
+    const profileUrl = getProfileUrl();
+    if (profileUrl) return profileUrl.replace(/\/$/, "");
+    const steamId = getSteamId();
+    return steamId ? `https://steamcommunity.com/profiles/${steamId}` : "";
+  }
+  async function fetchAssetGooValue(asset, queue, ui, index, total) {
+    const baseUrl = getProfileActionBaseUrl();
+    const sessionId = getSessionId();
+    if (!baseUrl) throw new Error("未找到 Steam 个人资料地址");
+    if (!sessionId) throw new Error("未找到 Steam sessionid");
+    ui.setStatus(`读取宝石值 ${index + 1}/${total}: ${asset.itemName}`);
+    const params = new URLSearchParams({
+      sessionid: sessionId,
+      appid: "753",
+      assetid: asset.assetid,
+      contextid: asset.contextid || "6"
+    });
+    const response = await queue.fetch(`${baseUrl}/ajaxgetgoovalue/?${params.toString()}`);
+    const data = response?.data || {};
+    const gooValue = Math.max(0, parseInt(data.goo_value, 10) || 0);
+    if (gooValue <= 0) {
+      throw new Error(data?.message || "Steam 未返回可分解宝石值");
+    }
+    return gooValue;
+  }
+  async function buildGemPlan(mode, ui, queue) {
+    const candidates = makeGemAssets(mode);
+    const plan = [];
+    const skipped = {
+      missingAsset: 0,
+      partialStack: 0,
+      noGooValue: 0
+    };
+    for (let index = 0; index < candidates.length; index++) {
+      const asset = candidates[index];
+      if (!asset.assetid) {
+        skipped.missingAsset++;
+        continue;
+      }
+      if (asset.selectedAmount < asset.assetAmount) {
+        skipped.partialStack++;
+        continue;
+      }
+      try {
+        const gooValueExpected = await fetchAssetGooValue(asset, queue, ui, index, candidates.length);
+        plan.push({ ...asset, gooValueExpected });
+      } catch (error) {
+        skipped.noGooValue++;
+        ui.log(`  ${asset.itemName}: ${error?.message || error}，已跳过`, "warn");
+      }
+    }
+    return { plan, skipped };
+  }
+  async function readJsonResponse(response) {
+    const text = await response.text();
+    try {
+      return { data: JSON.parse(text), text };
+    } catch (_) {
+      return { data: null, text };
+    }
+  }
+  function getSteamResponseError(data, response, fallback) {
+    return data?.message || data?.strError || data?.error || data?.strHTML || `${fallback} (${response.status})`;
+  }
+  async function sellAsset(asset, sellerReceiveCents) {
+    const sessionId = getSessionId();
+    if (!sessionId) throw new Error("未找到 Steam sessionid");
+    const body = new URLSearchParams({
+      sessionid: sessionId,
+      appid: "753",
+      contextid: asset.contextid || "6",
+      assetid: asset.assetid,
+      amount: String(asset.amount || 1),
+      price: String(sellerReceiveCents)
+    });
+    const response = await window.fetch("https://steamcommunity.com/market/sellitem/", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+      body: body.toString()
+    });
+    const { data } = await readJsonResponse(response);
+    if (!response.ok) {
+      throw new Error(getSteamResponseError(data, response, "出售失败"));
+    }
+    if (data?.success === true || data?.success === 1) return data;
+    throw new Error(getSteamResponseError(data, response, "出售失败"));
+  }
+  async function grindAsset(asset) {
+    const baseUrl = getProfileActionBaseUrl();
+    const sessionId = getSessionId();
+    if (!baseUrl) throw new Error("未找到 Steam 个人资料地址");
+    if (!sessionId) throw new Error("未找到 Steam sessionid");
+    const body = new URLSearchParams({
+      sessionid: sessionId,
+      appid: "753",
+      assetid: asset.assetid,
+      contextid: asset.contextid || "6",
+      goo_value_expected: String(asset.gooValueExpected)
+    });
+    const response = await window.fetch(`${baseUrl}/ajaxgrindintogoo/`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+      body: body.toString()
+    });
+    const { data } = await readJsonResponse(response);
+    if (!response.ok) {
+      throw new Error(getSteamResponseError(data, response, "转化宝石失败"));
+    }
+    if (data?.success === false || data?.success === 0) {
+      throw new Error(getSteamResponseError(data, response, "转化宝石失败"));
+    }
+    return data || {};
+  }
+  function showProcessingConfirmation(options) {
+    return new Promise((resolve) => {
+      const backdrop = document.createElement("div");
+      backdrop.id = "stch-order-dialog-backdrop";
+      backdrop.innerHTML = `
+        <div class="stch-order-dialog">
+          <h3>${options.title}</h3>
+          <div class="stch-order-summary"></div>
+          <div class="stch-order-list"></div>
+          <div class="stch-order-note"></div>
+          <div class="stch-order-dialog-actions">
+            <div class="stch-btn alt" data-action="cancel">取消</div>
+            <div class="stch-btn ${options.danger ? "stch-btn-danger" : ""}" data-action="confirm">${options.confirmLabel}</div>
+          </div>
+        </div>
+      `;
+      backdrop.querySelector(".stch-order-summary").innerHTML = options.summaryHtml;
+      const list = backdrop.querySelector(".stch-order-list");
+      options.rows.forEach((rowInfo) => {
+        const row = document.createElement("div");
+        row.className = `stch-order-item stch-processing-dialog-item ${options.rowClass || ""}`.trim();
+        rowInfo.forEach((text) => row.appendChild(createTextSpan("", text)));
+        list.appendChild(row);
+      });
+      backdrop.querySelector(".stch-order-note").textContent = options.note;
+      const finish = (confirmed) => {
+        backdrop.remove();
+        resolve(confirmed);
+      };
+      backdrop.querySelector('[data-action="cancel"]').addEventListener("click", () => finish(false));
+      backdrop.querySelector('[data-action="confirm"]').addEventListener("click", () => finish(true));
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === backdrop) finish(false);
+      });
+      document.body.appendChild(backdrop);
+    });
+  }
+  function showSellConfirmation(planData) {
+    const { plan, skipped, priceSource, adjustmentCents, minimumBuyerCents } = planData;
+    const totalQuantity = plan.reduce((sum, item) => sum + item.quantity, 0);
+    const totalBuyerCents = plan.reduce((sum, item) => sum + item.totalBuyerCents, 0);
+    const totalReceiveCents = plan.reduce((sum, item) => sum + item.totalReceiveCents, 0);
+    const adjustmentText = `${adjustmentCents >= 0 ? "+" : "-"}¥${formatCNY(Math.abs(adjustmentCents))}`;
+    const notes = [];
+    if (skipped.missingHash) notes.push(`${skipped.missingHash} 项缺少市场标识`);
+    if (skipped.unmarketable) notes.push(`${skipped.unmarketable} 项不可出售`);
+    if (skipped.missingPrice) notes.push(`${skipped.missingPrice} 项缺少所选价格`);
+    if (skipped.failedPrice) notes.push(`${skipped.failedPrice} 项查价失败`);
+    if (skipped.clamped) notes.push(`${skipped.clamped} 项低于 Steam 最低售价，已调整到 ¥${formatCNY(minimumBuyerCents)}`);
+    return showProcessingConfirmation({
+      title: "确认上架出售",
+      rowClass: "sell",
+      confirmLabel: "上架出售",
+      summaryHtml: `项目 <b>${plan.length}</b> 项 · 数量 <b>${totalQuantity}</b> 件 · 买家价格合计 <b>¥${formatCNY(totalBuyerCents)}</b> · 税后到手约 <b>¥${formatCNY(totalReceiveCents)}</b><br>价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> · 售价调整 <b>${adjustmentText}</b>`,
+      rows: plan.map((item) => [
+        `${item.gameName ? `${item.gameName} · ` : ""}${item.itemName}`,
+        `${item.quantity} 件`,
+        `买家 ¥${formatCNY(item.unitBuyerCents)}`,
+        `到手 ¥${formatCNY(item.sellerReceiveCents)}`
+      ]),
+      note: `${notes.join("；") || "未发现需跳过的项目"}。将直接提交 Steam 市场上架请求；可能仍需要在 Steam 手机应用中确认。`
+    });
+  }
+  function showGemConfirmation(planData) {
+    const { plan, skipped } = planData;
+    const totalGems = plan.reduce((sum, item) => sum + item.gooValueExpected, 0);
+    const notes = [];
+    if (skipped.missingAsset) notes.push(`${skipped.missingAsset} 项缺少资产 ID`);
+    if (skipped.partialStack) notes.push(`${skipped.partialStack} 项是部分堆叠资产，Steam 原生接口不支持只销毁一部分，已跳过`);
+    if (skipped.noGooValue) notes.push(`${skipped.noGooValue} 项未读取到可分解宝石值`);
+    return showProcessingConfirmation({
+      title: "确认转化宝石",
+      rowClass: "gem",
+      confirmLabel: "转化宝石",
+      danger: true,
+      summaryHtml: `资产 <b>${plan.length}</b> 个 · 预计获得 <b>${formatInt(totalGems)}</b> 宝石`,
+      rows: plan.map((item) => [
+        `${item.gameName ? `${item.gameName} · ` : ""}${item.itemName}`,
+        item.assetid,
+        `${formatInt(item.gooValueExpected)} 宝石`
+      ]),
+      note: `${notes.join("；") || "未发现需跳过的项目"}。转化宝石会不可逆销毁物品，请确认选中项目和数量。`
+    });
+  }
+  async function submitSelectedProcessingSell() {
+    const mode = getProcessingMode();
+    const ui = getProcessingUi(mode);
+    if (isSharedActionBusy()) return;
+    if (getSelectedGroups(mode).length === 0) {
+      ui.log(ui.emptySell, "warn");
+      return;
+    }
+    state.surplusActionRunning = true;
+    updateAllActionStates();
+    const queue = getActionQueue(ui);
+    let finalStatus = null;
+    let submitted = 0;
+    let failed = 0;
+    try {
+      ui.log("开始生成出售计划", "info");
+      const planData = await buildSellPlan(mode, ui, queue);
+      if (planData.plan.length === 0) {
+        finalStatus = "没有可上架出售的选中项目";
+        ui.log(finalStatus, "warn");
+        return;
+      }
+      const confirmed = await showSellConfirmation(planData);
+      if (!confirmed) {
+        finalStatus = "已取消上架出售";
+        return;
+      }
+      const assets = planData.plan.flatMap(
+        (item) => item.assets.map((asset) => ({ ...asset, item }))
+      );
+      for (let index = 0; index < assets.length; index++) {
+        const asset = assets[index];
+        ui.setStatus(`上架出售 ${index + 1}/${assets.length}: ${asset.item.itemName}`);
+        try {
+          const result = await sellAsset(asset, asset.item.sellerReceiveCents);
+          submitted++;
+          const confirmationText = result?.requires_confirmation || result?.needs_mobile_confirmation ? "，等待手机确认" : "";
+          ui.log(
+            `  ✓ ${asset.item.itemName} x${asset.amount}: 买家 ¥${formatCNY(asset.item.unitBuyerCents)} / 到手 ¥${formatCNY(asset.item.sellerReceiveCents)}${confirmationText}`,
+            "ok"
+          );
+        } catch (error) {
+          failed++;
+          ui.log(`  ✗ ${asset.item.itemName} x${asset.amount}: ${error?.message || error}`, "err");
+        }
+        await wait(500);
+      }
+      finalStatus = `上架出售结束: 成功 ${submitted}, 失败 ${failed}`;
+      ui.log(`${finalStatus}；建议重新扫描刷新库存结果`, failed ? "warn" : "ok");
+      if (submitted > 0) clearSelection(mode);
+    } catch (error) {
+      finalStatus = `无法上架出售: ${error?.message || error}`;
+      ui.log(finalStatus, "err");
+    } finally {
+      queue.stop();
+      state.surplusActionRunning = false;
+      ui.setStatus(finalStatus && failed ? finalStatus : null, false);
+      updateAllActionStates();
+    }
+  }
+  async function submitSelectedProcessingGems() {
+    const mode = getProcessingMode();
+    const ui = getProcessingUi(mode);
+    if (isSharedActionBusy()) return;
+    if (getSelectedGroups(mode).length === 0) {
+      ui.log(ui.emptyGem, "warn");
+      return;
+    }
+    state.surplusActionRunning = true;
+    updateAllActionStates();
+    const queue = getActionQueue(ui);
+    let finalStatus = null;
+    let submitted = 0;
+    let failed = 0;
+    try {
+      ui.log("开始读取选中资产的可分解宝石值", "info");
+      const planData = await buildGemPlan(mode, ui, queue);
+      if (planData.plan.length === 0) {
+        finalStatus = "没有可转化宝石的选中项目";
+        ui.log(finalStatus, "warn");
+        return;
+      }
+      const confirmed = await showGemConfirmation(planData);
+      if (!confirmed) {
+        finalStatus = "已取消转化宝石";
+        return;
+      }
+      for (let index = 0; index < planData.plan.length; index++) {
+        const asset = planData.plan[index];
+        ui.setStatus(`转化宝石 ${index + 1}/${planData.plan.length}: ${asset.itemName}`);
+        try {
+          await grindAsset(asset);
+          submitted++;
+          ui.log(
+            `  ✓ ${asset.itemName}: ${formatInt(asset.gooValueExpected)} 宝石`,
+            "ok"
+          );
+        } catch (error) {
+          failed++;
+          ui.log(`  ✗ ${asset.itemName}: ${error?.message || error}`, "err");
+        }
+        await wait(500);
+      }
+      finalStatus = `转化宝石结束: 成功 ${submitted}, 失败 ${failed}`;
+      ui.log(`${finalStatus}；建议重新扫描刷新库存结果`, failed ? "warn" : "ok");
+      if (submitted > 0) clearSelection(mode);
+    } catch (error) {
+      finalStatus = `无法转化宝石: ${error?.message || error}`;
+      ui.log(finalStatus, "err");
+    } finally {
+      queue.stop();
+      state.surplusActionRunning = false;
+      ui.setStatus(finalStatus && failed ? finalStatus : null, false);
+      updateAllActionStates();
+    }
   }
 
   // src/ui/modal.js
@@ -5647,10 +6090,23 @@ ${assetSummary.title}` : ""
               只显示当前已满级徽章
             </label>
             <span class="stch-card-only-control" style="color:#8f98a0;font-size:12px;">默认计算升满后仍会剩余的卡牌</span>
+          </div>
+          <div class="stch-scan-actions stch-surplus-action-row">
+            <label class="stch-primary-label">出售价格
+              <span class="stch-help" title="在售最低：当前最低卖单价格&#10;平均价格：Steam 返回的 median_price&#10;求购最高：当前最高买单价格&#10;提交出售时会换算为 Steam 接口需要的卖家到手价">?</span>
+              <select id="stch-surplus-sell-price-source" class="stch-input" style="width:118px">
+                <option value="lowest" ${state.cfg.surplusSellPriceSource === "lowest" ? "selected" : ""}>在售最低</option>
+                <option value="median" ${state.cfg.surplusSellPriceSource === "median" ? "selected" : ""}>平均价格</option>
+                <option value="highest" ${state.cfg.surplusSellPriceSource === "highest" ? "selected" : ""}>求购最高</option>
+              </select>
+            </label>
+            <label class="stch-primary-label">售价调整 ¥ <input id="stch-surplus-sell-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.surplusSellPriceAdjustment}" style="width:68px"></label>
+            <div class="stch-surplus-action-spacer"></div>
+            <div class="stch-btn alt disabled" id="stch-surplus-select-all-btn">全选</div>
             <span class="stch-selected-count stch-processing-selected-count" id="stch-surplus-selected-count">已选择 0 项</span>
             <div class="stch-surplus-action-buttons">
-              <div class="stch-btn alt disabled" id="stch-surplus-sell-btn" title="打开选中项的市场页面，不会自动上架出售">出售</div>
-              <div class="stch-btn stch-btn-danger disabled" id="stch-surplus-gem-btn" title="打开选中项的库存定位入口，不会自动销毁物品">转化宝石</div>
+              <div class="stch-btn alt disabled" id="stch-surplus-sell-btn" title="按所选价格源提交 Steam 市场出售请求">出售</div>
+              <div class="stch-btn stch-btn-danger disabled" id="stch-surplus-gem-btn" title="读取 Steam 当前宝石值后提交转化宝石请求">转化宝石</div>
             </div>
           </div>
           <div class="stch-surplus-mode-panel" id="stch-surplus-card-panel">
@@ -5676,7 +6132,7 @@ ${assetSummary.title}` : ""
                 <input id="stch-grind-only-recommended" type="checkbox" ${state.cfg.grindOnlyRecommended ? "checked" : ""}>
                 只显示建议分解
               </label>
-              <span style="color:#8f98a0;font-size:12px;">仅生成建议和资产 ID，不会自动销毁物品</span>
+              <span style="color:#8f98a0;font-size:12px;">扫描后可选择出售或转化宝石，提交前会显示确认窗口</span>
             </div>
             <div class="stch-scan-actions">
               <div class="stch-btn" id="stch-grind-scan-btn">扫描可分解物品</div>
@@ -5730,7 +6186,7 @@ ${assetSummary.title}` : ""
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V1.9.4 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V2.0.0 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -5823,6 +6279,11 @@ ${assetSummary.title}` : ""
       state.cfg.skipCachedOrderResults = !!document.getElementById("stch-skip-cached-orders")?.checked;
       state.cfg.surplusOnlyMaxed = !!document.getElementById("stch-surplus-only-maxed")?.checked;
       state.cfg.surplusItemMode = getSurplusItemMode();
+      state.cfg.surplusSellPriceSource = document.getElementById("stch-surplus-sell-price-source")?.value || state.cfg.surplusSellPriceSource || DEFAULT_CONFIG.surplusSellPriceSource;
+      state.cfg.surplusSellPriceAdjustment = readNumberInput(
+        "stch-surplus-sell-adjustment",
+        state.cfg.surplusSellPriceAdjustment ?? DEFAULT_CONFIG.surplusSellPriceAdjustment
+      );
       state.cfg.grindOnlyRecommended = !!document.getElementById("stch-grind-only-recommended")?.checked;
       const includeSurplusCards = document.getElementById("stch-grind-include-surplus-cards");
       if (includeSurplusCards) {
@@ -5884,6 +6345,8 @@ ${assetSummary.title}` : ""
       "stch-seasonal-target",
       "stch-surplus-item-mode",
       "stch-surplus-only-maxed",
+      "stch-surplus-sell-price-source",
+      "stch-surplus-sell-adjustment",
       "stch-grind-only-recommended",
       "stch-grind-include-surplus-cards"
     ];
@@ -5942,16 +6405,24 @@ ${assetSummary.title}` : ""
     document.getElementById("stch-surplus-stop-btn").addEventListener("click", requestSurplusStop);
     document.getElementById("stch-grind-scan-btn").addEventListener("click", startGrindScan);
     document.getElementById("stch-grind-stop-btn").addEventListener("click", requestGrindStop);
+    document.getElementById("stch-surplus-select-all-btn").addEventListener("click", (event) => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      const mode = getSurplusItemMode();
+      const list = document.getElementById(mode === "card" ? "stch-surplus-list" : "stch-grind-list");
+      const tiles = list ? [...list.querySelectorAll(".stch-inv-tile")] : [];
+      const allSelected = tiles.length > 0 && tiles.every((tile) => tile.classList.contains("selected"));
+      if (mode === "card") setAllVisibleSurplusSelection(!allSelected);
+      else setAllVisibleGrindSelection(!allSelected);
+      updateAllActionStates();
+    });
     document.getElementById("stch-surplus-sell-btn").addEventListener("click", (event) => {
       if (event.currentTarget.classList.contains("disabled")) return;
-      if (getSurplusItemMode() === "card") openSelectedSurplusSellTargets();
-      else openSelectedGrindSellTargets();
+      submitSelectedProcessingSell();
       updateAllActionStates();
     });
     document.getElementById("stch-surplus-gem-btn").addEventListener("click", (event) => {
       if (event.currentTarget.classList.contains("disabled")) return;
-      if (getSurplusItemMode() === "card") openSelectedSurplusGemTargets();
-      else openSelectedGrindGemTargets();
+      submitSelectedProcessingGems();
       updateAllActionStates();
     });
     const syncCraftMaxPages = (event) => {

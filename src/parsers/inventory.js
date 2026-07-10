@@ -116,6 +116,7 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
     }
     if (!group.gameName) group.gameName = getCardGameName(description);
 
+    const gemValue = parseGemValueFromDescription(description);
     let card = group.cardsByHash.get(marketHashName);
     if (!card) {
       card = {
@@ -127,6 +128,7 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
         imageUrl: getDescriptionImageUrl(description),
         nameColor: getDescriptionColor(description, "name_color"),
         backgroundColor: getDescriptionColor(description, "background_color"),
+        gemValue,
         totalCount: 0,
         assets: [],
       };
@@ -135,6 +137,8 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
       if (nameKey && !group.cardsByName.has(nameKey)) {
         group.cardsByName.set(nameKey, card);
       }
+    } else if (!card.gemValue && gemValue) {
+      card.gemValue = gemValue;
     }
 
     const amount = getAssetAmount(asset);
@@ -146,6 +150,7 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
       classid: String(asset.classid || ""),
       instanceid: String(asset.instanceid || ""),
       amount,
+      gemValue,
       marketable: Number(description.marketable) === 1,
       tradable: Number(description.tradable) === 1,
     });

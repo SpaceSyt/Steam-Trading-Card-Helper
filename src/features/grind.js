@@ -6,7 +6,7 @@ import { unsafeWindow } from "../globals.js";
 
 import { formatCNY, formatInt } from "../utils/format.js";
 
-import { getProfileUrl, getSteamId } from "../utils/steam.js";
+import { getSteamId } from "../utils/steam.js";
 
 import { loadSidebarGemPrice } from "../sidebar/gems.js";
 
@@ -302,50 +302,23 @@ export { updateGrindActionState };
     );
   }
 
+  export function setAllVisibleGrindSelection(selected) {
+    if (!state.selectedGrindResults) state.selectedGrindResults = new Set();
+    const visible = getVisibleGrindResults();
+    for (const item of visible) {
+      const key = getGrindResultKey(item);
+      if (selected) state.selectedGrindResults.add(key);
+      else state.selectedGrindResults.delete(key);
+    }
+    renderGrindResults();
+  }
+
   function pruneSelectedGrindResults(visible) {
     const selected = state.selectedGrindResults || new Set();
     const visibleKeys = new Set(visible.map(getGrindResultKey));
     for (const key of [...selected]) {
       if (!visibleKeys.has(key)) selected.delete(key);
     }
-  }
-
-  function getFirstSelectedAsset(item) {
-    return (item.assets || []).find(asset => asset.assetid) || null;
-  }
-
-  function getInventoryAssetUrl(asset) {
-    const profileUrl = getProfileUrl();
-    const assetid = String(asset?.assetid || "");
-    if (!profileUrl || !assetid) return "";
-    const contextid = String(asset?.contextid || "6");
-    return `${profileUrl}/inventory#753_${contextid}_${assetid}`;
-  }
-
-  function openUrlBatch(urls, log) {
-    const uniqueUrls = [...new Set(urls.filter(Boolean))];
-    if (uniqueUrls.length === 0) return 0;
-    const openCount = Math.min(uniqueUrls.length, 8);
-    if (uniqueUrls.length > openCount) {
-      log(`已选择 ${uniqueUrls.length} 个入口，本次先打开前 ${openCount} 个，避免浏览器拦截`, "warn");
-    }
-    uniqueUrls.slice(0, openCount).forEach(url => window.open(url, "_blank"));
-    return openCount;
-  }
-
-  function copyAssetIds(items) {
-    const text = items
-      .flatMap(item => item.assets || [])
-      .map(asset => asset.amount > 1
-        ? `${asset.assetid}x${asset.amount}`
-        : asset.assetid
-      )
-      .filter(Boolean)
-      .join("\n");
-    if (text && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch(() => {});
-    }
-    return text;
   }
 
   export function updateGrindSummary() {
@@ -488,44 +461,6 @@ export { updateGrindActionState };
     updateGrindActionState();
   }
 
-  export function openSelectedGrindSellTargets() {
-    const selected = getSelectedGrindResults();
-    if (selected.length === 0) {
-      grindLog("请先选择要出售的物品", "warn");
-      return;
-    }
-    const urls = selected
-      .filter(item => item.marketHashName && item.marketableCount > 0)
-      .map(item => `https://steamcommunity.com/market/listings/753/${encodeURIComponent(item.marketHashName)}`);
-    const opened = openUrlBatch(urls, grindLog);
-    if (opened > 0) {
-      grindLog(`已打开 ${opened} 个市场页面；不会自动上架出售，请在 Steam 页面确认价格和数量`, "ok");
-    } else {
-      grindLog("选中物品中没有可出售的市场条目", "warn");
-    }
-  }
-
-  export function openSelectedGrindGemTargets() {
-    const selected = getSelectedGrindResults();
-    if (selected.length === 0) {
-      grindLog("请先选择要转化宝石的物品", "warn");
-      return;
-    }
-    const assetText = copyAssetIds(selected);
-    const urls = selected
-      .map(getFirstSelectedAsset)
-      .map(getInventoryAssetUrl);
-    const opened = openUrlBatch(urls, grindLog);
-    if (opened > 0) {
-      grindLog(
-        `已打开 ${opened} 个库存定位入口${assetText ? "，并尝试复制资产 ID" : ""}；不会自动销毁物品，请在 Steam 页面确认转化宝石`,
-        "ok"
-      );
-    } else {
-      grindLog("没有找到可定位的资产 ID", "warn");
-    }
-  }
-
   export async function startGrindScan() {
     if (
       state.grindScanning
@@ -535,6 +470,7 @@ export { updateGrindActionState };
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
+      || state.surplusActionRunning
       || state.surplusScanning
     ) {
       return;

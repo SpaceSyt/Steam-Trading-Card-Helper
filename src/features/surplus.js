@@ -56,6 +56,10 @@ export { updateSurplusActionState };
         0
       );
       const assetSummary = summarizeAssetIds(surplusAssets);
+      const totalGems = surplusAssets.reduce(
+        (sum, asset) => sum + (asset.selectedAmount || 0) * (asset.gemValue || inventoryCard.gemValue || 0),
+        0
+      );
       results.push({
         appid: group.appid,
         isFoil: group.isFoil,
@@ -68,6 +72,8 @@ export { updateSurplusActionState };
         imageUrl: inventoryCard.imageUrl || "",
         nameColor: inventoryCard.nameColor || "",
         backgroundColor: inventoryCard.backgroundColor || "",
+        gemValue: inventoryCard.gemValue || 0,
+        totalGems,
         inventoryCount: inventoryCard.totalCount,
         reservedCount: reservePerCard,
         surplusCount,
@@ -108,50 +114,23 @@ export { updateSurplusActionState };
     );
   }
 
+  export function setAllVisibleSurplusSelection(selected) {
+    if (!state.selectedSurplusResults) state.selectedSurplusResults = new Set();
+    const visible = getVisibleSurplusResults();
+    for (const result of visible) {
+      const key = getSurplusResultKey(result);
+      if (selected) state.selectedSurplusResults.add(key);
+      else state.selectedSurplusResults.delete(key);
+    }
+    renderSurplusResults();
+  }
+
   function pruneSelectedSurplusResults(visible) {
     const selected = state.selectedSurplusResults || new Set();
     const visibleKeys = new Set(visible.map(getSurplusResultKey));
     for (const key of [...selected]) {
       if (!visibleKeys.has(key)) selected.delete(key);
     }
-  }
-
-  function getFirstSelectedAsset(result) {
-    return (result.assets || []).find(asset => asset.assetid) || null;
-  }
-
-  function getInventoryAssetUrl(asset) {
-    const profileUrl = getProfileUrl();
-    const assetid = String(asset?.assetid || "");
-    if (!profileUrl || !assetid) return "";
-    const contextid = String(asset?.contextid || "6");
-    return `${profileUrl}/inventory#753_${contextid}_${assetid}`;
-  }
-
-  function openUrlBatch(urls, log) {
-    const uniqueUrls = [...new Set(urls.filter(Boolean))];
-    if (uniqueUrls.length === 0) return 0;
-    const openCount = Math.min(uniqueUrls.length, 8);
-    if (uniqueUrls.length > openCount) {
-      log(`已选择 ${uniqueUrls.length} 个入口，本次先打开前 ${openCount} 个，避免浏览器拦截`, "warn");
-    }
-    uniqueUrls.slice(0, openCount).forEach(url => window.open(url, "_blank"));
-    return openCount;
-  }
-
-  function copyAssetIds(results) {
-    const text = results
-      .flatMap(result => result.assets || [])
-      .map(asset => asset.selectedAmount > 1
-        ? `${asset.assetid}x${asset.selectedAmount}`
-        : asset.assetid
-      )
-      .filter(Boolean)
-      .join("\n");
-    if (text && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch(() => {});
-    }
-    return text;
   }
 
   export function updateSurplusSummary() {
@@ -270,44 +249,6 @@ export { updateSurplusActionState };
     updateSurplusActionState();
   }
 
-  export function openSelectedSurplusSellTargets() {
-    const selected = getSelectedSurplusResults();
-    if (selected.length === 0) {
-      surplusLog("请先选择要出售的卡牌", "warn");
-      return;
-    }
-    const urls = selected
-      .filter(result => result.marketHashName && result.marketableCount > 0)
-      .map(result => `https://steamcommunity.com/market/listings/753/${encodeURIComponent(result.marketHashName)}`);
-    const opened = openUrlBatch(urls, surplusLog);
-    if (opened > 0) {
-      surplusLog(`已打开 ${opened} 个市场页面；不会自动上架出售，请在 Steam 页面确认价格和数量`, "ok");
-    } else {
-      surplusLog("选中卡牌中没有可出售的市场条目", "warn");
-    }
-  }
-
-  export function openSelectedSurplusGemTargets() {
-    const selected = getSelectedSurplusResults();
-    if (selected.length === 0) {
-      surplusLog("请先选择要转化宝石的卡牌", "warn");
-      return;
-    }
-    const assetText = copyAssetIds(selected);
-    const urls = selected
-      .map(getFirstSelectedAsset)
-      .map(getInventoryAssetUrl);
-    const opened = openUrlBatch(urls, surplusLog);
-    if (opened > 0) {
-      surplusLog(
-        `已打开 ${opened} 个库存定位入口${assetText ? "，并尝试复制资产 ID" : ""}；不会自动销毁物品，请在 Steam 页面确认转化宝石`,
-        "ok"
-      );
-    } else {
-      surplusLog("没有找到可定位的资产 ID", "warn");
-    }
-  }
-
   export async function startSurplusScan() {
     if (
       state.surplusScanning
@@ -317,6 +258,7 @@ export { updateSurplusActionState };
       || state.craftScanning
       || state.craftActionRunning
       || state.seasonalActionRunning
+      || state.surplusActionRunning
       || state.grindScanning
     ) {
       return;

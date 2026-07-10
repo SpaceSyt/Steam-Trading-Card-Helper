@@ -25,6 +25,7 @@ import { loadConfig } from "./config.js";
     surplusScanning: false,
     surplusStopRequested: false,
     surplusQueue: null,
+    surplusActionRunning: false,
     grindResults: [],
     selectedGrindResults: new Set(),
     grindScanning: false,

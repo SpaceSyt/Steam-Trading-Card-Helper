@@ -225,6 +225,7 @@ export { updateSeasonalActionState };
       || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
+      || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning
     ) {
