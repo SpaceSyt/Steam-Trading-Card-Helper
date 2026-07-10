@@ -8,10 +8,11 @@ const root = join(__dirname, "..");
 
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
-const banner = readFileSync(join(root, "src", "meta.txt"), "utf8").replace(
-  /__VERSION__/g,
-  pkg.version
-);
+const normalizeNewlines = text => text.replace(/\r\n?/g, "\n");
+
+const banner = normalizeNewlines(
+  readFileSync(join(root, "src", "meta.txt"), "utf8")
+).replace(/__VERSION__/g, pkg.version);
 
 await build({
   entryPoints: [join(root, "src", "index.js")],
@@ -21,6 +22,15 @@ await build({
   legalComments: "none",
   sourcemap: false,
   loader: { ".css": "text" },
+  plugins: [{
+    name: "normalize-text-newlines",
+    setup(buildContext) {
+      buildContext.onLoad({ filter: /\.css$/ }, args => ({
+        contents: normalizeNewlines(readFileSync(args.path, "utf8")),
+        loader: "text",
+      }));
+    },
+  }],
   banner: { js: banner },
   outfile: join(root, "steam-trading-card-helper.user.js"),
 });
