@@ -139,6 +139,8 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
     if (onlyMaxed) onlyMaxed.disabled = surplusBusy || otherBusy;
     const compareGems = document.getElementById("stch-surplus-compare-gems");
     if (compareGems) compareGems.disabled = surplusBusy || otherBusy;
+    const onlyTradable = document.getElementById("stch-surplus-only-tradable");
+    if (onlyTradable) onlyTradable.disabled = surplusBusy || otherBusy;
     const itemMode = document.getElementById("stch-surplus-item-mode");
     if (itemMode) itemMode.disabled = surplusBusy || otherBusy;
     updateSurplusProcessingActionState();
@@ -162,7 +164,7 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       "disabled",
       !grindBusy
     );
-    ["stch-grind-only-recommended", "stch-grind-include-surplus-cards", "stch-surplus-item-mode"].forEach(id => {
+    ["stch-grind-only-recommended", "stch-grind-include-surplus-cards", "stch-grind-reserve-copies", "stch-grind-include-points-shop", "stch-surplus-item-mode"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = grindBusy || otherBusy;
     });

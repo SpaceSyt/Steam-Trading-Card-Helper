@@ -69,6 +69,13 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
     return "other";
   }
 
+  export function isPointsShopCommunityItemDescription(description) {
+    const category = getCommunityItemCategory(description);
+    return ["background", "emoticon"].includes(category)
+      && Number(description?.marketable) !== 1
+      && Number(description?.tradable) !== 1;
+  }
+
   export function getCardGameAppid(description) {
     const feeApp = String(description?.market_fee_app || "").trim();
     if (/^\d+$/.test(feeApp)) return feeApp;

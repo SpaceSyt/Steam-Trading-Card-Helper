@@ -28,6 +28,28 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
 
 export { updateSurplusActionState };
 
+  export function getSurplusReservePolicy(info) {
+    const targetLevel = getBadgeTargetLevel(info);
+    const level = Math.max(0, Number(info?.level) || 0);
+    if (info?.isUnlimitedLevelBadge) {
+      const eligible = level >= 1;
+      return {
+        targetLevel,
+        level,
+        eligible,
+        badgeMaxed: eligible,
+        reservePerCard: 0,
+      };
+    }
+    return {
+      targetLevel,
+      level,
+      eligible: true,
+      badgeMaxed: level >= targetLevel,
+      reservePerCard: Math.max(0, targetLevel - level),
+    };
+  }
+
   function applySurplusMarketInfo(result, price, gemSackPriceCents) {
     result.priceCents = price && !price.noPriceData ? price.lowestSellCents || 0 : 0;
     result.medianCents = price && !price.noPriceData ? price.medianCents || 0 : 0;
@@ -57,10 +79,9 @@ export { updateSurplusActionState };
     info.isFoil = group.isFoil;
     info.gameName = info.gameName || group.gameName || "";
 
-    const targetLevel = getBadgeTargetLevel(info);
-    const level = Math.max(0, Number(info.level) || 0);
-    const badgeMaxed = level >= targetLevel;
-    const reservePerCard = Math.max(0, targetLevel - level);
+    const policy = getSurplusReservePolicy(info);
+    const { targetLevel, level, badgeMaxed, reservePerCard } = policy;
+    if (!policy.eligible) return [];
     const results = [];
 
     for (const badgeCard of info.cards) {
@@ -91,6 +112,7 @@ export { updateSurplusActionState };
         level,
         targetLevel,
         badgeMaxed,
+        isUnlimitedLevelBadge: !!info.isUnlimitedLevelBadge,
         cardName: badgeCard.name || inventoryCard.name,
         marketHashName: badgeCard.marketHashName || inventoryCard.marketHashName,
         imageUrl: inventoryCard.imageUrl || "",
@@ -113,9 +135,11 @@ export { updateSurplusActionState };
   }
 
   export function getVisibleSurplusResults() {
-    const all = state.surplusResults || [];
-    if (!state.cfg.surplusOnlyMaxed) return all;
-    return all.filter(result => result.badgeMaxed);
+    return (state.surplusResults || []).filter(result => {
+      if (state.cfg.surplusOnlyMaxed && !result.badgeMaxed) return false;
+      if (state.cfg.surplusOnlyTradable && result.tradableCount <= 0) return false;
+      return true;
+    });
   }
 
   export function getSurplusResultKey(result) {
@@ -222,7 +246,9 @@ export { updateSurplusActionState };
       tile.classList.toggle("selected", state.selectedSurplusResults?.has(key));
       tile.title = [
         `${result.gameName || "未知游戏"} · ${result.cardName || result.marketHashName || "未知卡牌"}`,
-        `徽章 Lv${result.level}/${result.targetLevel}`,
+        result.isUnlimitedLevelBadge
+          ? `特卖徽章 Lv${result.level}（Lv1 后可处理多余卡牌）`
+          : `徽章 Lv${result.level}/${result.targetLevel}`,
         `库存 ${result.inventoryCount}，预留 ${result.reservedCount}，多余 ${result.surplusCount}`,
         `可出售 ${result.marketableCount}，可交易 ${result.tradableCount}`,
         result.volume === 0

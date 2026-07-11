@@ -4,7 +4,7 @@ import { getSteamId, getProfileUrl, parseSteamIdFromText, parseSteamIdFromProfil
 
 import { stchRequestText } from "../request/http.js";
 
-import { getFirstText, getFirstImageUrl } from "../utils/dom.js";
+import { getFirstText, getFirstImageUrl, getFirstAttr, normalizeSteamAvatarUrl } from "../utils/dom.js";
 
 import { parseIntLoose } from "../utils/format.js";
 
@@ -38,18 +38,20 @@ import { xpRequiredForLevel, xpStepForLevel } from "./../utils/xp.js";
     ]) || getFirstText(document, ["#global_actions .persona"]);
     const name = rawName.replace(/\s*».*$/, "").trim();
     const avatarSelectors = [
-      ".profile_small_header_avatar img",
-      ".profile_small_header_avatar",
-      ".profile_header .playerAvatar img",
-      ".playerAvatarAutoSizeInner img",
-      ".playerAvatarAutoSizeInner",
-      ".playerAvatar img",
-      ".playerAvatar",
-      "#global_actions .user_avatar img",
-      "#global_actions .user_avatar",
+      ".profile_small_header_avatar > .playerAvatar > picture img",
+      ".profile_small_header_avatar > .playerAvatar > img",
+      ".profile_header .playerAvatar > picture img",
+      ".profile_header .playerAvatar > img",
+      ".playerAvatarAutoSizeInner > img",
+      "#global_actions a.user_avatar > img",
     ];
     const avatar = getFirstImageUrl(doc, avatarSelectors)
-      || getFirstImageUrl(document, avatarSelectors);
+      || getFirstImageUrl(document, avatarSelectors)
+      || normalizeSteamAvatarUrl(getFirstAttr(doc, [
+        "meta[property='og:image']",
+        "meta[name='twitter:image']",
+        "link[rel='image_src']",
+      ], "content") || getFirstAttr(doc, ["link[rel='image_src']"], "href"));
 
     const level = parseIntLoose(getFirstText(doc, [
       ".profile_xp_block .friendPlayerLevelNum",

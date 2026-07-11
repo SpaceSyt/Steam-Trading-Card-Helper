@@ -41,7 +41,10 @@
   export function normalizeSteamAvatarUrl(value) {
     const url = normalizeResourceUrl(value);
     if (!url.includes("avatars.fastly.steamstatic.com/")) return url;
-    return url.replace(/_full(\.[a-z0-9]+)(?:\?.*)?$/i, "$1");
+    return url.replace(
+      /(?:_(?:medium|full))?(\.[a-z0-9]+)(\?.*)?$/i,
+      "_full$1$2"
+    );
   }
 
   export function getImageUrlFromElement(element) {

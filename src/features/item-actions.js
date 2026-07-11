@@ -160,7 +160,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
         assetid: String(asset.assetid || ""),
         contextid: String(asset.contextid || "6"),
         selectedAmount: getAssetQuantity(asset, "amount"),
-        assetAmount: getAssetQuantity(asset, "amount"),
+        assetAmount: getAssetQuantity(asset, "originalAmount"),
         estimatedGems: (item.gemValue || 0) * getAssetQuantity(asset, "amount"),
       }))
     );

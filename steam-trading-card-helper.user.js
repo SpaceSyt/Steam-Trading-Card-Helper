@@ -2,7 +2,7 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      2.0.0
+// @version      2.0.1
 // @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and process surplus items
 // @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测和处理多余卡牌/背景/表情
 // @author       SpaceSyt
@@ -40,7 +40,7 @@
 
   // src/config.js
   var DEFAULT_CONFIG = {
-    configVersion: 15,
+    configVersion: 16,
     threshold: 5,
     scanInterval: 0,
     requestInterval: 330,
@@ -67,12 +67,15 @@
     seasonalTargetLevel: 40,
     seasonalInterval: 200,
     surplusOnlyMaxed: false,
+    surplusOnlyTradable: false,
     surplusCompareGems: false,
     surplusItemMode: "card",
     surplusSellPriceSource: "lowest",
     surplusSellPriceAdjustment: 0,
     grindOnlyRecommended: true,
-    grindIncludeSurplusCards: true
+    grindIncludeSurplusCards: true,
+    grindReserveCopies: 1,
+    grindIncludePointsShopItems: false
   };
   function loadConfig() {
     const defaults = { ...DEFAULT_CONFIG };
@@ -1000,6 +1003,13 @@
     }
     return "";
   }
+  function getFirstAttr(root, selectors, attr) {
+    for (const selector of selectors) {
+      const value = root.querySelector(selector)?.getAttribute(attr);
+      if (value) return value;
+    }
+    return "";
+  }
   function normalizeResourceUrl(value) {
     const raw = String(value || "").trim().replace(/^url\(["']?/, "").replace(/["']?\)$/, "");
     if (!raw) return "";
@@ -1012,7 +1022,10 @@
   function normalizeSteamAvatarUrl(value) {
     const url = normalizeResourceUrl(value);
     if (!url.includes("avatars.fastly.steamstatic.com/")) return url;
-    return url.replace(/_full(\.[a-z0-9]+)(?:\?.*)?$/i, "$1");
+    return url.replace(
+      /(?:_(?:medium|full))?(\.[a-z0-9]+)(\?.*)?$/i,
+      "_full$1$2"
+    );
   }
   function getImageUrlFromElement(element) {
     if (!element) return "";
@@ -1768,6 +1781,8 @@
     if (onlyMaxed) onlyMaxed.disabled = surplusBusy || otherBusy;
     const compareGems = document.getElementById("stch-surplus-compare-gems");
     if (compareGems) compareGems.disabled = surplusBusy || otherBusy;
+    const onlyTradable = document.getElementById("stch-surplus-only-tradable");
+    if (onlyTradable) onlyTradable.disabled = surplusBusy || otherBusy;
     const itemMode = document.getElementById("stch-surplus-item-mode");
     if (itemMode) itemMode.disabled = surplusBusy || otherBusy;
     updateSurplusProcessingActionState();
@@ -1783,7 +1798,7 @@
       "disabled",
       !grindBusy
     );
-    ["stch-grind-only-recommended", "stch-grind-include-surplus-cards", "stch-surplus-item-mode"].forEach((id) => {
+    ["stch-grind-only-recommended", "stch-grind-include-surplus-cards", "stch-grind-reserve-copies", "stch-grind-include-points-shop", "stch-surplus-item-mode"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.disabled = grindBusy || otherBusy;
     });
@@ -4116,6 +4131,10 @@
     if (isEmoticonDescription(description)) return "emoticon";
     return "other";
   }
+  function isPointsShopCommunityItemDescription(description) {
+    const category = getCommunityItemCategory(description);
+    return ["background", "emoticon"].includes(category) && Number(description?.marketable) !== 1 && Number(description?.tradable) !== 1;
+  }
   function getCardGameAppid(description) {
     const feeApp = String(description?.market_fee_app || "").trim();
     if (/^\d+$/.test(feeApp)) return feeApp;
@@ -4457,6 +4476,27 @@
 
   // src/features/surplus.js
   var { log: surplusLog2, setStatus: setSurplusStatus2, setProgress: setSurplusProgress, hideProgress: hideSurplusProgress } = surplusStatus;
+  function getSurplusReservePolicy(info) {
+    const targetLevel = getBadgeTargetLevel(info);
+    const level = Math.max(0, Number(info?.level) || 0);
+    if (info?.isUnlimitedLevelBadge) {
+      const eligible = level >= 1;
+      return {
+        targetLevel,
+        level,
+        eligible,
+        badgeMaxed: eligible,
+        reservePerCard: 0
+      };
+    }
+    return {
+      targetLevel,
+      level,
+      eligible: true,
+      badgeMaxed: level >= targetLevel,
+      reservePerCard: Math.max(0, targetLevel - level)
+    };
+  }
   function applySurplusMarketInfo(result, price, gemSackPriceCents) {
     result.priceCents = price && !price.noPriceData ? price.lowestSellCents || 0 : 0;
     result.medianCents = price && !price.noPriceData ? price.medianCents || 0 : 0;
@@ -4480,10 +4520,9 @@
     info.appid = group.appid;
     info.isFoil = group.isFoil;
     info.gameName = info.gameName || group.gameName || "";
-    const targetLevel = getBadgeTargetLevel(info);
-    const level = Math.max(0, Number(info.level) || 0);
-    const badgeMaxed = level >= targetLevel;
-    const reservePerCard = Math.max(0, targetLevel - level);
+    const policy = getSurplusReservePolicy(info);
+    const { targetLevel, level, badgeMaxed, reservePerCard } = policy;
+    if (!policy.eligible) return [];
     const results = [];
     for (const badgeCard of info.cards) {
       const inventoryCard = findInventoryCardForBadgeCard(group, badgeCard);
@@ -4511,6 +4550,7 @@
         level,
         targetLevel,
         badgeMaxed,
+        isUnlimitedLevelBadge: !!info.isUnlimitedLevelBadge,
         cardName: badgeCard.name || inventoryCard.name,
         marketHashName: badgeCard.marketHashName || inventoryCard.marketHashName,
         imageUrl: inventoryCard.imageUrl || "",
@@ -4531,9 +4571,11 @@
     return results;
   }
   function getVisibleSurplusResults() {
-    const all = state.surplusResults || [];
-    if (!state.cfg.surplusOnlyMaxed) return all;
-    return all.filter((result) => result.badgeMaxed);
+    return (state.surplusResults || []).filter((result) => {
+      if (state.cfg.surplusOnlyMaxed && !result.badgeMaxed) return false;
+      if (state.cfg.surplusOnlyTradable && result.tradableCount <= 0) return false;
+      return true;
+    });
   }
   function getSurplusResultKey(result) {
     const assetKey = (result.assets || []).map((asset) => `${asset.assetid || ""}x${asset.selectedAmount || asset.amount || 1}`).join(",");
@@ -4618,7 +4660,7 @@
       tile.classList.toggle("selected", state.selectedSurplusResults?.has(key));
       tile.title = [
         `${result.gameName || "未知游戏"} · ${result.cardName || result.marketHashName || "未知卡牌"}`,
-        `徽章 Lv${result.level}/${result.targetLevel}`,
+        result.isUnlimitedLevelBadge ? `特卖徽章 Lv${result.level}（Lv1 后可处理多余卡牌）` : `徽章 Lv${result.level}/${result.targetLevel}`,
         `库存 ${result.inventoryCount}，预留 ${result.reservedCount}，多余 ${result.surplusCount}`,
         `可出售 ${result.marketableCount}，可交易 ${result.tradableCount}`,
         result.volume === 0 ? "市场成交量 0" : Number.isFinite(result.volume) ? `市场成交量 ${result.volume}` : "市场价格尚未读取",
@@ -4891,7 +4933,7 @@ ${result.assetTitle}` : ""
     }
     return allowance;
   }
-  function addGrindItem(groupMap, asset, description, amount, source, gemValue) {
+  function addGrindItem(groupMap, asset, description, amount, source, gemValue, pointsShop = false) {
     if (!description || amount <= 0) return "skipped";
     if (isGemSackDescription(description) || isLooseGemDescription(description)) return "gem";
     const unitGemValue = Math.max(0, parseInt(gemValue, 10) || 0);
@@ -4921,6 +4963,7 @@ ${result.assetTitle}` : ""
         totalGems: 0,
         marketableCount: 0,
         tradableCount: 0,
+        pointsShopCount: 0,
         source,
         assets: []
       };
@@ -4933,20 +4976,72 @@ ${result.assetTitle}` : ""
     item.totalGems += amount * unitGemValue;
     if (marketable) item.marketableCount += amount;
     if (tradable) item.tradableCount += amount;
+    if (pointsShop) item.pointsShopCount += amount;
     item.assets.push({
       assetid: String(asset.assetid || ""),
       contextid: String(asset.contextid || "6"),
       amount,
+      originalAmount: getAssetAmount(asset),
       marketable,
-      tradable
+      tradable,
+      pointsShop
     });
     return "added";
+  }
+  function selectDuplicateSurplusItem(item, reserveCopies) {
+    const inventoryCount = (item.assets || []).reduce(
+      (sum, asset) => sum + Math.max(0, Number(asset.amount) || 0),
+      0
+    );
+    const reservedCount = Math.min(
+      inventoryCount,
+      Math.max(0, Math.floor(Number(reserveCopies) || 0))
+    );
+    let remaining = Math.max(0, inventoryCount - reservedCount);
+    if (remaining <= 0) return null;
+    const assets = [...item.assets || []].sort((left, right) => {
+      const marketCompare = Number(right.marketable) - Number(left.marketable);
+      if (marketCompare) return marketCompare;
+      const tradeCompare = Number(right.tradable) - Number(left.tradable);
+      if (tradeCompare) return tradeCompare;
+      const pointsCompare = Number(left.pointsShop) - Number(right.pointsShop);
+      if (pointsCompare) return pointsCompare;
+      return String(left.assetid || "").localeCompare(String(right.assetid || ""), "en");
+    }).flatMap((asset) => {
+      if (remaining <= 0) return [];
+      const amount = Math.min(Math.max(0, Number(asset.amount) || 0), remaining);
+      remaining -= amount;
+      return amount > 0 ? [{ ...asset, amount }] : [];
+    });
+    const quantity = assets.reduce((sum, asset) => sum + asset.amount, 0);
+    return {
+      ...item,
+      inventoryCount,
+      reservedCount,
+      quantity,
+      totalGems: quantity * item.gemValue,
+      marketableCount: assets.reduce(
+        (sum, asset) => sum + (asset.marketable ? asset.amount : 0),
+        0
+      ),
+      tradableCount: assets.reduce(
+        (sum, asset) => sum + (asset.tradable ? asset.amount : 0),
+        0
+      ),
+      pointsShopCount: assets.reduce(
+        (sum, asset) => sum + (asset.pointsShop ? asset.amount : 0),
+        0
+      ),
+      assets
+    };
   }
   async function loadGrindInventoryItems(steamId, queue) {
     const groupMap = /* @__PURE__ */ new Map();
     const language = unsafeWindow.g_strLanguage || "schinese";
     const surplusAllowance = getSurplusAssetAllowance();
     const includeCards = !!state.cfg.grindIncludeSurplusCards;
+    const reserveCopies = Math.max(0, Math.floor(Number(state.cfg.grindReserveCopies) || 0));
+    const includePointsShopItems = !!state.cfg.grindIncludePointsShopItems;
     const itemMode = ["background", "emoticon"].includes(state.cfg.surplusItemMode) ? state.cfg.surplusItemMode : "background";
     let startAssetId = "";
     let page = 0;
@@ -4956,7 +5051,9 @@ ${result.assetTitle}` : ""
       cardsWithoutSurplus: 0,
       noGemValue: 0,
       blacklisted: 0,
-      gems: 0
+      gems: 0,
+      pointsShop: 0,
+      reserved: 0
     };
     do {
       page++;
@@ -4995,6 +5092,11 @@ ${result.assetTitle}` : ""
         if (getCommunityItemCategory(description) !== itemMode) {
           continue;
         }
+        const pointsShop = isPointsShopCommunityItemDescription(description);
+        if (pointsShop && !includePointsShopItems) {
+          skipped.pointsShop += assetAmount;
+          continue;
+        }
         let amount = assetAmount;
         if (isTradingCardDescription(description)) {
           const allowed = surplusAllowance.get(String(asset.assetid || "")) || 0;
@@ -5011,7 +5113,8 @@ ${result.assetTitle}` : ""
           description,
           amount,
           isTradingCardDescription(description) ? "card" : "item",
-          gemValue
+          gemValue,
+          pointsShop
         );
         if (result === "noGemValue") skipped.noGemValue += amount;
         else if (result === "blacklisted") skipped.blacklisted += amount;
@@ -5023,7 +5126,11 @@ ${result.assetTitle}` : ""
       );
       startAssetId = data.more_items && data.last_assetid ? String(data.last_assetid) : "";
     } while (startAssetId && !state.grindStopRequested);
-    const items = [...groupMap.values()].sort((left, right) => {
+    const items = [...groupMap.values()].flatMap((item) => {
+      const surplus = selectDuplicateSurplusItem(item, reserveCopies);
+      skipped.reserved += surplus ? surplus.reservedCount : item.quantity;
+      return surplus ? [surplus] : [];
+    }).sort((left, right) => {
       const adviceCompare = Number(right.totalGems) - Number(left.totalGems);
       if (adviceCompare) return adviceCompare;
       const gameCompare = (left.gameName || "").localeCompare(right.gameName || "", "zh-CN");
@@ -5071,9 +5178,11 @@ ${result.assetTitle}` : ""
     return item;
   }
   function getVisibleGrindResults() {
-    const all = state.grindResults || [];
-    if (!state.cfg.grindOnlyRecommended) return all;
-    return all.filter((item) => item.recommendationKey === "grind");
+    return (state.grindResults || []).filter((item) => {
+      if (state.cfg.grindOnlyRecommended && item.recommendationKey !== "grind") return false;
+      if (state.cfg.surplusOnlyTradable && item.tradableCount <= 0) return false;
+      return true;
+    });
   }
   function getGrindResultKey(item) {
     const assetKey = (item.assets || []).map((asset) => `${asset.assetid || ""}x${asset.amount || 1}`).join(",");
@@ -5163,7 +5272,8 @@ ${result.assetTitle}` : ""
       tile.classList.toggle("selected", state.selectedGrindResults?.has(key));
       tile.title = [
         `${item.gameName || "未知游戏"} · ${item.itemName || item.marketHashName || "未知物品"}`,
-        `类型 ${item.type || "物品"}；数量 ${item.quantity}`,
+        `类型 ${item.type || "物品"}；库存 ${item.inventoryCount}，保留 ${item.reservedCount}，多余 ${item.quantity}`,
+        item.pointsShopCount ? `多余数量中含点数商店类副本 ${item.pointsShopCount} 件` : "",
         `${item.gemValue} 宝石/件，共 ${formatInt(item.totalGems)} 宝石`,
         `市场 ${marketText}${marketTitle ? `；${marketTitle}` : ""}`,
         `分解临界 ${breakEvenText}`,
@@ -5277,7 +5387,7 @@ ${assetSummary.title}` : ""
         return;
       }
       grindLog(
-        `库存读取完成：库存 ${inventory.totalInventoryCount || inventory.totalAssetsSeen} 件，候选 ${inventory.items.length} 种；跳过无宝石值 ${inventory.skipped.noGemValue} 件，游戏黑名单 ${inventory.skipped.blacklisted} 件`,
+        `库存读取完成：库存 ${inventory.totalInventoryCount || inventory.totalAssetsSeen} 件，候选 ${inventory.items.length} 种；跳过无宝石值 ${inventory.skipped.noGemValue} 件，默认保留 ${inventory.skipped.reserved} 件，点数商店类 ${inventory.skipped.pointsShop} 件，游戏黑名单 ${inventory.skipped.blacklisted} 件`,
         "ok"
       );
       if (inventory.items.length === 0) {
@@ -5475,7 +5585,7 @@ ${assetSummary.title}` : ""
         assetid: String(asset.assetid || ""),
         contextid: String(asset.contextid || "6"),
         selectedAmount: getAssetQuantity(asset, "amount"),
-        assetAmount: getAssetQuantity(asset, "amount"),
+        assetAmount: getAssetQuantity(asset, "originalAmount"),
         estimatedGems: (item.gemValue || 0) * getAssetQuantity(asset, "amount")
       }))
     );
@@ -6166,6 +6276,10 @@ ${assetSummary.title}` : ""
               <input id="stch-surplus-only-maxed" type="checkbox" ${state.cfg.surplusOnlyMaxed ? "checked" : ""}>
               只显示当前已满级徽章
             </label>
+            <label>
+              <input id="stch-surplus-only-tradable" type="checkbox" ${state.cfg.surplusOnlyTradable ? "checked" : ""}>
+              只显示可交易
+            </label>
             <label class="stch-card-only-control" title="按宝石袋税后价值与卡牌出售税后到手价比较；分解更值时以绿色覆盖">
               <input id="stch-surplus-compare-gems" type="checkbox" ${state.cfg.surplusCompareGems ? "checked" : ""}>
               宝石比较
@@ -6251,6 +6365,15 @@ ${assetSummary.title}` : ""
             <label>每次合成请求间隔 <input id="stch-craft-interval" class="stch-input" type="number" min="200" step="100" value="${state.cfg.craftInterval}" style="width:70px"> ms</label>
             <span style="color:#8f98a0;font-size:12px;">逐级升级按每一级等待；一次升满按每个徽章等待</span>
           </div>
+          <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">多余物品处理</div>
+          <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+          <div class="stch-toolbar">
+            <label>默认保留 <input id="stch-grind-reserve-copies" class="stch-input" type="number" min="0" step="1" value="${state.cfg.grindReserveCopies}" style="width:55px"> 份背景/表情</label>
+            <label title="点数商店类副本按不可交易且不可上架的背景/表情识别">
+              <input id="stch-grind-include-points-shop" type="checkbox" ${state.cfg.grindIncludePointsShopItems ? "checked" : ""}>
+              重复物品计算包含点数商店物品
+            </label>
+          </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">使用说明</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
@@ -6259,7 +6382,7 @@ ${assetSummary.title}` : ""
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.0.0 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V2.0.1 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -6360,6 +6483,7 @@ ${assetSummary.title}` : ""
       );
       state.cfg.skipCachedOrderResults = !!document.getElementById("stch-skip-cached-orders")?.checked;
       state.cfg.surplusOnlyMaxed = !!document.getElementById("stch-surplus-only-maxed")?.checked;
+      state.cfg.surplusOnlyTradable = !!document.getElementById("stch-surplus-only-tradable")?.checked;
       state.cfg.surplusCompareGems = !!document.getElementById("stch-surplus-compare-gems")?.checked;
       state.cfg.surplusItemMode = getSurplusItemMode();
       state.cfg.surplusSellPriceSource = document.getElementById("stch-surplus-sell-price-source")?.value || state.cfg.surplusSellPriceSource || DEFAULT_CONFIG.surplusSellPriceSource;
@@ -6368,6 +6492,12 @@ ${assetSummary.title}` : ""
         state.cfg.surplusSellPriceAdjustment ?? DEFAULT_CONFIG.surplusSellPriceAdjustment
       );
       state.cfg.grindOnlyRecommended = !!document.getElementById("stch-grind-only-recommended")?.checked;
+      state.cfg.grindReserveCopies = readNumberInput(
+        "stch-grind-reserve-copies",
+        state.cfg.grindReserveCopies ?? DEFAULT_CONFIG.grindReserveCopies,
+        { integer: true, min: 0 }
+      );
+      state.cfg.grindIncludePointsShopItems = !!document.getElementById("stch-grind-include-points-shop")?.checked;
       const includeSurplusCards = document.getElementById("stch-grind-include-surplus-cards");
       if (includeSurplusCards) {
         state.cfg.grindIncludeSurplusCards = !!includeSurplusCards.checked;
@@ -6393,8 +6523,9 @@ ${assetSummary.title}` : ""
         renderOrderResults();
       }
       if (changedId === "stch-craft-mode") renderCraftResults();
-      if (["stch-surplus-only-maxed", "stch-surplus-compare-gems"].includes(changedId)) {
+      if (["stch-surplus-only-maxed", "stch-surplus-only-tradable", "stch-surplus-compare-gems"].includes(changedId)) {
         renderSurplusResults();
+        renderGrindResults();
       }
       if (changedId === "stch-surplus-item-mode") {
         if (state.cfg.surplusItemMode !== previousSurplusItemMode) {
@@ -6403,6 +6534,11 @@ ${assetSummary.title}` : ""
           state.grindGemPrice = null;
         }
         applySurplusItemMode();
+      }
+      if (["stch-grind-reserve-copies", "stch-grind-include-points-shop"].includes(changedId)) {
+        state.grindResults = [];
+        state.selectedGrindResults = /* @__PURE__ */ new Set();
+        state.grindGemPrice = null;
       }
       if (changedId?.startsWith("stch-grind-")) renderGrindResults();
       if (changedId?.startsWith("stch-seasonal-")) {
@@ -6430,11 +6566,14 @@ ${assetSummary.title}` : ""
       "stch-seasonal-target",
       "stch-surplus-item-mode",
       "stch-surplus-only-maxed",
+      "stch-surplus-only-tradable",
       "stch-surplus-compare-gems",
       "stch-surplus-sell-price-source",
       "stch-surplus-sell-adjustment",
       "stch-grind-only-recommended",
-      "stch-grind-include-surplus-cards"
+      "stch-grind-include-surplus-cards",
+      "stch-grind-reserve-copies",
+      "stch-grind-include-points-shop"
     ];
     cfgIds.forEach((id) => {
       const el = document.getElementById(id);
@@ -6836,17 +6975,18 @@ ${assetSummary.title}` : ""
     ]) || getFirstText(document, ["#global_actions .persona"]);
     const name = rawName.replace(/\s*».*$/, "").trim();
     const avatarSelectors = [
-      ".profile_small_header_avatar img",
-      ".profile_small_header_avatar",
-      ".profile_header .playerAvatar img",
-      ".playerAvatarAutoSizeInner img",
-      ".playerAvatarAutoSizeInner",
-      ".playerAvatar img",
-      ".playerAvatar",
-      "#global_actions .user_avatar img",
-      "#global_actions .user_avatar"
+      ".profile_small_header_avatar > .playerAvatar > picture img",
+      ".profile_small_header_avatar > .playerAvatar > img",
+      ".profile_header .playerAvatar > picture img",
+      ".profile_header .playerAvatar > img",
+      ".playerAvatarAutoSizeInner > img",
+      "#global_actions a.user_avatar > img"
     ];
-    const avatar = getFirstImageUrl(doc, avatarSelectors) || getFirstImageUrl(document, avatarSelectors);
+    const avatar = getFirstImageUrl(doc, avatarSelectors) || getFirstImageUrl(document, avatarSelectors) || normalizeSteamAvatarUrl(getFirstAttr(doc, [
+      "meta[property='og:image']",
+      "meta[name='twitter:image']",
+      "link[rel='image_src']"
+    ], "content") || getFirstAttr(doc, ["link[rel='image_src']"], "href"));
     const level = parseIntLoose(getFirstText(doc, [
       ".profile_xp_block .friendPlayerLevelNum",
       ".friendPlayerLevelNum"

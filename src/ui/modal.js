@@ -332,6 +332,10 @@ import { pruneOrderCache } from "../services/order-cache.js";
               <input id="stch-surplus-only-maxed" type="checkbox" ${state.cfg.surplusOnlyMaxed ? "checked" : ""}>
               只显示当前已满级徽章
             </label>
+            <label>
+              <input id="stch-surplus-only-tradable" type="checkbox" ${state.cfg.surplusOnlyTradable ? "checked" : ""}>
+              只显示可交易
+            </label>
             <label class="stch-card-only-control" title="按宝石袋税后价值与卡牌出售税后到手价比较；分解更值时以绿色覆盖">
               <input id="stch-surplus-compare-gems" type="checkbox" ${state.cfg.surplusCompareGems ? "checked" : ""}>
               宝石比较
@@ -417,6 +421,15 @@ import { pruneOrderCache } from "../services/order-cache.js";
             <label>每次合成请求间隔 <input id="stch-craft-interval" class="stch-input" type="number" min="200" step="100" value="${state.cfg.craftInterval}" style="width:70px"> ms</label>
             <span style="color:#8f98a0;font-size:12px;">逐级升级按每一级等待；一次升满按每个徽章等待</span>
           </div>
+          <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">多余物品处理</div>
+          <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+          <div class="stch-toolbar">
+            <label>默认保留 <input id="stch-grind-reserve-copies" class="stch-input" type="number" min="0" step="1" value="${state.cfg.grindReserveCopies}" style="width:55px"> 份背景/表情</label>
+            <label title="点数商店类副本按不可交易且不可上架的背景/表情识别">
+              <input id="stch-grind-include-points-shop" type="checkbox" ${state.cfg.grindIncludePointsShopItems ? "checked" : ""}>
+              重复物品计算包含点数商店物品
+            </label>
+          </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">使用说明</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
@@ -425,7 +438,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.0.0 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V2.0.1 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -533,6 +546,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
       );
       state.cfg.skipCachedOrderResults = !!document.getElementById("stch-skip-cached-orders")?.checked;
       state.cfg.surplusOnlyMaxed = !!document.getElementById("stch-surplus-only-maxed")?.checked;
+      state.cfg.surplusOnlyTradable = !!document.getElementById("stch-surplus-only-tradable")?.checked;
       state.cfg.surplusCompareGems = !!document.getElementById("stch-surplus-compare-gems")?.checked;
       state.cfg.surplusItemMode = getSurplusItemMode();
       state.cfg.surplusSellPriceSource = document.getElementById("stch-surplus-sell-price-source")?.value
@@ -543,6 +557,12 @@ import { pruneOrderCache } from "../services/order-cache.js";
         state.cfg.surplusSellPriceAdjustment ?? DEFAULT_CONFIG.surplusSellPriceAdjustment
       );
       state.cfg.grindOnlyRecommended = !!document.getElementById("stch-grind-only-recommended")?.checked;
+      state.cfg.grindReserveCopies = readNumberInput(
+        "stch-grind-reserve-copies",
+        state.cfg.grindReserveCopies ?? DEFAULT_CONFIG.grindReserveCopies,
+        { integer: true, min: 0 }
+      );
+      state.cfg.grindIncludePointsShopItems = !!document.getElementById("stch-grind-include-points-shop")?.checked;
       const includeSurplusCards = document.getElementById("stch-grind-include-surplus-cards");
       if (includeSurplusCards) {
         state.cfg.grindIncludeSurplusCards = !!includeSurplusCards.checked;
@@ -568,8 +588,9 @@ import { pruneOrderCache } from "../services/order-cache.js";
         renderOrderResults();
       }
       if (changedId === "stch-craft-mode") renderCraftResults();
-      if (["stch-surplus-only-maxed", "stch-surplus-compare-gems"].includes(changedId)) {
+      if (["stch-surplus-only-maxed", "stch-surplus-only-tradable", "stch-surplus-compare-gems"].includes(changedId)) {
         renderSurplusResults();
+        renderGrindResults();
       }
       if (changedId === "stch-surplus-item-mode") {
         if (state.cfg.surplusItemMode !== previousSurplusItemMode) {
@@ -578,6 +599,11 @@ import { pruneOrderCache } from "../services/order-cache.js";
           state.grindGemPrice = null;
         }
         applySurplusItemMode();
+      }
+      if (["stch-grind-reserve-copies", "stch-grind-include-points-shop"].includes(changedId)) {
+        state.grindResults = [];
+        state.selectedGrindResults = new Set();
+        state.grindGemPrice = null;
       }
       if (changedId?.startsWith("stch-grind-")) renderGrindResults();
       if (changedId?.startsWith("stch-seasonal-")) {
@@ -593,9 +619,10 @@ import { pruneOrderCache } from "../services/order-cache.js";
       "stch-early-price-prediction", "stch-order-cache-days",
       "stch-skip-cached-orders", "stch-craft-interval",
       "stch-craft-mode", "stch-seasonal-target", "stch-surplus-item-mode",
-      "stch-surplus-only-maxed", "stch-surplus-compare-gems", "stch-surplus-sell-price-source",
+      "stch-surplus-only-maxed", "stch-surplus-only-tradable", "stch-surplus-compare-gems", "stch-surplus-sell-price-source",
       "stch-surplus-sell-adjustment", "stch-grind-only-recommended",
-      "stch-grind-include-surplus-cards"];
+      "stch-grind-include-surplus-cards", "stch-grind-reserve-copies",
+      "stch-grind-include-points-shop"];
     cfgIds.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;

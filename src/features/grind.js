@@ -12,7 +12,7 @@ import { loadSidebarGemPrice } from "../sidebar/gems.js";
 
 import { priceCard } from "../parsers/price.js";
 
-import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, isTradingCardDescription, isFoilCardDescription, getCardGameName, getCommunityItemType, getCommunityItemCategory, getDescriptionImageUrl, getDescriptionColor, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, normalizeInventoryText, addInventoryCard, getDescriptionKey } from "../parsers/inventory.js";
+import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, isTradingCardDescription, isFoilCardDescription, getCardGameName, getCommunityItemType, getCommunityItemCategory, getDescriptionImageUrl, getDescriptionColor, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, normalizeInventoryText, addInventoryCard, getDescriptionKey, isPointsShopCommunityItemDescription } from "../parsers/inventory.js";
 
 import { getGemValueSellerNetCents, getGemBreakEvenBuyerPrice, getGemSackSellerNetCents, getSellerReceiveForBuyerPrice } from "../utils/market-fees.js";
 
@@ -75,7 +75,7 @@ export { updateGrindActionState };
     return allowance;
   }
 
-  export function addGrindItem(groupMap, asset, description, amount, source, gemValue) {
+  export function addGrindItem(groupMap, asset, description, amount, source, gemValue, pointsShop = false) {
     if (!description || amount <= 0) return "skipped";
     if (isGemSackDescription(description) || isLooseGemDescription(description)) return "gem";
 
@@ -108,6 +108,7 @@ export { updateGrindActionState };
         totalGems: 0,
         marketableCount: 0,
         tradableCount: 0,
+        pointsShopCount: 0,
         source,
         assets: [],
       };
@@ -121,14 +122,69 @@ export { updateGrindActionState };
     item.totalGems += amount * unitGemValue;
     if (marketable) item.marketableCount += amount;
     if (tradable) item.tradableCount += amount;
+    if (pointsShop) item.pointsShopCount += amount;
     item.assets.push({
       assetid: String(asset.assetid || ""),
       contextid: String(asset.contextid || "6"),
       amount,
+      originalAmount: getAssetAmount(asset),
       marketable,
       tradable,
+      pointsShop,
     });
     return "added";
+  }
+
+  export function selectDuplicateSurplusItem(item, reserveCopies) {
+    const inventoryCount = (item.assets || []).reduce(
+      (sum, asset) => sum + Math.max(0, Number(asset.amount) || 0),
+      0
+    );
+    const reservedCount = Math.min(
+      inventoryCount,
+      Math.max(0, Math.floor(Number(reserveCopies) || 0))
+    );
+    let remaining = Math.max(0, inventoryCount - reservedCount);
+    if (remaining <= 0) return null;
+
+    const assets = [...(item.assets || [])]
+      .sort((left, right) => {
+        const marketCompare = Number(right.marketable) - Number(left.marketable);
+        if (marketCompare) return marketCompare;
+        const tradeCompare = Number(right.tradable) - Number(left.tradable);
+        if (tradeCompare) return tradeCompare;
+        const pointsCompare = Number(left.pointsShop) - Number(right.pointsShop);
+        if (pointsCompare) return pointsCompare;
+        return String(left.assetid || "").localeCompare(String(right.assetid || ""), "en");
+      })
+      .flatMap(asset => {
+        if (remaining <= 0) return [];
+        const amount = Math.min(Math.max(0, Number(asset.amount) || 0), remaining);
+        remaining -= amount;
+        return amount > 0 ? [{ ...asset, amount }] : [];
+      });
+    const quantity = assets.reduce((sum, asset) => sum + asset.amount, 0);
+
+    return {
+      ...item,
+      inventoryCount,
+      reservedCount,
+      quantity,
+      totalGems: quantity * item.gemValue,
+      marketableCount: assets.reduce(
+        (sum, asset) => sum + (asset.marketable ? asset.amount : 0),
+        0
+      ),
+      tradableCount: assets.reduce(
+        (sum, asset) => sum + (asset.tradable ? asset.amount : 0),
+        0
+      ),
+      pointsShopCount: assets.reduce(
+        (sum, asset) => sum + (asset.pointsShop ? asset.amount : 0),
+        0
+      ),
+      assets,
+    };
   }
 
   export async function loadGrindInventoryItems(steamId, queue) {
@@ -136,6 +192,8 @@ export { updateGrindActionState };
     const language = unsafeWindow.g_strLanguage || "schinese";
     const surplusAllowance = getSurplusAssetAllowance();
     const includeCards = !!state.cfg.grindIncludeSurplusCards;
+    const reserveCopies = Math.max(0, Math.floor(Number(state.cfg.grindReserveCopies) || 0));
+    const includePointsShopItems = !!state.cfg.grindIncludePointsShopItems;
     const itemMode = ["background", "emoticon"].includes(state.cfg.surplusItemMode)
       ? state.cfg.surplusItemMode
       : "background";
@@ -148,6 +206,8 @@ export { updateGrindActionState };
       noGemValue: 0,
       blacklisted: 0,
       gems: 0,
+      pointsShop: 0,
+      reserved: 0,
     };
 
     do {
@@ -189,6 +249,11 @@ export { updateGrindActionState };
         if (getCommunityItemCategory(description) !== itemMode) {
           continue;
         }
+        const pointsShop = isPointsShopCommunityItemDescription(description);
+        if (pointsShop && !includePointsShopItems) {
+          skipped.pointsShop += assetAmount;
+          continue;
+        }
         let amount = assetAmount;
         if (isTradingCardDescription(description)) {
           const allowed = surplusAllowance.get(String(asset.assetid || "")) || 0;
@@ -206,7 +271,8 @@ export { updateGrindActionState };
           description,
           amount,
           isTradingCardDescription(description) ? "card" : "item",
-          gemValue
+          gemValue,
+          pointsShop
         );
         if (result === "noGemValue") skipped.noGemValue += amount;
         else if (result === "blacklisted") skipped.blacklisted += amount;
@@ -222,7 +288,11 @@ export { updateGrindActionState };
         : "";
     } while (startAssetId && !state.grindStopRequested);
 
-    const items = [...groupMap.values()].sort((left, right) => {
+    const items = [...groupMap.values()].flatMap(item => {
+      const surplus = selectDuplicateSurplusItem(item, reserveCopies);
+      skipped.reserved += surplus ? surplus.reservedCount : item.quantity;
+      return surplus ? [surplus] : [];
+    }).sort((left, right) => {
       const adviceCompare = Number(right.totalGems) - Number(left.totalGems);
       if (adviceCompare) return adviceCompare;
       const gameCompare = (left.gameName || "").localeCompare(right.gameName || "", "zh-CN");
@@ -276,9 +346,11 @@ export { updateGrindActionState };
   }
 
   export function getVisibleGrindResults() {
-    const all = state.grindResults || [];
-    if (!state.cfg.grindOnlyRecommended) return all;
-    return all.filter(item => item.recommendationKey === "grind");
+    return (state.grindResults || []).filter(item => {
+      if (state.cfg.grindOnlyRecommended && item.recommendationKey !== "grind") return false;
+      if (state.cfg.surplusOnlyTradable && item.tradableCount <= 0) return false;
+      return true;
+    });
   }
 
   export function getGrindResultKey(item) {
@@ -398,7 +470,8 @@ export { updateGrindActionState };
       tile.classList.toggle("selected", state.selectedGrindResults?.has(key));
       tile.title = [
         `${item.gameName || "未知游戏"} · ${item.itemName || item.marketHashName || "未知物品"}`,
-        `类型 ${item.type || "物品"}；数量 ${item.quantity}`,
+        `类型 ${item.type || "物品"}；库存 ${item.inventoryCount}，保留 ${item.reservedCount}，多余 ${item.quantity}`,
+        item.pointsShopCount ? `多余数量中含点数商店类副本 ${item.pointsShopCount} 件` : "",
         `${item.gemValue} 宝石/件，共 ${formatInt(item.totalGems)} 宝石`,
         `市场 ${marketText}${marketTitle ? `；${marketTitle}` : ""}`,
         `分解临界 ${breakEvenText}`,
@@ -540,6 +613,8 @@ export { updateGrindActionState };
         `库存读取完成：库存 ${inventory.totalInventoryCount || inventory.totalAssetsSeen} 件，` +
         `候选 ${inventory.items.length} 种；` +
         `跳过无宝石值 ${inventory.skipped.noGemValue} 件，` +
+        `默认保留 ${inventory.skipped.reserved} 件，` +
+        `点数商店类 ${inventory.skipped.pointsShop} 件，` +
         `游戏黑名单 ${inventory.skipped.blacklisted} 件`,
         "ok"
       );
