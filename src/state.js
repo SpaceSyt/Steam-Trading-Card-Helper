@@ -2,6 +2,7 @@ import { loadConfig } from "./config.js";
 
   export const state = {
     cfg: loadConfig(),
+    currencyContext: null,
     results: [],
     scanning: false,
     stopRequested: false,

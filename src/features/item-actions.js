@@ -6,7 +6,7 @@ import { priceCard } from "../parsers/price.js";
 
 import { getBuyerPriceForSellerReceive, getSellerReceiveForBuyerPrice } from "../utils/market-fees.js";
 
-import { formatCNY, formatInt } from "../utils/format.js";
+import { formatInt, formatMoney } from "../utils/format.js";
 
 import { getMarketMinimumPriceCents, getProfileUrl, getSessionId, getSteamId } from "../utils/steam.js";
 
@@ -171,7 +171,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     let basePriceCents = null;
     if (priceSource === "highest") {
       ui.setStatus(`读取求购最高 ${index + 1}/${total}: ${group.itemName}`);
-      basePriceCents = await fetchHighestBuyPrice(group.marketHashName);
+      basePriceCents = await fetchHighestBuyPrice(group.marketHashName, queue);
     } else {
       ui.setStatus(`读取出售参考价 ${index + 1}/${total}: ${group.itemName}`);
       const price = await priceCard(group.marketHashName, queue);
@@ -432,13 +432,17 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     const totalQuantity = plan.reduce((sum, item) => sum + item.quantity, 0);
     const totalBuyerCents = plan.reduce((sum, item) => sum + item.totalBuyerCents, 0);
     const totalReceiveCents = plan.reduce((sum, item) => sum + item.totalReceiveCents, 0);
-    const adjustmentText = `${adjustmentCents >= 0 ? "+" : "-"}¥${formatCNY(Math.abs(adjustmentCents))}`;
+    const adjustmentText = adjustmentCents >= 0
+      ? `+${formatMoney(adjustmentCents)}`
+      : formatMoney(adjustmentCents);
     const notes = [];
     if (skipped.missingHash) notes.push(`${skipped.missingHash} 项缺少市场标识`);
     if (skipped.unmarketable) notes.push(`${skipped.unmarketable} 项不可出售`);
     if (skipped.missingPrice) notes.push(`${skipped.missingPrice} 项缺少所选价格`);
     if (skipped.failedPrice) notes.push(`${skipped.failedPrice} 项查价失败`);
-    if (skipped.clamped) notes.push(`${skipped.clamped} 项低于 Steam 最低售价，已调整到 ¥${formatCNY(minimumBuyerCents)}`);
+    if (skipped.clamped) {
+      notes.push(`${skipped.clamped} 项低于 Steam 最低售价，已调整到 ${formatMoney(minimumBuyerCents)}`);
+    }
 
     return showProcessingConfirmation({
       title: "确认上架出售",
@@ -446,14 +450,14 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
       confirmLabel: "上架出售",
       summaryHtml:
         `项目 <b>${plan.length}</b> 项 · 数量 <b>${totalQuantity}</b> 件 · ` +
-        `买家价格合计 <b>¥${formatCNY(totalBuyerCents)}</b> · ` +
-        `税后到手约 <b>¥${formatCNY(totalReceiveCents)}</b><br>` +
+        `买家价格合计 <b>${formatMoney(totalBuyerCents)}</b> · ` +
+        `税后到手约 <b>${formatMoney(totalReceiveCents)}</b><br>` +
         `价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> · 售价调整 <b>${adjustmentText}</b>`,
       rows: plan.map(item => [
         `${item.gameName ? `${item.gameName} · ` : ""}${item.itemName}`,
         `${item.quantity} 件`,
-        `买家 ¥${formatCNY(item.unitBuyerCents)}`,
-        `到手 ¥${formatCNY(item.sellerReceiveCents)}`,
+        `买家 ${formatMoney(item.unitBuyerCents)}`,
+        `到手 ${formatMoney(item.sellerReceiveCents)}`,
       ]),
       note:
         `${notes.join("；") || "未发现需跳过的项目"}。` +
@@ -529,7 +533,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
             ? "，等待手机确认"
             : "";
           ui.log(
-            `  ✓ ${asset.item.itemName} x${asset.amount}: 买家 ¥${formatCNY(asset.item.unitBuyerCents)} / 到手 ¥${formatCNY(asset.item.sellerReceiveCents)}${confirmationText}`,
+            `  ✓ ${asset.item.itemName} x${asset.amount}: 买家 ${formatMoney(asset.item.unitBuyerCents)} / 到手 ${formatMoney(asset.item.sellerReceiveCents)}${confirmationText}`,
             "ok"
           );
         } catch (error) {

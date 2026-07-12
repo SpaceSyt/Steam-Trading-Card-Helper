@@ -16,7 +16,7 @@ import { priceCard } from "../parsers/price.js";
 
 import { getGemValueSellerNetCents, getSellerReceiveForBuyerPrice } from "../utils/market-fees.js";
 
-import { formatCNY } from "../utils/format.js";
+import { formatMoney } from "../utils/format.js";
 
 import { findInventoryCardForBadgeCard, selectSurplusAssets, summarizeAssetIds } from "../parsers/inventory.js";
 
@@ -257,10 +257,10 @@ export { updateSurplusActionState };
             ? `市场成交量 ${result.volume}`
             : "市场价格尚未读取",
         result.priceCents
-          ? `市场参考 ¥${formatCNY(result.priceCents)}，出售税后约 ¥${formatCNY(result.marketNetCents)}`
+          ? `市场参考 ${formatMoney(result.priceCents)}，出售税后约 ${formatMoney(result.marketNetCents)}`
           : "",
         result.gemValueNetCents
-          ? `${result.gemValue} 宝石/张，税后折算约 ¥${formatCNY(result.gemValueNetCents)}`
+          ? `${result.gemValue} 宝石/张，税后折算约 ${formatMoney(result.gemValueNetCents)}`
           : "",
         state.cfg.surplusCompareGems && result.gemBetter
           ? "宝石价值高于出售税后到手价"
@@ -446,7 +446,7 @@ export { updateSurplusActionState };
           state.surplusGemPrice = await loadSidebarGemPrice(queue);
           if (state.surplusGemPrice.priceCents) {
             surplusLog(
-              `宝石袋 ${state.surplusGemPrice.source} ¥${formatCNY(state.surplusGemPrice.priceCents)}`,
+              `宝石袋 ${state.surplusGemPrice.source} ${formatMoney(state.surplusGemPrice.priceCents)}`,
               "info"
             );
           }

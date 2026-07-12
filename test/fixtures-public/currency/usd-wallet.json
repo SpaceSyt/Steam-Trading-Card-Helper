@@ -1,0 +1,19 @@
+{
+  "_meta": {
+    "synthetic": true,
+    "description": "Synthetic USD wallet-format fixture; contains no account or balance data."
+  },
+  "walletInfo": {
+    "wallet_currency": 1,
+    "wallet_market_minimum": 1,
+    "wallet_fee_percent": "0.05",
+    "wallet_fee_minimum": 1,
+    "wallet_publisher_fee_percent_default": "0.10",
+    "wallet_fee_base": 0
+  },
+  "applicationConfigWalletInfo": "{&quot;wallet_currency&quot;:1,&quot;wallet_market_minimum&quot;:1,&quot;wallet_fee_percent&quot;:&quot;0.05&quot;,&quot;wallet_fee_minimum&quot;:1,&quot;wallet_publisher_fee_percent_default&quot;:&quot;0.10&quot;,&quot;wallet_fee_base&quot;:0}",
+  "amounts": [
+    { "display": "$0.03", "minor": 3 },
+    { "display": "$1,234.56", "minor": 123456 }
+  ]
+}

@@ -2,6 +2,7 @@
 import css from "./ui/style.css";
 import { $J } from "./globals.js";
 import { state } from "./state.js";
+import { initializeCurrencyContext } from "./services/currency.js";
 import { loadOrderCache, pruneOrderCache } from "./services/order-cache.js";
 import { observeEntryBtn } from "./ui/entry.js";
 import { injectSidebar } from "./sidebar/sidebar.js";
@@ -10,6 +11,9 @@ import { isPointsShopPage } from "./utils/steam.js";
 
 GM_addStyle(css);
 
+state.currencyContext = initializeCurrencyContext({
+  configuredCurrencyId: state.cfg.currencyId,
+});
 state.orderResults = loadOrderCache();
 pruneOrderCache(true);
 

@@ -1,6 +1,7 @@
 import { SIDEBAR_PINNED_KEY, SIDEBAR_GEM_PRICE_KEY, GEM_SACK_SIZE } from "../constants.js";
+import { state } from "../state.js";
 
-import { formatInt, formatCNY } from "../utils/format.js";
+import { formatInt, formatMoney } from "../utils/format.js";
 
 import { getGemSackSellerNetCents, getGemBreakEvenBuyerPrice } from "../utils/market-fees.js";
 
@@ -70,12 +71,12 @@ import { loadSidebarGemInfo, loadSidebarGemPrice } from "./gems.js";
               ? "stch-sidebar-price-fall"
               : "stch-sidebar-price-flat";
           change.textContent = changeCents === 0
-            ? `(±¥${formatCNY(0)}) `
-            : `(${changeCents > 0 ? "+" : "-"}¥${formatCNY(Math.abs(changeCents))}) `;
+            ? `(±${formatMoney(0)}) `
+            : `(${changeCents > 0 ? "+" : ""}${formatMoney(changeCents)}) `;
           priceEl.appendChild(change);
         }
         priceEl.appendChild(
-          document.createTextNode(`${GEM_SACK_SIZE}宝石/¥${formatCNY(gemPrice.priceCents)}`)
+          document.createTextNode(`${GEM_SACK_SIZE}宝石/${formatMoney(gemPrice.priceCents)}`)
         );
       } else {
         priceEl.textContent = "—";
@@ -85,7 +86,7 @@ import { loadSidebarGemInfo, loadSidebarGemPrice } from "./gems.js";
       ? getGemSackSellerNetCents(gemPrice.priceCents)
       : 0;
     const priceTitle = gemPrice.priceCents
-      ? `${gemPrice.source}${gemPrice.volume ? `，成交量 ${formatInt(gemPrice.volume)}` : ""}，税后到手约 ¥${formatCNY(gemSackNetCents)}`
+      ? `${gemPrice.source}${gemPrice.volume ? `，成交量 ${formatInt(gemPrice.volume)}` : ""}，税后到手约 ${formatMoney(gemSackNetCents)}`
       : "暂无宝石袋市场价格";
     if (priceEl) priceEl.title = priceTitle;
 
@@ -93,11 +94,11 @@ import { loadSidebarGemInfo, loadSidebarGemPrice } from "./gems.js";
       ? getGemBreakEvenBuyerPrice(10, gemPrice.priceCents)
       : 0;
     const breakEvenTitle = breakEven10
-      ? `按宝石袋税后到手 ¥${formatCNY(gemSackNetCents)} 计算；物品卖出税后低于该值时，分解成宝石更值`
+      ? `按宝石袋税后到手 ${formatMoney(gemSackNetCents)} 计算；物品卖出税后低于该值时，分解成宝石更值`
       : "暂无宝石袋市场价格";
     setSidebarText(
       "stch-sidebar-grind-threshold",
-      breakEven10 ? `10宝石/¥${formatCNY(breakEven10)}` : "—",
+      breakEven10 ? `10宝石/${formatMoney(breakEven10)}` : "—",
       breakEvenTitle
     );
 
@@ -132,11 +133,22 @@ import { loadSidebarGemInfo, loadSidebarGemPrice } from "./gems.js";
       }
       if (priceResult.status === "fulfilled") {
         const currentPriceCents = Number(priceResult.value?.priceCents) || 0;
+        const currencyId = Number(
+          priceResult.value?.currencyId
+          || state?.currencyContext?.currencyId
+          || state?.cfg?.currencyId
+          || 23
+        );
         const savedGemPrice = GM_getValue(SIDEBAR_GEM_PRICE_KEY, null);
+        const savedCurrencyId = typeof savedGemPrice === "object"
+          ? Number(savedGemPrice?.currencyId || 23)
+          : 23;
         const previousPriceCents = Number(
-          typeof savedGemPrice === "object"
+          savedCurrencyId === currencyId && typeof savedGemPrice === "object"
             ? savedGemPrice?.priceCents
-            : savedGemPrice
+            : savedCurrencyId === currencyId
+              ? savedGemPrice
+              : 0
         ) || 0;
         sidebarData.gemPrice = {
           ...priceResult.value,
@@ -144,6 +156,8 @@ import { loadSidebarGemInfo, loadSidebarGemPrice } from "./gems.js";
         };
         if (currentPriceCents > 0) {
           GM_setValue(SIDEBAR_GEM_PRICE_KEY, {
+            schemaVersion: 2,
+            currencyId,
             priceCents: currentPriceCents,
             observedAt: Date.now(),
           });

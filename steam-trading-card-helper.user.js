@@ -2,7 +2,7 @@
 // @name         Steam Trading Card Helper
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
-// @version      2.0.5
+// @version      2.1.0
 // @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and process surplus items
 // @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测和处理多余卡牌/背景/表情
 // @author       SpaceSyt
@@ -39,8 +39,11 @@
   var $J = unsafeWindow.jQuery || unsafeWindow.$ || window.jQuery || window.$ || null;
 
   // src/config.js
+  var CONFIG_STORAGE_KEY = "stch_config";
+  var CONFIG_SCHEMA_VERSION = 19;
   var DEFAULT_CONFIG = {
-    configVersion: 18,
+    configVersion: CONFIG_SCHEMA_VERSION,
+    currencyId: 23,
     threshold: 5,
     requestInterval: 330,
     batchSize: 20,
@@ -78,26 +81,30 @@
     grindReserveCopies: 1,
     grindIncludePointsShopItems: false
   };
+  function normalizeConfig(saved) {
+    const defaults = { ...DEFAULT_CONFIG };
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) {
+      return defaults;
+    }
+    const merged = { ...defaults, ...saved };
+    for (const key of Object.keys(merged)) {
+      if (!Object.prototype.hasOwnProperty.call(defaults, key)) {
+        delete merged[key];
+      }
+    }
+    const currencyId = Number(merged.currencyId);
+    merged.currencyId = Number.isInteger(currencyId) && currencyId > 0 ? currencyId : defaults.currencyId;
+    merged.configVersion = CONFIG_SCHEMA_VERSION;
+    return merged;
+  }
   function loadConfig() {
     const defaults = { ...DEFAULT_CONFIG };
-    const currentVersion = defaults.configVersion;
     try {
-      const raw = GM_getValue("stch_config", null);
+      const raw = GM_getValue(CONFIG_STORAGE_KEY, null);
       if (raw) {
-        const saved = JSON.parse(raw);
-        const merged = { ...defaults, ...saved };
-        let pruned = false;
-        for (const key of Object.keys(merged)) {
-          if (!Object.prototype.hasOwnProperty.call(defaults, key)) {
-            delete merged[key];
-            pruned = true;
-          }
-        }
-        const savedVersion = Number(saved?.configVersion) || 0;
-        if (savedVersion < currentVersion) {
-          merged.configVersion = currentVersion;
-          saveConfig(merged);
-        } else if (pruned) {
+        const saved = typeof raw === "string" ? JSON.parse(raw) : raw;
+        const merged = normalizeConfig(saved);
+        if (JSON.stringify(saved) !== JSON.stringify(merged)) {
           saveConfig(merged);
         }
         return merged;
@@ -108,12 +115,18 @@
     return defaults;
   }
   function saveConfig(cfg) {
-    GM_setValue("stch_config", JSON.stringify(cfg));
+    const normalized = normalizeConfig(cfg);
+    for (const key of Object.keys(cfg || {})) {
+      if (!Object.prototype.hasOwnProperty.call(normalized, key)) delete cfg[key];
+    }
+    Object.assign(cfg, normalized);
+    GM_setValue(CONFIG_STORAGE_KEY, JSON.stringify(normalized));
   }
 
   // src/state.js
   var state = {
     cfg: loadConfig(),
+    currencyContext: null,
     results: [],
     scanning: false,
     stopRequested: false,
@@ -154,6 +167,464 @@
     blLookupName: ""
   };
 
+  // src/services/currency.js
+  var DEFAULT_DECIMAL_DIGITS = 2;
+  var DEFAULT_STEAM_FEE_RATE = 0.05;
+  var DEFAULT_PUBLISHER_FEE_RATE = 0.1;
+  var CURRENCY_IDS = Object.freeze({
+    USD: 1,
+    CNY: 23,
+    HKD: 29
+  });
+  var CURRENCY_DEFINITION_MAP = Object.freeze({
+    [CURRENCY_IDS.USD]: Object.freeze({
+      currencyId: CURRENCY_IDS.USD,
+      code: "USD",
+      name: "US Dollar",
+      symbol: "$",
+      symbolPosition: "before",
+      symbolSpacing: false,
+      locale: "en-US",
+      decimalDigits: 2,
+      decimalSeparator: ".",
+      groupSeparator: ",",
+      marketMinimumMinor: 1,
+      minimumBuyerMinor: 3,
+      steamFeeRate: DEFAULT_STEAM_FEE_RATE,
+      publisherFeeRate: DEFAULT_PUBLISHER_FEE_RATE,
+      steamFeeMinimumMinor: 1,
+      publisherFeeMinimumMinor: 1,
+      steamFeeBaseMinor: 0,
+      verified: true
+    }),
+    [CURRENCY_IDS.CNY]: Object.freeze({
+      currencyId: CURRENCY_IDS.CNY,
+      code: "CNY",
+      name: "Chinese Yuan",
+      symbol: "¥",
+      symbolPosition: "before",
+      symbolSpacing: false,
+      locale: "zh-CN",
+      decimalDigits: 2,
+      decimalSeparator: ".",
+      groupSeparator: ",",
+      marketMinimumMinor: 7,
+      minimumBuyerMinor: 21,
+      steamFeeRate: DEFAULT_STEAM_FEE_RATE,
+      publisherFeeRate: DEFAULT_PUBLISHER_FEE_RATE,
+      steamFeeMinimumMinor: 7,
+      publisherFeeMinimumMinor: 7,
+      steamFeeBaseMinor: 0,
+      verified: true
+    }),
+    [CURRENCY_IDS.HKD]: Object.freeze({
+      currencyId: CURRENCY_IDS.HKD,
+      code: "HKD",
+      name: "Hong Kong Dollar",
+      symbol: "HK$",
+      symbolPosition: "before",
+      symbolSpacing: true,
+      locale: "zh-HK",
+      decimalDigits: 2,
+      decimalSeparator: ".",
+      groupSeparator: ",",
+      // HK market samples confirm ID, formatting, and percentage fee behavior.
+      // The page does not expose wallet minimum fields, so retain Steam's
+      // conservative one-minor-unit defaults for those values.
+      marketMinimumMinor: 1,
+      minimumBuyerMinor: 3,
+      steamFeeRate: DEFAULT_STEAM_FEE_RATE,
+      publisherFeeRate: DEFAULT_PUBLISHER_FEE_RATE,
+      steamFeeMinimumMinor: 1,
+      publisherFeeMinimumMinor: 1,
+      steamFeeBaseMinor: 0,
+      verified: true
+    })
+  });
+  var activeCurrencyContext = null;
+  function firstDefined(...values) {
+    return values.find((value) => value !== void 0 && value !== null && value !== "");
+  }
+  function toFiniteNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+  function toNonNegativeInteger(value, fallback) {
+    const number = toFiniteNumber(value);
+    return number != null && number >= 0 ? Math.floor(number) : fallback;
+  }
+  function toPositiveInteger(value, fallback) {
+    const number = toFiniteNumber(value);
+    return number != null && number > 0 ? Math.floor(number) : fallback;
+  }
+  function toRate(value, fallback) {
+    const number = toFiniteNumber(value);
+    if (number == null || number < 0) return fallback;
+    return number > 1 ? number / 100 : number;
+  }
+  function normalizeCurrencyId(value) {
+    if (typeof value === "string") {
+      const normalized = value.trim().toUpperCase();
+      if (normalized === "USD") return CURRENCY_IDS.USD;
+      if (normalized === "CNY" || normalized === "RMB") return CURRENCY_IDS.CNY;
+      if (normalized === "HKD") return CURRENCY_IDS.HKD;
+    }
+    const number = Number(value);
+    return Number.isInteger(number) && number > 0 ? number : null;
+  }
+  function currencyIdFromObject(value) {
+    if (!value || typeof value !== "object") return null;
+    const direct = firstDefined(
+      value.currencyId,
+      value.currency_id,
+      value.wallet_currency,
+      value.walletCurrency,
+      value.eCurrency,
+      value.currency
+    );
+    const directId = normalizeCurrencyId(direct);
+    if (directId != null) return directId;
+    return normalizeCurrencyId(firstDefined(value.code, value.currencyCode, value.wallet_currency_code));
+  }
+  function isWalletInfoLike(value) {
+    return Boolean(
+      value && typeof value === "object" && (Object.hasOwn(value, "wallet_currency") || Object.hasOwn(value, "wallet_market_minimum") || Object.hasOwn(value, "wallet_fee_percent") || Object.hasOwn(value, "wallet_fee_minimum"))
+    );
+  }
+  function genericCurrencyDefinition(currencyId) {
+    const idLabel = currencyId == null ? "unknown" : String(currencyId);
+    return {
+      currencyId,
+      code: currencyId == null ? "UNRESOLVED" : `STEAM-${idLabel}`,
+      name: currencyId == null ? "Unresolved currency" : `Steam currency ${idLabel}`,
+      symbol: "¤",
+      symbolPosition: "before",
+      symbolSpacing: false,
+      locale: "en-US",
+      decimalDigits: DEFAULT_DECIMAL_DIGITS,
+      decimalSeparator: ".",
+      groupSeparator: ",",
+      marketMinimumMinor: 1,
+      minimumBuyerMinor: 3,
+      steamFeeRate: DEFAULT_STEAM_FEE_RATE,
+      publisherFeeRate: DEFAULT_PUBLISHER_FEE_RATE,
+      steamFeeMinimumMinor: 1,
+      publisherFeeMinimumMinor: 1,
+      steamFeeBaseMinor: 0
+    };
+  }
+  function normalizedSourceObject(value) {
+    if (!value || typeof value !== "object") return {};
+    if (value.currencyContext && typeof value.currencyContext === "object") {
+      return value.currencyContext;
+    }
+    return value;
+  }
+  function createCurrencyContext(currencyOrOptions, metadata = {}) {
+    const supplied = normalizedSourceObject(
+      currencyOrOptions && typeof currencyOrOptions === "object" ? currencyOrOptions : { currencyId: currencyOrOptions }
+    );
+    const walletInfo = supplied.walletInfo && typeof supplied.walletInfo === "object" ? supplied.walletInfo : isWalletInfoLike(supplied) ? supplied : {};
+    const currencyId = currencyIdFromObject(supplied) ?? currencyIdFromObject(walletInfo);
+    const knownDefinition = currencyId == null ? null : CURRENCY_DEFINITION_MAP[currencyId];
+    const base = knownDefinition || genericCurrencyDefinition(currencyId);
+    const override = { ...walletInfo, ...supplied };
+    const decimalDigits = base.decimalDigits;
+    const marketMinimumMinor = toPositiveInteger(firstDefined(
+      override.marketMinimumMinor,
+      override.walletMarketMinimumMinor,
+      override.wallet_market_minimum
+    ), base.marketMinimumMinor);
+    const minimumBuyerMinor = toPositiveInteger(firstDefined(
+      override.minimumBuyerMinor,
+      override.marketMinimumBuyerMinor,
+      override.minimumBuyerAmount
+    ), marketMinimumMinor * 3);
+    const feeMinimumFromWallet = firstDefined(
+      override.wallet_fee_minimum,
+      override.feeMinimumMinor
+    );
+    const steamFeeMinimumMinor = toNonNegativeInteger(firstDefined(
+      override.steamFeeMinimumMinor,
+      override.steam_fee_minimum,
+      feeMinimumFromWallet,
+      override.wallet_market_minimum
+    ), base.steamFeeMinimumMinor);
+    const publisherFeeMinimumMinor = toNonNegativeInteger(firstDefined(
+      override.publisherFeeMinimumMinor,
+      override.publisher_fee_minimum,
+      override.wallet_publisher_fee_minimum,
+      feeMinimumFromWallet,
+      override.wallet_market_minimum
+    ), base.publisherFeeMinimumMinor);
+    const verified = Boolean(knownDefinition?.verified);
+    const source = String(firstDefined(metadata.source, override.source, "manual"));
+    const isFallback = Boolean(firstDefined(metadata.isFallback, override.isFallback, false));
+    const status = verified ? isFallback ? "fallback" : "verified" : "unverified";
+    const code = base.code;
+    return Object.freeze({
+      currencyId,
+      id: currencyId,
+      currency: currencyId,
+      code,
+      currencyCode: code,
+      name: base.name,
+      symbol: base.symbol,
+      symbolPosition: base.symbolPosition,
+      symbolSpacing: base.symbolSpacing,
+      locale: base.locale,
+      decimalDigits,
+      decimals: decimalDigits,
+      minorDigits: decimalDigits,
+      fractionDigits: decimalDigits,
+      minorUnitFactor: 10 ** decimalDigits,
+      decimalSeparator: base.decimalSeparator,
+      groupSeparator: base.groupSeparator,
+      marketMinimumMinor,
+      minimumBuyerMinor,
+      marketMinimumBuyerMinor: minimumBuyerMinor,
+      steamFeeRate: toRate(firstDefined(
+        override.steamFeeRate,
+        override.wallet_fee_percent
+      ), base.steamFeeRate),
+      publisherFeeRate: toRate(firstDefined(
+        override.publisherFeeRate,
+        override.wallet_publisher_fee_percent_default
+      ), base.publisherFeeRate),
+      steamFeeMinimumMinor,
+      publisherFeeMinimumMinor,
+      steamFeeBaseMinor: toNonNegativeInteger(firstDefined(
+        override.steamFeeBaseMinor,
+        override.wallet_fee_base
+      ), base.steamFeeBaseMinor),
+      verified,
+      isVerified: verified,
+      unverified: !verified,
+      isUnverified: !verified,
+      verification: verified ? "verified" : "unverified",
+      status,
+      source,
+      isFallback
+    });
+  }
+  function decodeHtmlAttribute(value) {
+    return String(value || "").replace(/&quot;|&#34;|&#x22;/gi, '"').replace(/&apos;|&#39;|&#x27;/gi, "'").replace(/&lt;|&#60;|&#x3c;/gi, "<").replace(/&gt;|&#62;|&#x3e;/gi, ">").replace(/&amp;|&#38;|&#x26;/gi, "&");
+  }
+  function parseWalletInfo(value) {
+    if (value && typeof value === "object") return value;
+    let text = String(value || "").trim();
+    if (!text) return null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      text = decodeHtmlAttribute(text).trim();
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === "object") return parsed;
+        if (typeof parsed === "string") {
+          text = parsed;
+          continue;
+        }
+      } catch (_) {
+      }
+    }
+    return null;
+  }
+  function globalObject() {
+    if (typeof globalThis === "undefined") return {};
+    return globalThis.unsafeWindow || globalThis.window || globalThis;
+  }
+  function readApplicationConfigWalletInfo(options) {
+    const direct = parseWalletInfo(options.applicationConfigWalletInfo);
+    if (currencyIdFromObject(direct) != null) return direct;
+    const applicationConfig = options.applicationConfig;
+    if (applicationConfig) {
+      const configValue = typeof applicationConfig === "string" ? applicationConfig : firstDefined(
+        applicationConfig.dataset?.walletinfo,
+        applicationConfig.dataset?.walletInfo,
+        applicationConfig.getAttribute?.("data-walletinfo")
+      );
+      const parsed2 = parseWalletInfo(configValue || applicationConfig);
+      if (currencyIdFromObject(parsed2) != null) return parsed2;
+    }
+    const documentRef = options.document || (typeof document !== "undefined" ? document : null);
+    const element = documentRef?.getElementById?.("application_config") || documentRef?.querySelector?.("#application_config");
+    const raw = firstDefined(
+      element?.dataset?.walletinfo,
+      element?.dataset?.walletInfo,
+      element?.getAttribute?.("data-walletinfo")
+    );
+    const parsed = parseWalletInfo(raw);
+    return currencyIdFromObject(parsed) != null ? parsed : null;
+  }
+  function pageCurrencyId(options) {
+    const documentRef = options.document || (typeof document !== "undefined" ? document : null);
+    const root = globalObject();
+    const locationRef = options.location || root.location;
+    const directCountry = firstDefined(
+      root.g_strCountryCode,
+      root.UserConfig?.country_code,
+      root.UserConfig?.COUNTRY
+    );
+    const pageParts = [
+      options.pageText,
+      options.pageHtml,
+      documentRef?.documentElement?.innerHTML,
+      documentRef?.body?.textContent,
+      locationRef?.href
+    ].filter(Boolean);
+    const text = decodeHtmlAttribute(pageParts.join("\n")).replace(/\\(["'])/g, "$1");
+    const isHongKongAccount = String(directCountry || "").trim().toUpperCase() === "HK";
+    if (!text) return isHongKongAccount ? CURRENCY_IDS.HKD : null;
+    const idPatterns = [
+      /wallet_currency["']?\s*[:=]\s*["']?(\d+)/i,
+      /(?:data-)?currency(?:-id)?["']?\s*[:=]\s*["']?(\d+)/i,
+      /[?&]currency=(\d+)(?:&|$)/i,
+      /eCurrency["']?\s*[:=]\s*["']?(\d+)/i
+    ];
+    for (const pattern of idPatterns) {
+      const match = text.match(pattern);
+      const currencyId = normalizeCurrencyId(match?.[1]);
+      if (currencyId != null) return currencyId;
+    }
+    if (/\b(?:CNY|RMB)\b/i.test(text) || /[¥￥]\s*[+-]?\d/.test(text)) {
+      return CURRENCY_IDS.CNY;
+    }
+    if (/\bHKD\b/i.test(text) || /HK\$\s*[+-]?\d/i.test(text)) {
+      return CURRENCY_IDS.HKD;
+    }
+    if (/(?:country_code|COUNTRY|country)[\\"']?\s*[:=]\s*[\\"']?HK\b/i.test(text)) {
+      return CURRENCY_IDS.HKD;
+    }
+    if (isHongKongAccount) {
+      return CURRENCY_IDS.HKD;
+    }
+    if (/\bUSD\b/i.test(text) || /\$\s*[+-]?\d/.test(text)) {
+      return CURRENCY_IDS.USD;
+    }
+    return null;
+  }
+  function normalizeDetectionOptions(value) {
+    if (!value || typeof value !== "object") {
+      return value == null ? {} : { configuredCurrencyId: value };
+    }
+    const detectionKeys = [
+      "walletInfo",
+      "configuredCurrencyId",
+      "applicationConfigWalletInfo",
+      "applicationConfig",
+      "document",
+      "pageText",
+      "pageHtml",
+      "location"
+    ];
+    return detectionKeys.some((key) => Object.hasOwn(value, key)) ? value : { walletInfo: value };
+  }
+  function detectCurrencyContext(input = {}) {
+    const options = normalizeDetectionOptions(input);
+    const root = globalObject();
+    const walletInfo = parseWalletInfo(
+      Object.hasOwn(options, "walletInfo") ? options.walletInfo : root.g_rgWalletInfo
+    );
+    if (currencyIdFromObject(walletInfo) != null) {
+      return createCurrencyContext(walletInfo, { source: "walletInfo", isFallback: false });
+    }
+    const configWalletInfo = readApplicationConfigWalletInfo(options);
+    if (currencyIdFromObject(configWalletInfo) != null) {
+      return createCurrencyContext(configWalletInfo, {
+        source: "application_config",
+        isFallback: false
+      });
+    }
+    const detectedPageCurrencyId = pageCurrencyId(options);
+    if (detectedPageCurrencyId != null) {
+      return createCurrencyContext(detectedPageCurrencyId, { source: "page", isFallback: false });
+    }
+    const configuredCurrencyId = normalizeCurrencyId(options.configuredCurrencyId);
+    if (configuredCurrencyId != null) {
+      return createCurrencyContext(configuredCurrencyId, {
+        source: "configured",
+        isFallback: true
+      });
+    }
+    return createCurrencyContext(null, { source: "unresolved", isFallback: true });
+  }
+  function initializeCurrencyContext(options = {}) {
+    activeCurrencyContext = detectCurrencyContext(options);
+    return activeCurrencyContext;
+  }
+  function setActiveCurrencyContext(context) {
+    if (context == null) {
+      activeCurrencyContext = null;
+      return null;
+    }
+    activeCurrencyContext = createCurrencyContext(context, {
+      source: context?.source || "manual",
+      isFallback: context?.isFallback || false
+    });
+    return activeCurrencyContext;
+  }
+  function getActiveCurrencyContext() {
+    return activeCurrencyContext;
+  }
+  function getCurrencyContextById(currencyId) {
+    return createCurrencyContext(currencyId, { source: "definition", isFallback: false });
+  }
+  function resolveCurrencyContext(context) {
+    if (context == null) {
+      return activeCurrencyContext || createCurrencyContext(null, { source: "unresolved", isFallback: true });
+    }
+    if (typeof context === "number" || typeof context === "string") {
+      return createCurrencyContext(context, { source: "manual", isFallback: false });
+    }
+    if (context.currencyContext) return resolveCurrencyContext(context.currencyContext);
+    if (currencyIdFromObject(context) != null || isWalletInfoLike(context)) {
+      return createCurrencyContext(context, {
+        source: context.source || (isWalletInfoLike(context) ? "walletInfo" : "manual"),
+        isFallback: context.isFallback || false
+      });
+    }
+    return activeCurrencyContext || createCurrencyContext(null, { source: "unresolved", isFallback: true });
+  }
+  function formatArguments(contextOrOptions, maybeOptions) {
+    const looksLikeOptions = contextOrOptions && typeof contextOrOptions === "object" && (Object.hasOwn(contextOrOptions, "useGrouping") || Object.hasOwn(contextOrOptions, "invalidPlaceholder")) && currencyIdFromObject(contextOrOptions) == null && !contextOrOptions.currencyContext;
+    return looksLikeOptions ? { context: resolveCurrencyContext(), options: contextOrOptions } : { context: resolveCurrencyContext(contextOrOptions), options: maybeOptions || {} };
+  }
+  function minorAmountToBigInt(value) {
+    if (typeof value === "bigint") return value;
+    if (typeof value === "number") {
+      return Number.isSafeInteger(value) ? BigInt(value) : null;
+    }
+    const text = String(value ?? "").trim();
+    return /^[+-]?\d+$/.test(text) ? BigInt(text) : null;
+  }
+  function formatMinorAmount(amount, contextOrOptions, maybeOptions) {
+    const { context, options } = formatArguments(contextOrOptions, maybeOptions);
+    const minorAmount = minorAmountToBigInt(amount);
+    if (minorAmount == null) return options.invalidPlaceholder || "?";
+    const negative = minorAmount < 0n;
+    const absolute = negative ? -minorAmount : minorAmount;
+    const digits = context.decimalDigits;
+    const factor = 10n ** BigInt(digits);
+    const major = digits > 0 ? absolute / factor : absolute;
+    const fraction = digits > 0 ? absolute % factor : 0n;
+    let majorText = major.toString();
+    if (options.useGrouping !== false && context.groupSeparator) {
+      majorText = majorText.replace(/\B(?=(\d{3})+(?!\d))/g, context.groupSeparator);
+    }
+    const fractionText = digits > 0 ? `${context.decimalSeparator}${fraction.toString().padStart(digits, "0")}` : "";
+    return `${negative ? "-" : ""}${majorText}${fractionText}`;
+  }
+  function formatMoney(amount, contextOrOptions, maybeOptions) {
+    const { context, options } = formatArguments(contextOrOptions, maybeOptions);
+    const formatted = formatMinorAmount(amount, context, options);
+    const invalidPlaceholder = options.invalidPlaceholder || "?";
+    if (formatted === invalidPlaceholder) return invalidPlaceholder;
+    const negative = formatted.startsWith("-");
+    const unsigned = negative ? formatted.slice(1) : formatted;
+    const spacing = context.symbolSpacing ? " " : "";
+    const signedPrefix = negative ? "-" : "";
+    return context.symbolPosition === "after" ? `${signedPrefix}${unsigned}${spacing}${context.symbol}` : `${signedPrefix}${context.symbol}${spacing}${unsigned}`;
+  }
+
   // src/constants.js
   var SEASONAL_BADGE_NAME = "2026 夏季徽章";
   var SEASONAL_BADGE_DEFID = 3094368;
@@ -163,6 +634,8 @@
   var SIDEBAR_PINNED_KEY = "stch_sidebar_pinned";
   var SIDEBAR_GEM_PRICE_KEY = "stch_sidebar_gem_price";
   var ORDER_CACHE_KEY = "stch_order_cache";
+  var ORDER_CACHE_BACKUP_KEY = "stch_order_cache_backup";
+  var ORDER_CACHE_SCHEMA_VERSION = 2;
   var SIDEBAR_GEM_SACK_HASH = "753-Sack of Gems";
   var GEM_SACK_SIZE = 1e3;
   var MARKET_STEAM_FEE_RATE = 0.05;
@@ -216,8 +689,7 @@
 
   // src/utils/format.js
   function formatCNY(cents) {
-    if (cents == null || isNaN(cents)) return "?";
-    return (cents / 100).toFixed(2);
+    return formatMinorAmount(cents, CURRENCY_IDS.CNY, { useGrouping: false });
   }
   function formatInt(value) {
     const number = Number(value);
@@ -244,12 +716,13 @@
   }
 
   // src/utils/steam.js
+  var unsafeWindow2 = typeof globalThis !== "undefined" ? globalThis.unsafeWindow || globalThis.window || globalThis : {};
   function getProfileUrl() {
-    const url = unsafeWindow.g_strProfileURL || document.querySelector("#global_actions a.user_avatar")?.href || document.querySelector(".user_avatar[href*='/id/'], .user_avatar[href*='/profiles/']")?.href || null;
+    const url = unsafeWindow2.g_strProfileURL || document.querySelector("#global_actions a.user_avatar")?.href || document.querySelector(".user_avatar[href*='/id/'], .user_avatar[href*='/profiles/']")?.href || null;
     return url ? url.replace(/\/$/, "") : null;
   }
   function getSteamId() {
-    const direct = String(unsafeWindow.g_steamID || "").trim();
+    const direct = String(unsafeWindow2.g_steamID || "").trim();
     if (/^\d{17}$/.test(direct)) return direct;
     const config = document.getElementById("application_config");
     const userInfoRaw = config?.getAttribute("data-userinfo") || "";
@@ -283,12 +756,28 @@
     const match = String(profileUrl || "").match(/\/profiles\/(\d{17})(?:\/|$)/);
     return match ? match[1] : "";
   }
-  function getMarketMinimumPriceCents() {
-    const walletMinimum = Number(unsafeWindow.g_rgWalletInfo?.wallet_market_minimum);
-    return Number.isFinite(walletMinimum) && walletMinimum > 0 ? walletMinimum * 3 : 21;
+  function getMarketMinimumPriceMinor(currencyContextOrWalletInfo) {
+    const suppliedWalletInfo = currencyContextOrWalletInfo?.walletInfo || (currencyContextOrWalletInfo && typeof currencyContextOrWalletInfo === "object" && Object.hasOwn(currencyContextOrWalletInfo, "wallet_market_minimum") ? currencyContextOrWalletInfo : null);
+    const walletInfo = suppliedWalletInfo || (currencyContextOrWalletInfo == null ? unsafeWindow2.g_rgWalletInfo : null);
+    const walletMinimum = Number(walletInfo?.wallet_market_minimum);
+    if (Number.isFinite(walletMinimum) && walletMinimum > 0) {
+      return Math.floor(walletMinimum) * 3;
+    }
+    const activeContext = currencyContextOrWalletInfo == null ? getActiveCurrencyContext() : currencyContextOrWalletInfo;
+    if (activeContext || walletInfo) {
+      const context = resolveCurrencyContext(activeContext || walletInfo);
+      const minimum = Number(
+        context.minimumBuyerMinor ?? context.marketMinimumBuyerMinor ?? Number(context.marketMinimumMinor) * 3
+      );
+      if (Number.isFinite(minimum) && minimum > 0) return Math.floor(minimum);
+    }
+    return 21;
+  }
+  function getMarketMinimumPriceCents(currencyContextOrWalletInfo) {
+    return getMarketMinimumPriceMinor(currencyContextOrWalletInfo);
   }
   function getSessionId() {
-    if (unsafeWindow.g_sessionID) return unsafeWindow.g_sessionID;
+    if (unsafeWindow2.g_sessionID) return unsafeWindow2.g_sessionID;
     const match = document.cookie.match(/(?:^|;\s*)sessionid=([^;]+)/);
     return match ? decodeURIComponent(match[1]) : "";
   }
@@ -482,29 +971,701 @@
     };
   }
 
-  // src/parsers/price.js
-  function parsePrice(str) {
-    if (!str) return 0;
-    const n = parseFloat(str.replace(/[^0-9.,]/g, "").replace(",", "."));
-    return isNaN(n) ? 0 : Math.round(n * 100);
+  // src/services/market-data.js
+  var MARKET_DATA_SCHEMA_VERSION = 1;
+  var MARKET_DATA_SOURCES = Object.freeze({
+    PRICE_OVERVIEW: "priceoverview",
+    LISTING_ORDERBOOK: "listing-orderbook",
+    ITEM_ORDERS_HISTOGRAM: "itemordershistogram",
+    PRICE_HISTORY: "price-history",
+    LEGACY_PRICE_RESULT: "legacy-price-result"
+  });
+  var hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+  function isObject(value) {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
   }
-  async function priceCard(marketHashName, queue) {
-    try {
-      const url = `https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=${encodeURIComponent(marketHashName)}`;
-      const res = await queue.fetch(url);
-      const lowestCents = parsePrice(res?.data?.lowest_price);
-      const medianCents = parsePrice(res?.data?.median_price);
-      const sellCents = lowestCents || medianCents;
-      if (!sellCents) {
-        return res?.data?.success ? { noPriceData: true, volume: 0 } : null;
+  function firstDefined2(...values) {
+    return values.find((value) => value !== void 0 && value !== null);
+  }
+  function readField(input, defaults, names) {
+    for (const name of names) {
+      if (isObject(input) && hasOwn(input, name)) return input[name];
+    }
+    for (const name of names) {
+      if (isObject(defaults) && hasOwn(defaults, name)) return defaults[name];
+    }
+    return void 0;
+  }
+  function normalizeRequiredString(value) {
+    const normalized = String(value ?? "").trim();
+    return normalized || null;
+  }
+  function normalizeCurrencyId2(value) {
+    if (value === null || value === void 0 || value === "") return null;
+    const normalized = Number(value);
+    return Number.isSafeInteger(normalized) && normalized > 0 ? normalized : null;
+  }
+  function normalizeCurrencyCode(value) {
+    const normalized = String(value ?? "").trim().toUpperCase();
+    return normalized || null;
+  }
+  function normalizeObservedAt(value) {
+    if (value instanceof Date) {
+      const timestamp2 = value.getTime();
+      return Number.isFinite(timestamp2) ? timestamp2 : null;
+    }
+    if (typeof value === "number") {
+      return Number.isFinite(value) && value >= 0 ? Math.trunc(value) : null;
+    }
+    const text = String(value ?? "").trim();
+    if (!text) return null;
+    if (/^\d+$/.test(text)) {
+      const timestamp2 = Number(text);
+      return Number.isSafeInteger(timestamp2) ? timestamp2 : null;
+    }
+    const timestamp = Date.parse(text);
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+  function normalizeWholeNumber(value) {
+    if (typeof value === "number") {
+      return Number.isSafeInteger(value) && value >= 0 ? value : null;
+    }
+    const text = String(value ?? "").trim();
+    if (!text || text.includes("-")) return null;
+    const normalized = text.replace(/[\s\u00a0,.'’]/g, "");
+    if (!/^\d+$/.test(normalized)) return null;
+    const number = Number(normalized);
+    return Number.isSafeInteger(number) ? number : null;
+  }
+  function normalizeMinorAmount(value) {
+    const normalized = normalizeWholeNumber(value);
+    return normalized !== null && normalized > 0 ? normalized : null;
+  }
+  function normalizeMarketVolume(value) {
+    return normalizeWholeNumber(value);
+  }
+  function getMinorDigits(context) {
+    const value = Number(firstDefined2(
+      context?.minorDigits,
+      context?.decimalDigits,
+      context?.fractionDigits,
+      2
+    ));
+    return Number.isInteger(value) && value >= 0 && value <= 6 ? value : 2;
+  }
+  function parseMajorAmountToMinor(value, minorDigits = 2) {
+    const digits = Number.isInteger(Number(minorDigits)) ? Math.min(6, Math.max(0, Number(minorDigits))) : 2;
+    const factor = 10 ** digits;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value) || value < 0) return null;
+      const minor2 = Math.round(value * factor);
+      return Number.isSafeInteger(minor2) ? minor2 : null;
+    }
+    const text = String(value ?? "").trim();
+    if (!text) return null;
+    const compact = text.replace(/[\s\u00a0'’]/g, "");
+    if (compact.includes("-")) return null;
+    const numeric = compact.replace(/[^\d.,]/g, "");
+    if (!/\d/.test(numeric)) return null;
+    const dotPositions = [...numeric.matchAll(/\./g)].map((match) => match.index);
+    const commaPositions = [...numeric.matchAll(/,/g)].map((match) => match.index);
+    const lastDot = dotPositions.at(-1) ?? -1;
+    const lastComma = commaPositions.at(-1) ?? -1;
+    let decimalSeparator = null;
+    if (digits > 0 && lastDot >= 0 && lastComma >= 0) {
+      decimalSeparator = lastDot > lastComma ? "." : ",";
+    } else if (digits > 0 && (lastDot >= 0 || lastComma >= 0)) {
+      const separator = lastDot >= 0 ? "." : ",";
+      const positions = separator === "." ? dotPositions : commaPositions;
+      const fractionalLength = numeric.length - positions.at(-1) - 1;
+      const looksLikeSingleThousandsGroup = positions.length === 1 && fractionalLength === 3 && digits !== 3;
+      if (fractionalLength > 0 && fractionalLength <= digits && !looksLikeSingleThousandsGroup) {
+        decimalSeparator = separator;
       }
-      const volume = parseInt(String(res?.data?.volume || "").replace(/[^\d]/g, ""), 10) || 0;
+    }
+    let normalized;
+    if (decimalSeparator) {
+      const decimalIndex = numeric.lastIndexOf(decimalSeparator);
+      const integerPart = numeric.slice(0, decimalIndex).replace(/[.,]/g, "") || "0";
+      const fractionalPart = numeric.slice(decimalIndex + 1).replace(/[.,]/g, "");
+      normalized = `${integerPart}.${fractionalPart}`;
+    } else {
+      normalized = numeric.replace(/[.,]/g, "");
+    }
+    const major = Number(normalized);
+    if (!Number.isFinite(major) || major < 0) return null;
+    const minor = Math.round(major * factor);
+    return Number.isSafeInteger(minor) ? minor : null;
+  }
+  function unwrapResponseData(payload) {
+    if (isObject(payload?.data)) return payload.data;
+    return isObject(payload) ? payload : {};
+  }
+  function isExplicitFailure(value) {
+    return value === false || value === 0 || value === "0";
+  }
+  function adapterIdentity(payload, context, source, overrides = {}) {
+    return {
+      appid: firstDefined2(context?.appid, payload?.appid, payload?.app_id),
+      marketHashName: firstDefined2(
+        context?.marketHashName,
+        context?.market_hash_name,
+        payload?.marketHashName,
+        payload?.market_hash_name
+      ),
+      currencyId: hasOwn(overrides, "currencyId") ? overrides.currencyId : firstDefined2(context?.currencyId, context?.currency),
+      currencyCode: hasOwn(overrides, "currencyCode") ? overrides.currencyCode : firstDefined2(context?.currencyCode, context?.currency_code),
+      observedAt: hasOwn(overrides, "observedAt") ? overrides.observedAt : firstDefined2(context?.observedAt, Date.now()),
+      source
+    };
+  }
+  function normalizeMarketRecord(input, defaults = {}) {
+    if (!isObject(input)) return null;
+    const appid = normalizeRequiredString(readField(input, defaults, ["appid", "app_id"]));
+    const marketHashName = normalizeRequiredString(readField(
+      input,
+      defaults,
+      ["marketHashName", "market_hash_name"]
+    ));
+    const source = normalizeRequiredString(readField(input, defaults, ["source"]));
+    if (!appid || !marketHashName || !source) return null;
+    return {
+      schemaVersion: MARKET_DATA_SCHEMA_VERSION,
+      appid,
+      marketHashName,
+      currencyId: normalizeCurrencyId2(readField(input, defaults, ["currencyId", "currency"])),
+      currencyCode: normalizeCurrencyCode(readField(input, defaults, ["currencyCode", "currency_code"])),
+      lowestSellMinor: normalizeMinorAmount(readField(
+        input,
+        defaults,
+        ["lowestSellMinor", "lowestSellCents"]
+      )),
+      medianMinor: normalizeMinorAmount(readField(input, defaults, ["medianMinor", "medianCents"])),
+      highestBuyMinor: normalizeMinorAmount(readField(
+        input,
+        defaults,
+        ["highestBuyMinor", "highestBuyCents"]
+      )),
+      volume: normalizeMarketVolume(readField(input, defaults, ["volume"])),
+      observedAt: normalizeObservedAt(readField(input, defaults, ["observedAt", "cachedAt", "timestamp"])),
+      source
+    };
+  }
+  function normalizePriceOverview(payload, context = {}) {
+    const data = unwrapResponseData(payload);
+    if (isExplicitFailure(data.success)) return null;
+    const minorDigits = getMinorDigits(context);
+    return normalizeMarketRecord({
+      ...adapterIdentity(data, context, MARKET_DATA_SOURCES.PRICE_OVERVIEW),
+      lowestSellMinor: parseMajorAmountToMinor(data.lowest_price, minorDigits),
+      medianMinor: parseMajorAmountToMinor(data.median_price, minorDigits),
+      highestBuyMinor: null,
+      volume: normalizeMarketVolume(data.volume)
+    });
+  }
+  function unwrapListingOrderbook(payload) {
+    const data = unwrapResponseData(payload);
+    if (isObject(data.orderbook)) return data.orderbook;
+    if (isObject(data.state?.data)) return data.state.data;
+    return data;
+  }
+  function normalizeListingOrderbook(payload, context = {}) {
+    const data = unwrapListingOrderbook(payload);
+    const payloadCurrencyId = normalizeCurrencyId2(firstDefined2(data.eCurrency, data.currencyId, data.currency));
+    const requestedCurrencyId = normalizeCurrencyId2(firstDefined2(context.currencyId, context.currency));
+    const currencyMismatch = payloadCurrencyId !== null && requestedCurrencyId !== null && payloadCurrencyId !== requestedCurrencyId;
+    return normalizeMarketRecord({
+      ...adapterIdentity(data, context, MARKET_DATA_SOURCES.LISTING_ORDERBOOK, {
+        currencyId: firstDefined2(payloadCurrencyId, requestedCurrencyId),
+        currencyCode: currencyMismatch ? null : firstDefined2(context.currencyCode, context.currency_code)
+      }),
+      lowestSellMinor: normalizeMinorAmount(firstDefined2(
+        data.amtMinSellOrder,
+        data.lowestSellMinor,
+        data.lowestSellCents,
+        data.lowest_sell_order
+      )),
+      medianMinor: null,
+      highestBuyMinor: normalizeMinorAmount(firstDefined2(
+        data.amtMaxBuyOrder,
+        data.highestBuyMinor,
+        data.highestBuyCents,
+        data.highest_buy_order
+      )),
+      volume: null
+    });
+  }
+  function normalizeItemOrdersHistogram(payload, context = {}) {
+    const data = unwrapResponseData(payload);
+    if (isExplicitFailure(data.success)) return null;
+    return normalizeMarketRecord({
+      ...adapterIdentity(data, context, MARKET_DATA_SOURCES.ITEM_ORDERS_HISTOGRAM),
+      // Only the explicitly named minor-unit integer fields are accepted.
+      // Graph/table text is intentionally not used as a fallback.
+      lowestSellMinor: normalizeMinorAmount(data.lowest_sell_order),
+      medianMinor: null,
+      highestBuyMinor: normalizeMinorAmount(data.highest_buy_order),
+      volume: null
+    });
+  }
+  function toLegacyPriceResult(record) {
+    const normalized = normalizeMarketRecord(record);
+    if (!normalized) return null;
+    const effectiveSellMinor = normalized.lowestSellMinor ?? normalized.medianMinor;
+    if (effectiveSellMinor === null) {
       return {
-        lowestSellCents: sellCents,
-        medianCents,
-        volume,
-        estimated: !lowestCents,
-        priceSource: lowestCents ? "lowest" : "median"
+        noPriceData: true,
+        volume: normalized.volume ?? 0
+      };
+    }
+    const estimated = normalized.lowestSellMinor === null;
+    return {
+      lowestSellCents: effectiveSellMinor,
+      medianCents: normalized.medianMinor ?? 0,
+      volume: normalized.volume ?? 0,
+      estimated,
+      priceSource: estimated ? "median" : "lowest"
+    };
+  }
+
+  // src/services/market-cache.js
+  var MARKET_CACHE_SCHEMA_VERSION = 1;
+  var MARKET_CACHE_STORAGE_KEY = "stch_market_cache";
+  var DEFAULT_MARKET_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1e3;
+  var DEFAULT_MARKET_CACHE_MAX_ENTRIES = 5e3;
+  function isObject2(value) {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+  }
+  function diagnostic(code, message, severity = "error", details = void 0) {
+    return details === void 0 ? { code, message, severity } : { code, message, severity, details };
+  }
+  function emptyEnvelope() {
+    return {
+      schemaVersion: MARKET_CACHE_SCHEMA_VERSION,
+      records: []
+    };
+  }
+  function getInputRecords(value) {
+    if (Array.isArray(value)) return value;
+    return isObject2(value) && Array.isArray(value.records) ? value.records : [];
+  }
+  function normalizeCacheRecords(records) {
+    const byKey = /* @__PURE__ */ new Map();
+    let invalidCount = 0;
+    let duplicateCount = 0;
+    let migratedSchemaCount = 0;
+    let unsupportedSchemaCount = 0;
+    records.forEach((record) => {
+      if (!isObject2(record)) {
+        invalidCount += 1;
+        return;
+      }
+      if (record.schemaVersion === void 0 || record.schemaVersion === null) {
+        migratedSchemaCount += 1;
+      } else {
+        const recordSchemaVersion = Number(record.schemaVersion);
+        if (!Number.isInteger(recordSchemaVersion) || recordSchemaVersion <= 0) {
+          migratedSchemaCount += 1;
+        } else if (recordSchemaVersion !== MARKET_DATA_SCHEMA_VERSION) {
+          unsupportedSchemaCount += 1;
+          return;
+        }
+      }
+      const normalized = normalizeMarketRecord(record);
+      const key = getMarketCacheKey(normalized);
+      if (!normalized || key === null || normalized.observedAt === null) {
+        invalidCount += 1;
+        return;
+      }
+      const previous = byKey.get(key);
+      if (previous) duplicateCount += 1;
+      if (!previous || normalized.observedAt >= previous.observedAt) {
+        byKey.set(key, normalized);
+      }
+    });
+    return {
+      records: [...byKey.values()],
+      invalidCount,
+      duplicateCount,
+      migratedSchemaCount,
+      unsupportedSchemaCount
+    };
+  }
+  function getMarketCacheKey(identity) {
+    const normalized = normalizeMarketRecord(identity);
+    if (!normalized || normalized.currencyId === null) return null;
+    return JSON.stringify([
+      normalized.appid,
+      normalized.marketHashName,
+      normalized.currencyId,
+      normalized.source
+    ]);
+  }
+  function normalizeMarketCache(value) {
+    const records = normalizeCacheRecords(getInputRecords(value)).records;
+    return {
+      schemaVersion: MARKET_CACHE_SCHEMA_VERSION,
+      records
+    };
+  }
+  function decodeMarketCache(raw) {
+    if (raw === null || raw === void 0 || raw === "") {
+      const envelope2 = emptyEnvelope();
+      return {
+        ok: true,
+        envelope: envelope2,
+        cache: envelope2,
+        diagnostics: [],
+        needsMigration: false
+      };
+    }
+    let parsed = raw;
+    if (typeof raw === "string") {
+      if (!raw.trim()) {
+        const envelope2 = emptyEnvelope();
+        return {
+          ok: true,
+          envelope: envelope2,
+          cache: envelope2,
+          diagnostics: [],
+          needsMigration: false
+        };
+      }
+      try {
+        parsed = JSON.parse(raw);
+      } catch (error) {
+        return {
+          ok: false,
+          envelope: null,
+          cache: null,
+          diagnostics: [diagnostic(
+            "invalid-json",
+            "Market cache is not valid JSON; the stored value was left untouched.",
+            "error",
+            { error: String(error?.message || error) }
+          )],
+          needsMigration: false
+        };
+      }
+    }
+    const diagnostics = [];
+    let needsMigration = false;
+    let records;
+    if (Array.isArray(parsed)) {
+      records = parsed;
+      needsMigration = true;
+      diagnostics.push(diagnostic(
+        "legacy-array-envelope",
+        "Legacy array cache was decoded in memory and has not been rewritten.",
+        "warning"
+      ));
+    } else if (!isObject2(parsed)) {
+      return {
+        ok: false,
+        envelope: null,
+        cache: null,
+        diagnostics: [diagnostic(
+          "invalid-envelope",
+          "Market cache must be an object envelope or a legacy record array."
+        )],
+        needsMigration: false
+      };
+    } else {
+      if (!Array.isArray(parsed.records)) {
+        return {
+          ok: false,
+          envelope: null,
+          cache: null,
+          diagnostics: [diagnostic(
+            "invalid-records",
+            "Market cache envelope has no records array; the stored value was left untouched."
+          )],
+          needsMigration: false
+        };
+      }
+      records = parsed.records;
+      const schemaVersion = Number(parsed.schemaVersion);
+      if (!Number.isInteger(schemaVersion) || schemaVersion <= 0) {
+        needsMigration = true;
+        diagnostics.push(diagnostic(
+          "missing-schema-version",
+          "Cache envelope has no valid schema version and was normalized in memory only.",
+          "warning"
+        ));
+      } else if (schemaVersion !== MARKET_CACHE_SCHEMA_VERSION) {
+        return {
+          ok: false,
+          envelope: null,
+          cache: null,
+          diagnostics: [diagnostic(
+            "unsupported-schema-version",
+            `Market cache schema ${schemaVersion} is not supported by schema ${MARKET_CACHE_SCHEMA_VERSION}.`,
+            "error",
+            { schemaVersion, supportedSchemaVersion: MARKET_CACHE_SCHEMA_VERSION }
+          )],
+          needsMigration: false
+        };
+      }
+    }
+    const normalized = normalizeCacheRecords(records);
+    const envelope = {
+      schemaVersion: MARKET_CACHE_SCHEMA_VERSION,
+      records: normalized.records
+    };
+    if (normalized.invalidCount > 0) {
+      needsMigration = true;
+      diagnostics.push(diagnostic(
+        "invalid-records-dropped",
+        `${normalized.invalidCount} invalid market cache record(s) were excluded in memory; storage was not rewritten.`,
+        "error",
+        { count: normalized.invalidCount }
+      ));
+    }
+    if (normalized.unsupportedSchemaCount > 0) {
+      needsMigration = true;
+      diagnostics.push(diagnostic(
+        "unsupported-record-schema",
+        `${normalized.unsupportedSchemaCount} record(s) use an unsupported market data schema and were excluded in memory.`,
+        "error",
+        { count: normalized.unsupportedSchemaCount, supportedSchemaVersion: MARKET_DATA_SCHEMA_VERSION }
+      ));
+    }
+    if (normalized.migratedSchemaCount > 0) {
+      needsMigration = true;
+      diagnostics.push(diagnostic(
+        "record-schema-normalized",
+        `${normalized.migratedSchemaCount} legacy record schema(s) were normalized in memory only.`,
+        "warning",
+        { count: normalized.migratedSchemaCount }
+      ));
+    }
+    if (normalized.duplicateCount > 0) {
+      needsMigration = true;
+      diagnostics.push(diagnostic(
+        "duplicate-records-collapsed",
+        `${normalized.duplicateCount} duplicate cache record(s) were collapsed to the newest observation in memory.`,
+        "warning",
+        { count: normalized.duplicateCount }
+      ));
+    }
+    return {
+      ok: !diagnostics.some((item) => item.severity === "error"),
+      envelope,
+      cache: envelope,
+      diagnostics,
+      needsMigration
+    };
+  }
+  function upsertMarketCache(cache, record, options = {}) {
+    const envelope = normalizeMarketCache(cache);
+    if (isObject2(record) && record.schemaVersion !== void 0 && Number(record.schemaVersion) !== MARKET_DATA_SCHEMA_VERSION) {
+      throw new TypeError(`Unsupported market record schema ${record.schemaVersion}.`);
+    }
+    const normalized = normalizeMarketRecord(record);
+    const key = getMarketCacheKey(normalized);
+    if (!normalized || key === null || normalized.observedAt === null) {
+      throw new TypeError("A cache record requires appid, marketHashName, currencyId, source, and observedAt.");
+    }
+    if (normalized.schemaVersion !== MARKET_DATA_SCHEMA_VERSION) {
+      throw new TypeError(`Unsupported market record schema ${normalized.schemaVersion}.`);
+    }
+    const index = envelope.records.findIndex((item) => getMarketCacheKey(item) === key);
+    if (index < 0) {
+      return {
+        ...envelope,
+        records: [...envelope.records, normalized]
+      };
+    }
+    if (options.preferNewest !== false && envelope.records[index].observedAt > normalized.observedAt) {
+      return envelope;
+    }
+    return {
+      ...envelope,
+      records: envelope.records.map((item, itemIndex) => itemIndex === index ? normalized : item)
+    };
+  }
+  function pruneMarketCache(cache, options = {}) {
+    const envelope = normalizeMarketCache(cache);
+    const now = options.now === void 0 ? Date.now() : Number(options.now);
+    const ttlMs = options.ttlMs === void 0 ? DEFAULT_MARKET_CACHE_TTL_MS : Number(options.ttlMs);
+    const maxEntries = options.maxEntries === void 0 ? DEFAULT_MARKET_CACHE_MAX_ENTRIES : Number(options.maxEntries);
+    const ttlEnabled = ttlMs !== Infinity && Number.isFinite(ttlMs) && Number.isFinite(now);
+    const effectiveTtl = ttlEnabled ? Math.max(0, ttlMs) : Infinity;
+    const fresh = envelope.records.filter((record) => effectiveTtl === Infinity || now - record.observedAt <= effectiveTtl);
+    if (maxEntries === Infinity || !Number.isFinite(maxEntries)) {
+      return { ...envelope, records: fresh };
+    }
+    const limit = Math.max(0, Math.floor(maxEntries));
+    if (fresh.length <= limit) return { ...envelope, records: fresh };
+    const retainedIndexes = new Set(
+      fresh.map((record, index) => ({ index, observedAt: record.observedAt })).sort((left, right) => right.observedAt - left.observedAt || right.index - left.index).slice(0, limit).map((item) => item.index)
+    );
+    return {
+      ...envelope,
+      records: fresh.filter((_, index) => retainedIndexes.has(index))
+    };
+  }
+  function resolveGMGetValue(explicit) {
+    if (typeof explicit === "function") return explicit;
+    if (typeof GM_getValue === "function") return GM_getValue;
+    return null;
+  }
+  function resolveGMSetValue(explicit) {
+    if (typeof explicit === "function") return explicit;
+    if (typeof GM_setValue === "function") return GM_setValue;
+    return null;
+  }
+  function loadMarketCache(options = {}) {
+    const storageKey = options.storageKey || options.key || MARKET_CACHE_STORAGE_KEY;
+    const getValue = resolveGMGetValue(options.getValue);
+    if (!getValue) {
+      return {
+        ok: false,
+        envelope: null,
+        cache: null,
+        raw: void 0,
+        storageKey,
+        diagnostics: [diagnostic("gm-get-unavailable", "GM_getValue is not available.")],
+        needsMigration: false
+      };
+    }
+    let raw;
+    try {
+      raw = getValue(storageKey, null);
+    } catch (error) {
+      return {
+        ok: false,
+        envelope: null,
+        cache: null,
+        raw: void 0,
+        storageKey,
+        diagnostics: [diagnostic(
+          "gm-read-failed",
+          "Failed to read the market cache; no stored value was changed.",
+          "error",
+          { error: String(error?.message || error) }
+        )],
+        needsMigration: false
+      };
+    }
+    return {
+      ...decodeMarketCache(raw),
+      raw,
+      storageKey
+    };
+  }
+  function saveMarketCache(cache, options = {}) {
+    const storageKey = options.storageKey || options.key || MARKET_CACHE_STORAGE_KEY;
+    const setValue = resolveGMSetValue(options.setValue);
+    if (!setValue) {
+      return {
+        ok: false,
+        envelope: null,
+        cache: null,
+        raw: void 0,
+        storageKey,
+        diagnostics: [diagnostic("gm-set-unavailable", "GM_setValue is not available.")]
+      };
+    }
+    const decoded = decodeMarketCache(cache);
+    if (!decoded.ok || !decoded.envelope) {
+      return {
+        ...decoded,
+        raw: void 0,
+        storageKey
+      };
+    }
+    const raw = JSON.stringify(decoded.envelope);
+    try {
+      setValue(storageKey, raw);
+    } catch (error) {
+      return {
+        ok: false,
+        envelope: decoded.envelope,
+        cache: decoded.envelope,
+        raw,
+        storageKey,
+        diagnostics: [diagnostic(
+          "gm-write-failed",
+          "Failed to write the market cache.",
+          "error",
+          { error: String(error?.message || error) }
+        )]
+      };
+    }
+    return {
+      ok: true,
+      envelope: decoded.envelope,
+      cache: decoded.envelope,
+      raw,
+      storageKey,
+      diagnostics: decoded.diagnostics
+    };
+  }
+  function upsertStoredMarketCache(record, options = {}) {
+    const loaded = loadMarketCache(options);
+    if (!loaded.ok || !loaded.envelope) {
+      return { ...loaded, saved: false };
+    }
+    const updated = pruneMarketCache(
+      upsertMarketCache(loaded.envelope, record, options),
+      options
+    );
+    const saved = saveMarketCache(updated, options);
+    return { ...saved, saved: saved.ok };
+  }
+
+  // src/parsers/price.js
+  function getPriceCurrencyContext(options = {}) {
+    if (options.currencyContext) return resolveCurrencyContext(options.currencyContext);
+    if (options.currencyId != null) return getCurrencyContextById(options.currencyId);
+    return getActiveCurrencyContext() || getCurrencyContextById(CURRENCY_IDS.CNY);
+  }
+  async function priceCard(marketHashName, queue, options = {}) {
+    try {
+      const currencyContext = getPriceCurrencyContext(options);
+      if (!currencyContext?.currencyId) return null;
+      const appid = String(options.appid || 753);
+      const params = new URLSearchParams({
+        appid,
+        currency: String(currencyContext.currencyId),
+        market_hash_name: marketHashName
+      });
+      const url = `https://steamcommunity.com/market/priceoverview/?${params.toString()}`;
+      const res = await queue.fetch(url, {
+        ...options.fetchOptions || {},
+        requestPolicy: "priceoverview"
+      });
+      const observedAt = Date.now();
+      const record = normalizePriceOverview(res?.data, {
+        appid,
+        marketHashName,
+        currencyId: currencyContext.currencyId,
+        currencyCode: currencyContext.code,
+        decimalDigits: currencyContext.decimalDigits,
+        observedAt
+      });
+      const legacy = toLegacyPriceResult(record);
+      if (record) {
+        const stored = upsertStoredMarketCache(record);
+        if (!stored.ok && stored.diagnostics?.some((item) => item.code !== "gm-get-unavailable" && item.code !== "gm-set-unavailable")) {
+          console.warn("[STCH] Market cache update skipped:", stored.diagnostics);
+        }
+      }
+      if (!legacy || legacy.noPriceData) {
+        return res?.data?.success ? {
+          noPriceData: true,
+          volume: legacy?.volume || 0,
+          record,
+          currencyId: currencyContext.currencyId,
+          observedAt
+        } : null;
+      }
+      return {
+        ...legacy,
+        record,
+        currencyId: currencyContext.currencyId,
+        observedAt
       };
     } catch (e) {
       return null;
@@ -576,6 +1737,7 @@
     info.targetLevel = getBadgeTargetLevel(info);
     info.gameName = existing.gameName || info.gameName || "";
     info.cardPrices = [];
+    info.currencyId = state.currencyContext?.currencyId || state.cfg.currencyId || 23;
     info.cheapestSetCostCents = 0;
     info.fullSetCostCents = 0;
     info.level5CostCents = 0;
@@ -598,6 +1760,8 @@
       }
       if (pk.noPriceData) {
         card.priceSource = "none";
+        card.currencyId = pk.currencyId;
+        card.marketRecord = pk.record;
         noPriceCards.push(card);
         info.hasEstimated = true;
         continue;
@@ -606,6 +1770,9 @@
       card.medianCents = pk.medianCents;
       card.volume = pk.volume;
       card.priceSource = pk.priceSource;
+      card.currencyId = pk.currencyId;
+      card.observedAt = pk.observedAt;
+      card.marketRecord = pk.record;
       minVolume = Math.min(minVolume, pk.volume);
       if (pk.estimated) {
         info.hasEstimated = true;
@@ -617,7 +1784,9 @@
         medianCents: pk.medianCents,
         volume: pk.volume,
         marketHashName: card.marketHashName,
-        priceSource: pk.priceSource
+        priceSource: pk.priceSource,
+        currencyId: pk.currencyId,
+        observedAt: pk.observedAt
       });
       const need1 = Math.max(0, 1 - card.owned);
       const need5 = Math.max(0, setsToTarget - card.owned);
@@ -644,13 +1813,137 @@
     info.fullSetCostCents = fullSetCostCents;
     info.level5CostCents = level5CostCents;
     info.minVolume = minVolume === Infinity ? 0 : minVolume;
-    info.cheapestSetCNY = formatCNY(setCostCents);
-    info.fullSetCNY = formatCNY(fullSetCostCents);
-    info.level5CNY = formatCNY(level5CostCents);
     return info;
   }
 
   // src/services/order-cache.js
+  var LEGACY_ORDER_CACHE_CURRENCY_ID = 23;
+  function normalizeCurrencyId3(value, fallback = LEGACY_ORDER_CACHE_CURRENCY_ID) {
+    const currencyId = Number(value);
+    if (Number.isInteger(currencyId) && currencyId > 0) return currencyId;
+    const fallbackId = Number(fallback);
+    return Number.isInteger(fallbackId) && fallbackId > 0 ? fallbackId : LEGACY_ORDER_CACHE_CURRENCY_ID;
+  }
+  function getActiveOrderCurrencyId() {
+    return normalizeCurrencyId3(
+      state?.currencyContext?.id ?? state?.currencyContext?.currencyId ?? state?.cfg?.currencyId,
+      DEFAULT_CONFIG.currencyId
+    );
+  }
+  function createOrderCacheEnvelope(updatedAt = Date.now()) {
+    return {
+      schemaVersion: ORDER_CACHE_SCHEMA_VERSION,
+      updatedAt: Number(updatedAt) || Date.now(),
+      partitions: {}
+    };
+  }
+  function normalizeOrderResult(info, cachedAt = Date.now(), currencyId = null) {
+    if (!info?.appid) return null;
+    const copy = JSON.parse(JSON.stringify(info));
+    copy.appid = String(copy.appid).trim();
+    copy.isFoil = !!copy.isFoil;
+    copy.targetLevel = getBadgeTargetLevel(copy);
+    copy.cachedAt = Number(copy.cachedAt || cachedAt) || cachedAt;
+    copy.currencyId = normalizeCurrencyId3(
+      copy.currencyId,
+      currencyId ?? getActiveOrderCurrencyId()
+    );
+    copy.cards = Array.isArray(copy.cards) ? copy.cards : [];
+    copy.cardPrices = Array.isArray(copy.cardPrices) ? copy.cardPrices : [];
+    copy.cheapestSetCostCents = Number(copy.cheapestSetCostCents) || 0;
+    copy.fullSetCostCents = Number(copy.fullSetCostCents) || 0;
+    copy.level5CostCents = Number(copy.level5CostCents) || 0;
+    const currencyContext = getCurrencyContextById(copy.currencyId);
+    copy.currencyCode = copy.currencyCode || currencyContext.code;
+    copy.cheapestSetFormatted = formatMinorAmount(copy.cheapestSetCostCents, currencyContext);
+    copy.fullSetFormatted = formatMinorAmount(copy.fullSetCostCents, currencyContext);
+    copy.level5Formatted = formatMinorAmount(copy.level5CostCents, currencyContext);
+    copy.cheapestSetCNY = copy.cheapestSetCNY || formatCNY(copy.cheapestSetCostCents);
+    copy.fullSetCNY = copy.fullSetCNY || formatCNY(copy.fullSetCostCents);
+    copy.level5CNY = copy.level5CNY || formatCNY(copy.level5CostCents);
+    return copy.appid ? copy : null;
+  }
+  function normalizePartition(value, currencyId, now = Date.now()) {
+    const items = Array.isArray(value) ? value : value?.items;
+    return {
+      currencyId,
+      updatedAt: Number(value?.updatedAt) || now,
+      items: (Array.isArray(items) ? items : []).map((item) => {
+        const normalized = normalizeOrderResult(item, item?.cachedAt || now, currencyId);
+        if (normalized) normalized.currencyId = currencyId;
+        return normalized;
+      }).filter(Boolean)
+    };
+  }
+  function decodeOrderCache(raw, options = {}) {
+    const now = Number(options.now) || Date.now();
+    let parsed = raw;
+    try {
+      if (typeof parsed === "string") parsed = JSON.parse(parsed || "[]");
+    } catch (error) {
+      return {
+        envelope: createOrderCacheEnvelope(now),
+        migrated: false,
+        corrupt: true,
+        error,
+        raw
+      };
+    }
+    if (Array.isArray(parsed)) {
+      const envelope2 = createOrderCacheEnvelope(now);
+      const currencyId = LEGACY_ORDER_CACHE_CURRENCY_ID;
+      envelope2.partitions[String(currencyId)] = normalizePartition(parsed, currencyId, now);
+      return { envelope: envelope2, migrated: true, corrupt: false, error: null, raw };
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed.partitions)) {
+      return {
+        envelope: createOrderCacheEnvelope(now),
+        migrated: false,
+        corrupt: true,
+        error: new Error("Invalid order cache envelope"),
+        raw
+      };
+    }
+    if (Number(parsed.schemaVersion) !== ORDER_CACHE_SCHEMA_VERSION) {
+      return {
+        envelope: createOrderCacheEnvelope(now),
+        migrated: false,
+        corrupt: true,
+        error: new Error(`Unsupported order cache schema: ${parsed.schemaVersion}`),
+        raw
+      };
+    }
+    const envelope = createOrderCacheEnvelope(parsed.updatedAt || now);
+    for (const [key, value] of Object.entries(parsed.partitions || {})) {
+      const currencyId = Number(value?.currencyId ?? key);
+      if (!Number.isInteger(currencyId) || currencyId <= 0) continue;
+      envelope.partitions[String(currencyId)] = normalizePartition(value, currencyId, now);
+    }
+    return { envelope, migrated: false, corrupt: false, error: null, raw };
+  }
+  function replaceOrderCachePartition(envelope, currencyId, items, now = Date.now()) {
+    const next = decodeOrderCache(envelope, { now });
+    const safeEnvelope = next.corrupt ? createOrderCacheEnvelope(now) : next.envelope;
+    const normalizedCurrencyId = normalizeCurrencyId3(currencyId);
+    safeEnvelope.partitions[String(normalizedCurrencyId)] = normalizePartition(
+      { items, updatedAt: now },
+      normalizedCurrencyId,
+      now
+    );
+    safeEnvelope.updatedAt = now;
+    return safeEnvelope;
+  }
+  function readStoredOrderCache(options = {}) {
+    const raw = GM_getValue(ORDER_CACHE_KEY, "[]");
+    const decoded = decodeOrderCache(raw);
+    if (decoded.migrated && options.persistMigration !== false) {
+      GM_setValue(ORDER_CACHE_KEY, JSON.stringify(decoded.envelope));
+    }
+    return decoded;
+  }
+  function persistEnvelope(envelope) {
+    GM_setValue(ORDER_CACHE_KEY, JSON.stringify(envelope));
+  }
   function getOrderCacheDays() {
     const days = Number(state?.cfg?.orderCacheDays ?? DEFAULT_CONFIG.orderCacheDays);
     return Number.isFinite(days) ? Math.max(0, Math.floor(days)) : DEFAULT_CONFIG.orderCacheDays;
@@ -659,52 +1952,58 @@
     const ts = Number(cachedAt) || Date.now();
     return Math.max(0, Math.floor((Date.now() - ts) / 864e5));
   }
-  function normalizeOrderResult(info, cachedAt = Date.now()) {
-    if (!info?.appid) return null;
-    const copy = JSON.parse(JSON.stringify(info));
-    copy.appid = String(copy.appid).trim();
-    copy.isFoil = !!copy.isFoil;
-    copy.targetLevel = getBadgeTargetLevel(copy);
-    copy.cachedAt = Number(copy.cachedAt || cachedAt) || cachedAt;
-    copy.cards = Array.isArray(copy.cards) ? copy.cards : [];
-    copy.cardPrices = Array.isArray(copy.cardPrices) ? copy.cardPrices : [];
-    copy.cheapestSetCostCents = Number(copy.cheapestSetCostCents) || 0;
-    copy.fullSetCostCents = Number(copy.fullSetCostCents) || 0;
-    copy.level5CostCents = Number(copy.level5CostCents) || 0;
-    copy.cheapestSetCNY = copy.cheapestSetCNY || formatCNY(copy.cheapestSetCostCents);
-    copy.fullSetCNY = copy.fullSetCNY || formatCNY(copy.fullSetCostCents);
-    copy.level5CNY = copy.level5CNY || formatCNY(copy.level5CostCents);
-    return copy.appid ? copy : null;
-  }
   function isOrderCacheFresh(info) {
     return getOrderCacheAgeDays(info?.cachedAt) <= getOrderCacheDays();
   }
-  function loadOrderCache() {
+  function loadOrderCache(currencyId = getActiveOrderCurrencyId()) {
     try {
-      const raw = GM_getValue(ORDER_CACHE_KEY, "[]");
-      const parsed = Array.isArray(raw) ? raw : JSON.parse(raw || "[]");
-      return parsed.map((item) => normalizeOrderResult(item, item?.cachedAt)).filter(Boolean).filter(isOrderCacheFresh);
+      const decoded = readStoredOrderCache({ persistMigration: true });
+      if (decoded.corrupt) {
+        console.warn("[STCH] Order cache load failed; original value was preserved:", decoded.error);
+        return [];
+      }
+      const normalizedCurrencyId = normalizeCurrencyId3(currencyId);
+      const partition = decoded.envelope.partitions[String(normalizedCurrencyId)];
+      const items = partition?.items || [];
+      const freshItems = items.filter(isOrderCacheFresh);
+      if (freshItems.length !== items.length) {
+        persistEnvelope(replaceOrderCachePartition(
+          decoded.envelope,
+          normalizedCurrencyId,
+          freshItems
+        ));
+      }
+      return freshItems;
     } catch (error) {
       console.warn("[STCH] Order cache load failed:", error);
       return [];
     }
   }
-  function saveOrderCache() {
-    GM_setValue(
-      ORDER_CACHE_KEY,
-      JSON.stringify(state.orderResults.map((item) => normalizeOrderResult(item, item.cachedAt)).filter(Boolean))
-    );
+  function saveOrderCache(currencyId = getActiveOrderCurrencyId()) {
+    const now = Date.now();
+    let decoded;
+    try {
+      decoded = readStoredOrderCache({ persistMigration: false });
+    } catch (error) {
+      decoded = { corrupt: true, raw: null, envelope: createOrderCacheEnvelope(now), error };
+    }
+    if (decoded.corrupt && decoded.raw != null) {
+      GM_setValue(ORDER_CACHE_BACKUP_KEY, decoded.raw);
+    }
+    const base = decoded.corrupt ? createOrderCacheEnvelope(now) : decoded.envelope;
+    const envelope = replaceOrderCachePartition(base, currencyId, state.orderResults, now);
+    persistEnvelope(envelope);
   }
   function clearOrderCache() {
     state.orderResults = [];
     state.selectedOrderResults = /* @__PURE__ */ new Set();
     state.pendingOrderQuantities = /* @__PURE__ */ new Map();
     state.highestBuyPrices = /* @__PURE__ */ new Map();
-    saveOrderCache();
+    persistEnvelope(createOrderCacheEnvelope());
   }
   function pruneOrderCache(persist = false) {
     const before = state.orderResults.length;
-    state.orderResults = state.orderResults.map((item) => normalizeOrderResult(item, item?.cachedAt)).filter(Boolean).filter(isOrderCacheFresh);
+    state.orderResults = state.orderResults.map((item) => normalizeOrderResult(item, item?.cachedAt, getActiveOrderCurrencyId())).filter(Boolean).filter(isOrderCacheFresh);
     if (persist && state.orderResults.length !== before) {
       saveOrderCache();
       state.selectedOrderResults.forEach((key) => {
@@ -721,31 +2020,34 @@
     return state.orderResults.find((item) => getResultKey(item) === key) || null;
   }
   function upsertOrderResult(info, options = {}) {
-    const item = normalizeOrderResult(info, options.cachedAt || Date.now());
+    const currencyId = getActiveOrderCurrencyId();
+    const item = normalizeOrderResult(info, options.cachedAt || Date.now(), currencyId);
     if (!item) return null;
     item.cachedAt = options.cachedAt || Date.now();
+    item.currencyId = currencyId;
     pruneOrderCache(false);
     const key = getResultKey(item);
     const index = state.orderResults.findIndex((existing) => getResultKey(existing) === key);
     if (index >= 0) state.orderResults[index] = item;
     else state.orderResults.push(item);
     if (options.select) state.selectedOrderResults.add(key);
-    saveOrderCache();
+    saveOrderCache(currencyId);
     return item;
   }
   function removeOrderResultByKey(key, options = {}) {
     const before = state.orderResults.length;
     state.orderResults = state.orderResults.filter((item) => getResultKey(item) !== key);
     state.selectedOrderResults.delete(key);
-    if (state.orderResults.length !== before) {
-      if (options.persist !== false) saveOrderCache();
+    if (state.orderResults.length !== before && options.persist !== false) {
+      saveOrderCache();
     }
   }
-  function readRawOrderCache() {
+  function readRawOrderCache(currencyId = getActiveOrderCurrencyId()) {
     try {
-      const raw = GM_getValue(ORDER_CACHE_KEY, "[]");
-      const parsed = Array.isArray(raw) ? raw : JSON.parse(raw || "[]");
-      return Array.isArray(parsed) ? parsed.map((item) => normalizeOrderResult(item, item?.cachedAt)).filter(Boolean) : [];
+      const decoded = readStoredOrderCache({ persistMigration: true });
+      if (decoded.corrupt) return [];
+      const normalizedCurrencyId = normalizeCurrencyId3(currencyId);
+      return decoded.envelope.partitions[String(normalizedCurrencyId)]?.items || [];
     } catch (_) {
       return [];
     }
@@ -755,8 +2057,31 @@
   }
 
   // src/request/queue.js
+  var CANCELLED = /* @__PURE__ */ Symbol("request-queue-cancelled");
+  var DEFAULT_POLICY = Object.freeze({
+    name: "default",
+    applyInterval: false,
+    applyBatchCooldown: false,
+    retry429: false
+  });
+  var PRICEOVERVIEW_POLICY = Object.freeze({
+    name: "priceoverview",
+    applyInterval: true,
+    applyBatchCooldown: true,
+    retry429: true
+  });
+  var REQUEST_POLICIES = Object.freeze({
+    default: DEFAULT_POLICY,
+    priceoverview: PRICEOVERVIEW_POLICY
+  });
+  function stoppedError() {
+    return { status: 0, error: "stopped" };
+  }
+  function firstDefined3(...values) {
+    return values.find((value) => value !== void 0);
+  }
   var RequestQueue = class {
-    constructor(interval = 330, batchSize = 20, batchPause = 53e3, state2 = null, onStatus = null, onLog = null) {
+    constructor(interval = 330, batchSize = 20, batchPause = 53e3, state2 = null, onStatus = null, onLog = null, dependencies = {}) {
       this.interval = interval;
       this.batchSize = batchSize;
       this.batchPause = batchPause;
@@ -765,19 +2090,61 @@
       this.onLog = onLog;
       this.queue = [];
       this.running = false;
+      this.cooling = false;
       this.stopped = false;
       this._consecutive429 = 0;
       this._429Warned = false;
       this._reqCount = 0;
+      this._currentJob = null;
+      this._currentController = null;
+      this._waiters = /* @__PURE__ */ new Set();
+      const runtime = dependencies && typeof dependencies === "object" ? dependencies : {};
+      const timerOption = runtime.timer || runtime.timers || runtime.clock || {};
+      const timer = typeof timerOption === "function" ? { setTimeout: timerOption } : timerOption;
+      const setTimeoutImpl = runtime.setTimeout || timer.setTimeout || globalThis.setTimeout;
+      const clearTimeoutImpl = runtime.clearTimeout || timer.clearTimeout || globalThis.clearTimeout;
+      const setTimeoutContext = runtime.setTimeout ? runtime : timer.setTimeout ? timer : globalThis;
+      const clearTimeoutContext = runtime.clearTimeout ? runtime : timer.clearTimeout ? timer : globalThis;
+      this._setTimeout = (...args) => setTimeoutImpl.apply(setTimeoutContext, args);
+      this._clearTimeout = (...args) => clearTimeoutImpl.apply(clearTimeoutContext, args);
+      this._now = () => {
+        const nowValue = runtime.now ?? timer.now ?? Date.now;
+        const nowContext = runtime.now != null ? runtime : timer.now != null ? timer : Date;
+        return Number(typeof nowValue === "function" ? nowValue.call(nowContext) : nowValue);
+      };
+      this._fetchImpl = runtime.fetch || runtime.fetchImpl || null;
+      this._stopPredicate = runtime.stopPredicate || runtime.shouldStop || null;
+      this._AbortController = Object.prototype.hasOwnProperty.call(runtime, "AbortController") ? runtime.AbortController : globalThis.AbortController || null;
     }
     async fetch(url, options = {}) {
+      if (this.stopped) throw stoppedError();
+      if (this._externalStopRequested()) {
+        this.stop();
+        throw stoppedError();
+      }
+      const {
+        policy: policyOption,
+        requestPolicy,
+        endpointPolicy,
+        ...fetchOptions
+      } = options || {};
+      const policyOverride = firstDefined3(policyOption, requestPolicy, endpointPolicy);
+      const policy = this._resolvePolicy(url, policyOverride);
       return new Promise((resolve, reject) => {
         if (this.stopped) {
-          reject({ status: 0, error: "stopped" });
+          reject(stoppedError());
           return;
         }
-        this.queue.push({ url, options, resolve, reject });
-        this._run();
+        this.queue.push({
+          url,
+          fetchOptions,
+          policy,
+          resolve,
+          reject,
+          settled: false,
+          cancelActive: null
+        });
+        void this._run();
       });
     }
     _cfgNumber(key, fallback, min = 0) {
@@ -794,122 +2161,404 @@
     _batchPauseMs() {
       return this._cfgNumber("batchPause", this.batchPause, 0);
     }
+    _urlText(url) {
+      if (typeof url === "string") return url;
+      if (url && typeof url.url === "string") return url.url;
+      return String(url || "");
+    }
+    _detectedPolicy(url) {
+      return /\/market\/priceoverview(?:\/|[?#]|$)/i.test(this._urlText(url)) ? PRICEOVERVIEW_POLICY : DEFAULT_POLICY;
+    }
+    _namedPolicy(name, detectedPolicy) {
+      const normalized = String(name || "").trim().toLowerCase();
+      if (!normalized || normalized === "auto") return detectedPolicy;
+      if (normalized === "priceoverview" || normalized === "price-overview") {
+        return PRICEOVERVIEW_POLICY;
+      }
+      if (normalized === "default" || normalized === "ordinary" || normalized === "normal" || normalized === "none") {
+        return DEFAULT_POLICY;
+      }
+      throw new TypeError(`Unknown request policy: ${name}`);
+    }
+    _resolvePolicy(url, override) {
+      const detected = this._detectedPolicy(url);
+      if (override == null || override === "auto") return detected;
+      if (typeof override === "string") return this._namedPolicy(override, detected);
+      if (typeof override === "boolean") {
+        return override ? PRICEOVERVIEW_POLICY : DEFAULT_POLICY;
+      }
+      if (typeof override !== "object") {
+        throw new TypeError("Request policy must be a policy name or object");
+      }
+      const baseName = firstDefined3(override.base, override.name, override.type);
+      const base = baseName == null ? detected : this._namedPolicy(baseName, detected);
+      const intervalOption = firstDefined3(
+        override.applyInterval,
+        override.interval,
+        override.pace
+      );
+      const batchOption = firstDefined3(
+        override.applyBatchCooldown,
+        override.batchCooldown,
+        override.proactiveCooldown,
+        override.countTowardBatch
+      );
+      const retryOption = firstDefined3(override.retry429, override.retryOn429);
+      const numericInterval = typeof intervalOption === "number" && Number.isFinite(intervalOption) ? Math.max(0, intervalOption) : null;
+      return {
+        name: base.name,
+        applyInterval: intervalOption === void 0 ? base.applyInterval : numericInterval != null || Boolean(intervalOption),
+        applyBatchCooldown: batchOption === void 0 ? base.applyBatchCooldown : Boolean(batchOption),
+        retry429: retryOption === void 0 ? base.retry429 : Boolean(retryOption),
+        intervalMs: numericInterval ?? this._optionalNumber(override.intervalMs, 0),
+        batchSize: this._optionalNumber(override.batchSize, 1, true),
+        batchPauseMs: this._optionalNumber(
+          firstDefined3(override.batchPauseMs, override.batchPause),
+          0
+        )
+      };
+    }
+    _optionalNumber(value, min, integer = false) {
+      if (value == null || value === "") return null;
+      const number = Number(value);
+      if (!Number.isFinite(number)) return null;
+      const normalized = Math.max(min, number);
+      return integer ? Math.floor(normalized) : normalized;
+    }
+    _policyInterval(policy) {
+      return policy.intervalMs == null ? this._priceInterval() : policy.intervalMs;
+    }
+    _policyBatchSize(policy) {
+      return policy.batchSize == null ? this._batchSizeLimit() : policy.batchSize;
+    }
+    _policyBatchPause(policy) {
+      return policy.batchPauseMs == null ? this._batchPauseMs() : policy.batchPauseMs;
+    }
+    _defaultStateStopRequested() {
+      return Boolean(
+        this.state?.stopRequested || this.state?.craftStopRequested || this.state?.surplusStopRequested || this.state?.seasonalStopRequested || this.state?.grindStopRequested
+      );
+    }
+    _externalStopRequested() {
+      if (!this._stopPredicate) return this._defaultStateStopRequested();
+      return Boolean(this._stopPredicate(this.state, this));
+    }
     _sleepShouldStop() {
-      return this.stopped || this.state?.stopRequested || this.state?.skipCurrent || this.state?.craftStopRequested || this.state?.surplusStopRequested || this.state?.seasonalStopRequested || this.state?.grindStopRequested;
+      return this.stopped || this.state?.skipCurrent || this._externalStopRequested();
+    }
+    _wait(ms) {
+      const delay = Math.max(0, Number(ms) || 0);
+      if (delay === 0) return Promise.resolve(!this._sleepShouldStop());
+      return new Promise((resolve, reject) => {
+        const waiter = {
+          id: null,
+          settled: false,
+          finish: (completed) => {
+            if (waiter.settled) return;
+            waiter.settled = true;
+            this._waiters.delete(waiter);
+            if (!completed && waiter.id != null) {
+              try {
+                this._clearTimeout(waiter.id);
+              } catch (_) {
+              }
+            }
+            resolve(completed);
+          }
+        };
+        this._waiters.add(waiter);
+        try {
+          waiter.id = this._setTimeout(() => waiter.finish(true), delay);
+        } catch (error) {
+          this._waiters.delete(waiter);
+          waiter.settled = true;
+          reject(error);
+          return;
+        }
+        if (this._sleepShouldStop()) waiter.finish(false);
+      });
+    }
+    _interruptWaits() {
+      for (const waiter of [...this._waiters]) waiter.finish(false);
     }
     async _sleep(ms) {
-      const endAt = Date.now() + Math.max(0, ms);
-      while (Date.now() < endAt) {
-        if (this._sleepShouldStop()) {
-          return false;
-        }
-        await new Promise(
-          (resolve) => setTimeout(resolve, Math.min(250, endAt - Date.now()))
-        );
+      const endAt = this._now() + Math.max(0, Number(ms) || 0);
+      while (this._now() < endAt) {
+        if (this._sleepShouldStop()) return false;
+        const remainingMs = Math.max(0, endAt - this._now());
+        if (!await this._wait(Math.min(250, remainingMs))) return false;
       }
-      return true;
+      return !this._sleepShouldStop();
     }
     async _sleepWithCountdown(ms, labelFactory) {
-      const endAt = Date.now() + Math.max(0, ms);
-      let lastSeconds = null;
-      while (Date.now() < endAt) {
-        if (this._sleepShouldStop()) {
-          return false;
-        }
-        const remainingMs = Math.max(0, endAt - Date.now());
-        const seconds = Math.max(1, Math.ceil(remainingMs / 1e3));
-        if (seconds !== lastSeconds && this.onStatus) {
-          lastSeconds = seconds;
-          this.onStatus(labelFactory(seconds), false);
-        }
-        await new Promise(
-          (resolve) => setTimeout(resolve, Math.min(250, remainingMs))
-        );
+      const duration = Math.max(0, Number(ms) || 0);
+      if (duration === 0 || this._sleepShouldStop()) {
+        this.cooling = false;
+        return !this._sleepShouldStop();
       }
-      return true;
+      const endAt = this._now() + duration;
+      let lastSeconds = null;
+      this.cooling = true;
+      try {
+        while (this._now() < endAt) {
+          if (this._sleepShouldStop()) return false;
+          const remainingMs = Math.max(0, endAt - this._now());
+          const seconds = Math.max(1, Math.ceil(remainingMs / 1e3));
+          if (seconds !== lastSeconds && this.onStatus && !this._sleepShouldStop()) {
+            lastSeconds = seconds;
+            this.onStatus(labelFactory(seconds), false);
+          }
+          if (this._sleepShouldStop()) return false;
+          if (!await this._wait(Math.min(250, remainingMs))) return false;
+        }
+        return !this._sleepShouldStop();
+      } finally {
+        this.cooling = false;
+      }
+    }
+    _resolveJob(job, value) {
+      if (job.settled) return;
+      job.settled = true;
+      job.resolve(value);
+    }
+    _rejectJob(job, reason) {
+      if (job.settled) return;
+      job.settled = true;
+      job.reject(reason);
+    }
+    _callFetch(url, options) {
+      if (this._fetchImpl) return this._fetchImpl(url, options);
+      const host = typeof window !== "undefined" ? window : globalThis;
+      if (typeof host.fetch !== "function") {
+        throw new Error("fetch is not available");
+      }
+      return host.fetch(url, options);
+    }
+    _prepareFetch(job) {
+      const options = {
+        credentials: "include",
+        ...job.fetchOptions
+      };
+      let controller = null;
+      let removeExternalAbort = null;
+      if (typeof this._AbortController === "function") {
+        try {
+          controller = new this._AbortController();
+          const externalSignal = options.signal;
+          if (externalSignal && externalSignal !== controller.signal) {
+            const forwardAbort = () => {
+              try {
+                controller.abort(externalSignal.reason);
+              } catch (_) {
+                try {
+                  controller.abort();
+                } catch (_2) {
+                }
+              }
+            };
+            if (externalSignal.aborted) {
+              forwardAbort();
+            } else if (typeof externalSignal.addEventListener === "function") {
+              externalSignal.addEventListener("abort", forwardAbort, { once: true });
+              removeExternalAbort = () => {
+                externalSignal.removeEventListener?.("abort", forwardAbort);
+              };
+            }
+          }
+          options.signal = controller.signal;
+        } catch (_) {
+          controller = null;
+        }
+      }
+      this._currentController = controller;
+      return {
+        options,
+        controller,
+        cleanup: () => {
+          removeExternalAbort?.();
+          if (this._currentController === controller) this._currentController = null;
+        }
+      };
+    }
+    async _awaitActive(job, operation) {
+      const operationResult = Promise.resolve().then(() => {
+        if (this.stopped) throw CANCELLED;
+        return operation();
+      }).then(
+        (value) => ({ value }),
+        (error) => ({ error })
+      );
+      const result = await Promise.race([operationResult, job.cancelPromise]);
+      if (result === CANCELLED) throw CANCELLED;
+      if (Object.prototype.hasOwnProperty.call(result, "error")) throw result.error;
+      return result.value;
+    }
+    async _attempt(job) {
+      const requestStartedAt = this._now();
+      let attempted = false;
+      let cancelActive;
+      job.cancelPromise = new Promise((resolve) => {
+        cancelActive = () => resolve(CANCELLED);
+      });
+      job.cancelActive = cancelActive;
+      this._currentJob = job;
+      const prepared = this._prepareFetch(job);
+      try {
+        if (this.stopped) throw CANCELLED;
+        attempted = true;
+        const response = await this._awaitActive(
+          job,
+          () => this._callFetch(job.url, prepared.options)
+        );
+        if (this.stopped) throw CANCELLED;
+        if (response.status === 429 && job.policy.retry429) {
+          this._consecutive429++;
+          this._reqCount = 0;
+          const pauseMs = this._policyBatchPause(job.policy);
+          if (this._consecutive429 >= 3 && !this._429Warned && this.onLog) {
+            this._429Warned = true;
+            this.onLog(
+              "Steam 可能已临时限制此 IP 访问价格 API；建议等待至少半小时或者更换 IP 后再继续",
+              "warn-ip"
+            );
+          }
+          const completed = await this._sleepWithCountdown(
+            pauseMs,
+            (seconds) => `429 限流冷却中 (第${this._consecutive429}次, ${seconds}s)`
+          );
+          if (!completed) {
+            if (this.state?.skipCurrent) {
+              this._rejectJob(job, { status: 429, error: "skipped by user" });
+            } else {
+              if (!this.stopped) this.stop();
+              this._rejectJob(job, stoppedError());
+            }
+            return { attempted: false, retry: false, requestStartedAt };
+          }
+          if (this.state?.skipCurrent) {
+            this._rejectJob(job, { status: 429, error: "skipped by user" });
+            return { attempted: false, retry: false, requestStartedAt };
+          }
+          if (this.stopped || this._externalStopRequested()) {
+            if (!this.stopped) this.stop();
+            this._rejectJob(job, stoppedError());
+            return { attempted: false, retry: false, requestStartedAt };
+          }
+          return { attempted: false, retry: true, requestStartedAt };
+        }
+        if (job.policy.retry429) this._consecutive429 = 0;
+        if (job.policy.name === "priceoverview" && this.onStatus && !this._sleepShouldStop()) {
+          this.onStatus("扫描卡牌价格中", true);
+        }
+        if (response.status >= 500 && job.policy.applyInterval) {
+          await this._sleep(this._policyInterval(job.policy) * 3);
+          if (this._externalStopRequested() && !this.stopped) this.stop();
+          if (this.stopped) throw CANCELLED;
+        }
+        const text = await this._awaitActive(job, () => response.text());
+        if (this.stopped) throw CANCELLED;
+        let data = null;
+        try {
+          data = JSON.parse(text);
+        } catch (_) {
+        }
+        if (!response.ok) {
+          this._rejectJob(job, { status: response.status, text, data });
+        } else {
+          this._resolveJob(job, { status: response.status, text, data });
+        }
+        return { attempted, retry: false, requestStartedAt };
+      } catch (error) {
+        if (error === CANCELLED || this.stopped) {
+          this._rejectJob(job, stoppedError());
+          return { attempted: false, retry: false, requestStartedAt };
+        }
+        this._rejectJob(job, { error: error?.message || String(error) });
+        return { attempted, retry: false, requestStartedAt };
+      } finally {
+        prepared.cleanup();
+        job.cancelActive = null;
+        job.cancelPromise = null;
+        if (this._currentJob === job) this._currentJob = null;
+      }
+    }
+    async _applyPolicy(job, requestStartedAt) {
+      if (this.stopped) return;
+      const policy = job.policy;
+      if (policy.applyBatchCooldown) {
+        this._reqCount++;
+        if (this._reqCount >= this._policyBatchSize(policy)) {
+          this._reqCount = 0;
+          if (this.stopped) return;
+          await this._sleepWithCountdown(
+            this._policyBatchPause(policy),
+            (seconds) => `主动冷却中 (${seconds}s)`
+          );
+          if (this._externalStopRequested() && !this.stopped) this.stop();
+          return;
+        }
+      }
+      if (policy.applyInterval && !this.stopped) {
+        const elapsed = this._now() - requestStartedAt;
+        await this._sleep(Math.max(0, this._policyInterval(policy) - elapsed));
+        if (this._externalStopRequested() && !this.stopped) this.stop();
+      }
     }
     async _run() {
-      if (this.running) return;
+      if (this.running || this.stopped) return;
       this.running = true;
       try {
         while (this.queue.length > 0 && !this.stopped) {
-          const job = this.queue.shift();
-          const isPriceOverview = job.url.includes("/market/priceoverview/");
-          const requestStartedAt = Date.now();
-          try {
-            const res = await window.fetch(job.url, {
-              credentials: "include",
-              ...job.options
-            });
-            if (res.status === 429) {
-              this._consecutive429++;
-              this._reqCount = 0;
-              const pauseMs = this._batchPauseMs();
-              if (this._consecutive429 >= 3 && !this._429Warned && this.onLog) {
-                this._429Warned = true;
-                this.onLog("Steam 可能已临时限制此 IP 访问价格 API；建议等待至少半小时或者更换 IP 后再继续", "warn-ip");
-              }
-              await this._sleepWithCountdown(
-                pauseMs,
-                (seconds) => `429 限流冷却中 (第${this._consecutive429}次, ${seconds}s)`
-              );
-              if (this.state?.skipCurrent) {
-                job.reject({ status: 429, error: "skipped by user" });
-                continue;
-              }
-              if (this.state?.stopRequested || this.state?.craftStopRequested || this.state?.surplusStopRequested || this.state?.seasonalStopRequested || this.state?.grindStopRequested || this.stopped) {
-                job.reject({ status: 0, error: "stopped" });
-                continue;
-              }
-              this.queue.unshift(job);
-              continue;
-            }
-            this._consecutive429 = 0;
-            if (isPriceOverview && this.onStatus) {
-              this.onStatus("扫描卡牌价格中", true);
-            }
-            if (res.status >= 500) {
-              await this._sleep(this._priceInterval() * 3);
-            }
-            const text = await res.text();
-            let data = null;
-            try {
-              data = JSON.parse(text);
-            } catch (_) {
-            }
-            if (!res.ok) {
-              job.reject({ status: res.status, text, data });
-            } else {
-              job.resolve({ status: res.status, text, data });
-            }
-          } catch (e) {
-            job.reject({ error: e?.message || String(e) });
+          if (this._externalStopRequested()) {
+            this.stop();
+            break;
           }
-          if (isPriceOverview) {
-            this._reqCount++;
-            if (this._reqCount >= this._batchSizeLimit()) {
-              this._reqCount = 0;
-              const pauseMs = this._batchPauseMs();
-              await this._sleepWithCountdown(
-                pauseMs,
-                (seconds) => `主动冷却中 (${seconds}s)`
-              );
-              continue;
-            }
-            const elapsed = Date.now() - requestStartedAt;
-            await this._sleep(Math.max(0, this._priceInterval() - elapsed));
+          const job = this.queue.shift();
+          const result = await this._attempt(job);
+          if (this.stopped) {
+            this._rejectJob(job, stoppedError());
+            break;
+          }
+          if (result.retry && !job.settled) {
+            this.queue.unshift(job);
+            continue;
+          }
+          if (result.attempted) {
+            await this._applyPolicy(job, result.requestStartedAt);
           }
         }
       } finally {
+        this.cooling = false;
+        this._currentJob = null;
+        this._currentController = null;
+        if (this.stopped) {
+          this._reqCount = 0;
+          this._consecutive429 = 0;
+          this._429Warned = false;
+        }
         this.running = false;
       }
-      if (this.queue.length > 0 && !this.stopped) this._run();
+      if (this.queue.length > 0 && !this.stopped) void this._run();
     }
     stop() {
       this.stopped = true;
-      for (const job of this.queue) {
-        if (job.reject) job.reject({ status: 0, error: "stopped" });
+      this.cooling = false;
+      this._reqCount = 0;
+      this._consecutive429 = 0;
+      this._429Warned = false;
+      this._interruptWaits();
+      const currentJob = this._currentJob;
+      if (currentJob) {
+        this._rejectJob(currentJob, stoppedError());
+        currentJob.cancelActive?.();
       }
+      if (this._currentController) {
+        try {
+          this._currentController.abort();
+        } catch (_) {
+        }
+      }
+      for (const job of this.queue) this._rejectJob(job, stoppedError());
       this.queue = [];
     }
     clear() {
@@ -1555,10 +3204,12 @@
     const bufferCents = Math.round(
       (Number.isFinite(adjustmentValue) ? adjustmentValue : 0) * 100
     );
+    const currencyContext = getActiveCurrencyContext();
     const buyData = {
       appid: info.appid,
       isFoil: !!info.isFoil,
       gameName: info.gameName,
+      currencyId: currencyContext?.currencyId ?? null,
       bufferCents,
       createdAt: Date.now(),
       items: toBuy.map((q) => q.card.marketHashName),
@@ -1589,11 +3240,15 @@
     const storedItems = Array.isArray(data?.items) ? data.items : [];
     const sameItems = sameMarketItems(currentItems, storedItems);
     const isFresh = Number.isFinite(data?.createdAt) && Date.now() - data.createdAt <= MULTIBUY_DATA_TTL;
-    if (!data || !Array.isArray(data.cards) || data.cards.length === 0 || !sameItems || !isFresh) {
+    const currencyContext = getActiveCurrencyContext();
+    const sameCurrency = Number.isInteger(currencyContext?.currencyId) && Number(data?.currencyId) === currencyContext.currencyId;
+    if (!data || !Array.isArray(data.cards) || data.cards.length === 0 || !sameItems || !isFresh || !sameCurrency) {
       console.warn("[STCH] Ignoring stale or mismatched multibuy data", {
         currentItems,
         storedItems,
-        isFresh
+        isFresh,
+        storedCurrencyId: data?.currencyId,
+        activeCurrencyId: currencyContext?.currencyId
       });
       clearMultibuyData();
       return;
@@ -1650,7 +3305,7 @@
         if (card.lowestCents > 0) {
           changed = setMultibuyFieldValue(
             price,
-            (Math.max(getMarketMinimumPriceCents(), card.lowestCents + bufferCents) / 100).toFixed(2)
+            (Math.max(getMarketMinimumPriceCents(), card.lowestCents + bufferCents) / currencyContext.minorUnitFactor).toFixed(currencyContext.decimalDigits)
           ) || changed;
         }
         if (quantity) {
@@ -2071,7 +3726,7 @@
     const estimateNotes = [];
     if (info.hasFormulaEstimate) {
       estimateNotes.push(
-        `Steam返回信息不全：${info.formulaEstimatedCards}张卡牌无价格，使用已知卡牌几何均价 ¥${formatCNY(info.formulaEstimateUnitCents)} 估算`
+        `Steam返回信息不全：${info.formulaEstimatedCards}张卡牌无价格，使用已知卡牌几何均价 ${formatMoney(info.formulaEstimateUnitCents)} 估算`
       );
     }
     if (info.hasMedianFallback) {
@@ -2086,9 +3741,9 @@
     row.appendChild(createTextSpan("stch-name", info.gameName || "(未知)"));
     row.appendChild(createTextSpan("stch-level", `Lv${info.level}/${targetLevel}`));
     row.appendChild(createTextSpan("stch-cards", `${ownedCards}/${info.totalInSet}`));
-    row.appendChild(createTextSpan("stch-cost", `¥${info.cheapestSetCNY}`));
-    row.appendChild(createTextSpan("stch-full", `¥${info.fullSetCNY}`));
-    const lv5 = createTextSpan("stch-lv5", `¥${info.level5CNY}`);
+    row.appendChild(createTextSpan("stch-cost", formatMoney(info.cheapestSetCostCents)));
+    row.appendChild(createTextSpan("stch-full", formatMoney(info.fullSetCostCents)));
+    const lv5 = createTextSpan("stch-lv5", formatMoney(info.level5CostCents));
     lv5.style.cssText = lv5Color;
     lv5.title = lv5Title;
     row.appendChild(lv5);
@@ -2183,11 +3838,12 @@
     if (!summary) return;
     const count = state.results.length;
     const modeLabel = state.results.some((info) => info.isFoil) ? "闪卡" : "普通卡";
-    const totalCNY = (state.results.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0) / 100).toFixed(2);
-    const fullCNY = (state.results.reduce((s, r) => s + r.fullSetCostCents, 0) / 100).toFixed(2);
-    const lv5CNY = (state.results.reduce((s, r) => s + r.level5CostCents, 0) / 100).toFixed(2);
+    const thresholdCents = Math.round((Number(state.cfg.threshold) || 0) * 100);
+    const totalCents = state.results.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0);
+    const fullCents = state.results.reduce((s, r) => s + (Number(r.fullSetCostCents) || 0), 0);
+    const lv5Cents = state.results.reduce((s, r) => s + (Number(r.level5CostCents) || 0), 0);
     summary.innerHTML = `
-      共 <b>${count}</b> 个${modeLabel} ≤ ¥${state.cfg.threshold} (单套卡牌价格上限)，补全总价 <b>¥${totalCNY}</b>，全套总价 ¥${fullCNY}，满级总价 ¥${lv5CNY}
+      共 <b>${count}</b> 个${modeLabel} ≤ ${formatMoney(thresholdCents)} (单套卡牌价格上限)，补全总价 <b>${formatMoney(totalCents)}</b>，全套总价 ${formatMoney(fullCents)}，满级总价 ${formatMoney(lv5Cents)}
     `;
   }
   function setOrderSummaryVisibility(visible) {
@@ -2200,11 +3856,11 @@
     pruneOrderCache(true);
     const count = state.orderResults.length;
     const selectedCount = getSelectedOrderResults().length;
-    const totalCNY = (state.orderResults.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0) / 100).toFixed(2);
-    const fullCNY = (state.orderResults.reduce((s, r) => s + r.fullSetCostCents, 0) / 100).toFixed(2);
-    const lv5CNY = (state.orderResults.reduce((s, r) => s + r.level5CostCents, 0) / 100).toFixed(2);
+    const totalCents = state.orderResults.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0);
+    const fullCents = state.orderResults.reduce((s, r) => s + (Number(r.fullSetCostCents) || 0), 0);
+    const lv5Cents = state.orderResults.reduce((s, r) => s + (Number(r.level5CostCents) || 0), 0);
     summary.innerHTML = `
-      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>¥${totalCNY}</b>，全套总价 ¥${fullCNY}，满级总价 ¥${lv5CNY}
+      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>${formatMoney(totalCents)}</b>，全套总价 ${formatMoney(fullCents)}，满级总价 ${formatMoney(lv5Cents)}
     `;
   }
   function updateOrderResultColumns() {
@@ -2411,6 +4067,7 @@
           info.targetLevel = getBadgeTargetLevel(info);
           info.gameName = b.gameName || info.gameName || "";
           info.cardPrices = [];
+          info.currencyId = state.currencyContext?.currencyId || state.cfg.currencyId || 23;
           info.cheapestSetCostCents = 0;
           info.fullSetCostCents = 0;
           info.level5CostCents = 0;
@@ -2460,6 +4117,8 @@
             if (pk.noPriceData) {
               log2(`  ⚠ 卡牌 "${card.name}" Steam 仅返回 success，无可用价格`, "warn");
               card.priceSource = "none";
+              card.currencyId = pk.currencyId;
+              card.marketRecord = pk.record;
               noPriceCards.push(card);
               info.hasEstimated = true;
               continue;
@@ -2468,6 +4127,9 @@
             card.medianCents = pk.medianCents;
             card.volume = pk.volume;
             card.priceSource = pk.priceSource;
+            card.currencyId = pk.currencyId;
+            card.observedAt = pk.observedAt;
+            card.marketRecord = pk.record;
             if (pk.volume < minVolume) minVolume = pk.volume;
             if (pk.estimated) {
               info.hasEstimated = true;
@@ -2479,7 +4141,9 @@
               medianCents: pk.medianCents,
               volume: pk.volume,
               marketHashName: card.marketHashName,
-              priceSource: pk.priceSource
+              priceSource: pk.priceSource,
+              currencyId: pk.currencyId,
+              observedAt: pk.observedAt
             });
             const need1 = Math.max(0, 1 - card.owned);
             const need5 = Math.max(0, setsToTarget - card.owned);
@@ -2487,7 +4151,7 @@
             fullSetCostCents += pk.lowestSellCents;
             level5CostCents += need5 > 0 ? pk.lowestSellCents + (need5 - 1) * Math.max(pk.lowestSellCents, pk.medianCents) : 0;
             if (fullSetCostCents > getThresholdCents()) {
-              log2(`  → 已查${info.cardPrices.length}/${info.totalInSet}张, 全套 ¥${formatCNY(fullSetCostCents)} > ¥${formatCNY(getThresholdCents())}，跳过`, "info");
+              log2(`  → 已查${info.cardPrices.length}/${info.totalInSet}张, 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(getThresholdCents())}，跳过`, "info");
               allPriced = false;
               thresholdSkip = true;
               break;
@@ -2505,13 +4169,13 @@
                 );
                 const shouldAutoBlacklistPrediction = state.cfg.earlyPredictionAutoBlacklist && state.cfg.autoBlackEnabled && predictionAutoBlacklistCents > 0 && prediction.predictedCents > predictionAutoBlacklistCents;
                 log2(
-                  `  → 已查${prediction.sampleCount}/${info.totalInSet}张, 保守预测全套≥¥${formatCNY(prediction.predictedCents)} > 安全线¥${formatCNY(predictionLimit)}，提前跳过 (样本¥${formatCNY(prediction.minPrice)}-${formatCNY(prediction.maxPrice)})`,
+                  `  → 已查${prediction.sampleCount}/${info.totalInSet}张, 保守预测全套≥${formatMoney(prediction.predictedCents)} > 安全线${formatMoney(predictionLimit)}，提前跳过 (样本${formatMoney(prediction.minPrice)}-${formatMoney(prediction.maxPrice)})`,
                   "info"
                 );
                 if (shouldAutoBlacklistPrediction) {
                   addToBlacklist(b.appid, info.gameName || b.gameName || "", 1);
                   log2(
-                    `  → 价格预测自动加入游戏黑名单: 预测全套≥¥${formatCNY(prediction.predictedCents)} > ¥${formatCNY(predictionAutoBlacklistCents)}`,
+                    `  → 价格预测自动加入游戏黑名单: 预测全套≥${formatMoney(prediction.predictedCents)} > ` + formatMoney(predictionAutoBlacklistCents),
                     "info"
                   );
                 }
@@ -2559,7 +4223,7 @@
               info.formulaEstimatedCards = noPriceCards.length;
               info.formulaEstimateUnitCents = formulaEstimate.estimatedUnitCents;
               log2(
-                `  → ${noPriceCards.length}/${info.totalInSet}张无价格，按已知卡牌几何均价 ¥${formatCNY(formulaEstimate.estimatedUnitCents)} 补充满级估算 ¥${formatCNY(formulaEstimate.estimatedCostCents)}`,
+                `  → ${noPriceCards.length}/${info.totalInSet}张无价格，按已知卡牌几何均价 ${formatMoney(formulaEstimate.estimatedUnitCents)} 补充满级估算 ${formatMoney(formulaEstimate.estimatedCostCents)}`,
                 "warn"
               );
             }
@@ -2570,24 +4234,24 @@
           info.fullSetCostCents = fullSetCostCents;
           info.level5CostCents = level5CostCents;
           info.minVolume = minVolume === Infinity ? 0 : minVolume;
-          info.cheapestSetCNY = formatCNY(setCostCents);
-          info.fullSetCNY = formatCNY(fullSetCostCents);
-          info.level5CNY = formatCNY(level5CostCents);
           const autoBlCents = Math.round((state.cfg.autoBlackThreshold || 0) * 100);
           if (state.cfg.autoBlackEnabled && autoBlCents > 0 && fullSetCostCents > autoBlCents) {
             addToBlacklist(b.appid, info.gameName || b.gameName || "", 1);
-            log2(`  → 自动加入游戏黑名单: 全套 ¥${info.fullSetCNY} > ¥${state.cfg.autoBlackThreshold}`, "info");
+            log2(`  → 自动加入游戏黑名单: 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(autoBlCents)}`, "info");
             skipped++;
             continue;
           }
           if (fullSetCostCents > getThresholdCents()) {
-            log2(`  → 整套卡牌价格已大于上限(¥${info.fullSetCNY} > ¥${formatCNY(getThresholdCents())})，跳过`, "info");
+            log2(`  → 整套卡牌价格已大于上限(${formatMoney(fullSetCostCents)} > ${formatMoney(getThresholdCents())})，跳过`, "info");
             skipped++;
             continue;
           }
           state.results.push(info);
           renderGameRow(info);
-          log2(`  ✓ [${b.appid}] ${info.gameName}: 补全 ¥${info.cheapestSetCNY} | 全套 ¥${info.fullSetCNY} | 满级 ¥${info.level5CNY}`, "ok");
+          log2(
+            `  ✓ [${b.appid}] ${info.gameName}: 补全 ${formatMoney(setCostCents)} | 全套 ${formatMoney(fullSetCostCents)} | 满级 ${formatMoney(level5CostCents)}`,
+            "ok"
+          );
         } catch (e) {
           log2(`[${b.appid}] ${b.gameName || ""}: 出错 ${e?.error || e?.status || JSON.stringify(e)}`, "err");
           skipped++;
@@ -2608,7 +4272,13 @@
       log2(`扫描中断: ${e?.message || JSON.stringify(e)}`, "err");
     } finally {
       queue.stop();
+      if (_stopTimeout) {
+        clearTimeout(_stopTimeout);
+        _stopTimeout = null;
+      }
       state.scanning = false;
+      state.stopRequested = false;
+      state.skipCurrent = false;
       state.queue = null;
       hideProgress();
       setStatus(null);
@@ -2692,7 +4362,7 @@
             }
             refreshed++;
             logFn(
-              `[${existing.appid}] ${existing.gameName}: 重算完成，补全 ¥${next.cheapestSetCNY} | 满级 ¥${next.level5CNY}`,
+              `[${existing.appid}] ${existing.gameName}: 重算完成，补全 ${formatMoney(next.cheapestSetCostCents)} | 满级 ${formatMoney(next.level5CostCents)}`,
               "ok"
             );
           }
@@ -2733,6 +4403,19 @@
   // src/features/orders.js
   var { log: log4, setStatus: setStatus3 } = scanStatus;
   var { setStatus: setOrderStatus2 } = orderStatus;
+  function getOrderCurrencyContext() {
+    return getActiveCurrencyContext() || getCurrencyContextById(state.cfg.currencyId || 23);
+  }
+  function getCurrencyMarketKey(marketHashName, currencyId = getOrderCurrencyContext().currencyId) {
+    return JSON.stringify([String(currencyId), String(marketHashName || "")]);
+  }
+  function storeMarketRecord(record) {
+    if (!record) return;
+    const result = upsertStoredMarketCache(record);
+    if (!result.ok && result.diagnostics?.some((item) => item.code !== "gm-get-unavailable" && item.code !== "gm-set-unavailable")) {
+      console.warn("[STCH] Market cache update skipped:", result.diagnostics);
+    }
+  }
   async function addManualOrderAppid() {
     if (isSharedActionBusy()) return;
     const input = document.getElementById("stch-order-appid");
@@ -2764,7 +4447,7 @@
       upsertOrderResult(info, { select: true, render: true });
       if (input) input.value = "";
       orderLog(
-        `[${appid}] ${info.gameName || ""}: 已加入订购缓存，补全 ¥${info.cheapestSetCNY} | 全套 ¥${info.fullSetCNY} | 满级 ¥${info.level5CNY}`,
+        `[${appid}] ${info.gameName || ""}: 已加入订购缓存，补全 ${formatMoney(info.cheapestSetCostCents)} | 全套 ${formatMoney(info.fullSetCostCents)} | 满级 ${formatMoney(info.level5CostCents)}`,
         "ok"
       );
     } catch (error) {
@@ -2796,15 +4479,24 @@
     renderOrderResults();
     setOrderStatus2(`已删除 ${expiredCount} 项过期缓存`, false);
   }
-  async function loadActiveBuyOrders() {
-    const response = await window.fetch(
-      "https://steamcommunity.com/market/mylistings?start=0&count=100&l=english",
-      { credentials: "include" }
+  async function loadActiveBuyOrders(queue = null) {
+    const ownedQueue = queue ? null : new RequestQueue(
+      state.cfg.requestInterval,
+      state.cfg.batchSize,
+      state.cfg.batchPause,
+      state
     );
-    if (!response.ok) {
-      throw new Error(`读取现有订购单失败 (${response.status})`);
+    const requestQueue = queue || ownedQueue;
+    let data;
+    try {
+      const response = await requestQueue.fetch(
+        "https://steamcommunity.com/market/mylistings?start=0&count=100&l=english",
+        { requestPolicy: "default" }
+      );
+      data = response?.data;
+    } finally {
+      ownedQueue?.stop();
     }
-    const data = await response.json();
     if (data?.success !== true && data?.success !== 1) {
       throw new Error("Steam 未返回现有订购单");
     }
@@ -2834,10 +4526,11 @@
     return orders;
   }
   function getPendingOrderExpectedQuantity(marketHashName) {
-    const pending = state.pendingOrderQuantities.get(marketHashName);
+    const cacheKey = getCurrencyMarketKey(marketHashName);
+    const pending = state.pendingOrderQuantities.get(cacheKey);
     if (!pending) return 0;
     if (Date.now() - pending.createdAt > 2 * 60 * 1e3) {
-      state.pendingOrderQuantities.delete(marketHashName);
+      state.pendingOrderQuantities.delete(cacheKey);
       return 0;
     }
     return pending.expectedQuantity;
@@ -2847,66 +4540,90 @@
     if (priceSource === "highest") return "求购最高";
     return "在售最低";
   }
-  async function fetchHighestBuyPrice(marketHashName) {
-    const cached = state.highestBuyPrices.get(marketHashName);
+  async function fetchHighestBuyPrice(marketHashName, queue = null) {
+    const currencyContext = getOrderCurrencyContext();
+    const cacheKey = getCurrencyMarketKey(marketHashName, currencyContext.currencyId);
+    const cached = state.highestBuyPrices.get(cacheKey);
     if (Number.isFinite(cached?.priceCents) && cached.priceCents > 0 && Date.now() - cached.fetchedAt < 3e4) {
       return cached.priceCents;
     }
-    const listingUrl = `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}?l=english`;
-    const listingResponse = await window.fetch(listingUrl, { credentials: "include" });
-    if (!listingResponse.ok) {
-      throw new Error(`读取商品页失败 (${listingResponse.status})`);
-    }
-    const listingHtml = await listingResponse.text();
-    const newOrderbook = parseMarketOrderbookFromListingHtml(
-      listingHtml,
-      marketHashName
+    const ownedQueue = queue ? null : new RequestQueue(
+      state.cfg.requestInterval,
+      state.cfg.batchSize,
+      state.cfg.batchPause,
+      state
     );
-    if (newOrderbook) {
-      const walletCurrency = Number(
-        unsafeWindow.g_rgWalletInfo?.wallet_currency || 23
+    const requestQueue = queue || ownedQueue;
+    try {
+      const listingUrl = `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}?l=english`;
+      const listingResponse = await requestQueue.fetch(listingUrl, {
+        requestPolicy: "default"
+      });
+      const listingHtml = listingResponse?.text || "";
+      const newOrderbook = parseMarketOrderbookFromListingHtml(
+        listingHtml,
+        marketHashName
       );
-      if (newOrderbook.currency != null && newOrderbook.currency !== walletCurrency) {
-        throw new Error(
-          `商品页币种不一致 (${newOrderbook.currency}/${walletCurrency})`
-        );
+      if (newOrderbook) {
+        if (newOrderbook.currency != null && newOrderbook.currency !== currencyContext.currencyId) {
+          throw new Error(
+            `商品页币种不一致 (${newOrderbook.currency}/${currencyContext.currencyId})`
+          );
+        }
+        if (newOrderbook.highestBuyCents <= 0) {
+          throw new Error("当前没有可用的最高求购价格");
+        }
+        const observedAt = Date.now();
+        storeMarketRecord(normalizeListingOrderbook(newOrderbook, {
+          appid: "753",
+          marketHashName,
+          currencyId: currencyContext.currencyId,
+          currencyCode: currencyContext.code,
+          observedAt
+        }));
+        state.highestBuyPrices.set(cacheKey, {
+          currencyId: currencyContext.currencyId,
+          priceCents: newOrderbook.highestBuyCents,
+          fetchedAt: observedAt
+        });
+        return newOrderbook.highestBuyCents;
       }
-      if (newOrderbook.highestBuyCents <= 0) {
+      const itemNameIdMatch = listingHtml.match(/Market_LoadOrderSpread\(\s*(\d+)\s*\)/) || listingHtml.match(/ItemActivityTicker\.Start\(\s*(\d+)\s*\)/);
+      if (!itemNameIdMatch) {
+        throw new Error("商品页缺少可用的订单簿数据");
+      }
+      const params = new URLSearchParams({
+        country: unsafeWindow.g_rgWalletInfo?.wallet_country || unsafeWindow.g_strCountryCode || "CN",
+        language: unsafeWindow.g_strLanguage || "schinese",
+        currency: String(currencyContext.currencyId),
+        item_nameid: itemNameIdMatch[1]
+      });
+      const histogramResponse = await requestQueue.fetch(
+        `https://steamcommunity.com/market/itemordershistogram?${params}`,
+        { requestPolicy: "default" }
+      );
+      const histogram = histogramResponse?.data;
+      const histogramRecord = normalizeItemOrdersHistogram(histogram, {
+        appid: "753",
+        marketHashName,
+        currencyId: currencyContext.currencyId,
+        currencyCode: currencyContext.code,
+        observedAt: Date.now()
+      });
+      const highestBuyCents = histogramRecord?.highestBuyMinor;
+      if (histogram?.success !== true && histogram?.success !== 1 || !Number.isFinite(highestBuyCents) || highestBuyCents <= 0) {
         throw new Error("当前没有可用的最高求购价格");
       }
-      state.highestBuyPrices.set(marketHashName, {
-        priceCents: newOrderbook.highestBuyCents,
-        fetchedAt: Date.now()
+      storeMarketRecord(histogramRecord);
+      state.highestBuyPrices.set(cacheKey, {
+        currencyId: currencyContext.currencyId,
+        priceCents: highestBuyCents,
+        fetchedAt: histogramRecord.observedAt
       });
-      return newOrderbook.highestBuyCents;
+      return highestBuyCents;
+    } finally {
+      ownedQueue?.stop();
     }
-    const itemNameIdMatch = listingHtml.match(/Market_LoadOrderSpread\(\s*(\d+)\s*\)/) || listingHtml.match(/ItemActivityTicker\.Start\(\s*(\d+)\s*\)/);
-    if (!itemNameIdMatch) {
-      throw new Error("商品页缺少可用的订单簿数据");
-    }
-    const params = new URLSearchParams({
-      country: unsafeWindow.g_strCountryCode || "CN",
-      language: unsafeWindow.g_strLanguage || "schinese",
-      currency: String(unsafeWindow.g_rgWalletInfo?.wallet_currency || 23),
-      item_nameid: itemNameIdMatch[1]
-    });
-    const histogramResponse = await window.fetch(
-      `https://steamcommunity.com/market/itemordershistogram?${params}`,
-      { credentials: "include" }
-    );
-    if (!histogramResponse.ok) {
-      throw new Error(`读取市场订单簿失败 (${histogramResponse.status})`);
-    }
-    const histogram = await histogramResponse.json();
-    const highestBuyCents = parseInt(histogram?.highest_buy_order, 10);
-    if (histogram?.success !== true && histogram?.success !== 1 || !Number.isFinite(highestBuyCents) || highestBuyCents <= 0) {
-      throw new Error("当前没有可用的最高求购价格");
-    }
-    state.highestBuyPrices.set(marketHashName, {
-      priceCents: highestBuyCents,
-      fetchedAt: Date.now()
-    });
-    return highestBuyCents;
   }
   async function buildBuyOrderPlan(selected, activeOrders, ui = {}) {
     const statusFn = ui.setStatus || setStatus3;
@@ -2967,7 +4684,7 @@
       } else if (priceSource === "highest") {
         statusFn(`读取求购最高 ${index + 1}/${candidates.length}: ${card.name}`);
         try {
-          basePriceCents = await fetchHighestBuyPrice(card.marketHashName);
+          basePriceCents = await fetchHighestBuyPrice(card.marketHashName, ui.queue || null);
         } catch (error) {
           logFn(
             `  ${info.gameName} · ${card.name}: ${error?.message || error}，已跳过`,
@@ -3005,13 +4722,13 @@
       const totalQuantity = plan.reduce((sum, item) => sum + item.quantity, 0);
       const totalCents = plan.reduce((sum, item) => sum + item.totalPriceCents, 0);
       const plannedGameCount = new Set(plan.map((item) => `${item.appid}:${item.gameName}`)).size;
-      const adjustmentText = `${adjustmentCents >= 0 ? "+" : "-"}¥${formatCNY(Math.abs(adjustmentCents))}`;
+      const adjustmentText = adjustmentCents >= 0 ? `+${formatMoney(adjustmentCents)}` : formatMoney(adjustmentCents);
       backdrop.innerHTML = `
         <div class="stch-order-dialog">
           <h3>确认提交长期订购单</h3>
           <div class="stch-order-summary">
             游戏 <b>${plannedGameCount}</b>/${selectedGameCount} 个 · 卡牌种类 <b>${plan.length}</b> ·
-            数量 <b>${totalQuantity}</b> 张 · 新增最高占用 <b>¥${formatCNY(totalCents)}</b><br>
+            数量 <b>${totalQuantity}</b> 张 · 新增最高占用 <b>${formatMoney(totalCents)}</b><br>
             价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> ·
             买价调整 <b>${adjustmentText}</b>
           </div>
@@ -3030,7 +4747,7 @@
         row.title = `${item.gameName} · ${item.marketHashName}`;
         row.appendChild(createTextSpan("", `${item.gameName} · ${item.cardName}`));
         row.appendChild(createTextSpan("", `${item.quantity} 张`));
-        row.appendChild(createTextSpan("", `¥${formatCNY(item.unitPriceCents)}`));
+        row.appendChild(createTextSpan("", formatMoney(item.unitPriceCents)));
         list.appendChild(row);
       });
       const notes = [];
@@ -3038,7 +4755,7 @@
       if (skipped.missingPrice) notes.push(`${skipped.missingPrice} 种卡牌缺少所选价格，已跳过`);
       if (skipped.missingHash) notes.push(`${skipped.missingHash} 种卡牌缺少市场标识，已跳过`);
       if (skipped.clamped) {
-        notes.push(`${skipped.clamped} 种卡牌低于 Steam 最低价，已调整为 ¥${formatCNY(minimumCents)}`);
+        notes.push(`${skipped.clamped} 种卡牌低于 Steam 最低价，已调整为 ${formatMoney(minimumCents)}`);
       }
       backdrop.querySelector(".stch-order-note").textContent = `${notes.join("；") || "未发现需跳过的卡牌"}。订单将长期保留，直到成交或手动取消；提交即表示同意 Steam 订户协议。`;
       const finish = (confirmed) => {
@@ -3065,7 +4782,7 @@
     for (let attempt = 0; attempt < 41; attempt++) {
       const body = new URLSearchParams({
         sessionid: sessionId,
-        currency: String(unsafeWindow.g_rgWalletInfo?.wallet_currency || 23),
+        currency: String(getOrderCurrencyContext().currencyId),
         appid: "753",
         market_hash_name: item.marketHashName,
         price_total: String(item.totalPriceCents),
@@ -3114,13 +4831,21 @@
     const isOrder = source === "order";
     const statusFn = isOrder ? setOrderStatus2 : setStatus3;
     const logFn = isOrder ? orderLog : log4;
-    const ui = { setStatus: statusFn, log: logFn };
     const selected = isOrder ? getSelectedOrderResults() : getSelectedResults();
     if (isSharedActionBusy()) return;
     if (selected.length === 0) {
       statusFn("请先勾选要提交订购单的卡组", false);
       return;
     }
+    const queue = new RequestQueue(
+      state.cfg.requestInterval,
+      state.cfg.batchSize,
+      state.cfg.batchPause,
+      state,
+      statusFn,
+      logFn
+    );
+    const ui = { setStatus: statusFn, log: logFn, queue };
     state.bulkActionRunning = true;
     updateAllActionStates();
     let submitted = 0;
@@ -3128,7 +4853,7 @@
     let finalStatus = null;
     try {
       statusFn("读取现有订购单");
-      const activeOrders = await loadActiveBuyOrders();
+      const activeOrders = await loadActiveBuyOrders(queue);
       const planData = await buildBuyOrderPlan(selected, activeOrders, ui);
       if (planData.plan.length === 0) {
         finalStatus = `无需提交订购单：已有订单已覆盖，或没有可用的${getOrderPriceSourceLabel(planData.priceSource)}`;
@@ -3146,12 +4871,12 @@
         try {
           const result = await createLongTermBuyOrder(item, ui);
           submitted++;
-          state.pendingOrderQuantities.set(item.marketHashName, {
+          state.pendingOrderQuantities.set(getCurrencyMarketKey(item.marketHashName), {
             expectedQuantity: item.reservedQuantity + item.quantity,
             createdAt: Date.now()
           });
           logFn(
-            `  ✓ ${item.gameName} · ${item.cardName}: ${item.quantity} 张 @ ¥${formatCNY(item.unitPriceCents)}，订单 ${result.buy_orderid}`,
+            `  ✓ ${item.gameName} · ${item.cardName}: ${item.quantity} 张 @ ${formatMoney(item.unitPriceCents)}，订单 ${result.buy_orderid}`,
             "ok"
           );
         } catch (error) {
@@ -3169,6 +4894,7 @@
       finalStatus = `无法提交长期订购单: ${error?.message || error}`;
       logFn(finalStatus, "err");
     } finally {
+      queue.stop();
       state.bulkActionRunning = false;
       if (isOrder && finalStatus) {
         statusFn(finalStatus, false);
@@ -4441,31 +6167,106 @@
     };
   }
   async function loadSidebarGemPrice(queue = null) {
-    const params = new URLSearchParams({
-      appid: "753",
-      currency: "23",
-      market_hash_name: SIDEBAR_GEM_SACK_HASH
-    });
-    const url = `https://steamcommunity.com/market/priceoverview/?${params.toString()}`;
-    const data = queue ? (await queue.fetch(url))?.data : await stchRequestJson(url);
-    const lowestCents = parsePrice(data?.lowest_price);
-    const medianCents = parsePrice(data?.median_price);
-    const priceCents = lowestCents || medianCents;
-    return {
-      priceCents,
-      source: lowestCents ? "在售最低" : medianCents ? "平均价格" : "暂无价格",
-      volume: parseInt(String(data?.volume || "").replace(/[^\d]/g, ""), 10) || 0
-    };
+    const ownedQueue = queue ? null : new RequestQueue(
+      state.cfg.requestInterval,
+      state.cfg.batchSize,
+      state.cfg.batchPause,
+      state
+    );
+    const requestQueue = queue || ownedQueue;
+    try {
+      const price = await priceCard(SIDEBAR_GEM_SACK_HASH, requestQueue);
+      const priceCents = price && !price.noPriceData ? price.lowestSellCents || 0 : 0;
+      return {
+        priceCents,
+        medianCents: price?.medianCents || 0,
+        source: price?.priceSource === "lowest" ? "在售最低" : price?.priceSource === "median" ? "平均价格" : "暂无价格",
+        volume: price?.volume || 0,
+        currencyId: price?.currencyId || state.currencyContext?.currencyId || state.cfg.currencyId,
+        observedAt: price?.observedAt || Date.now(),
+        record: price?.record || null
+      };
+    } finally {
+      ownedQueue?.stop();
+    }
   }
 
   // src/utils/market-fees.js
-  function getMarketFeesForSellerReceive(sellerCents) {
+  function firstFinite(...values) {
+    for (const value of values) {
+      if (value === void 0 || value === null || value === "") continue;
+      const number = Number(value);
+      if (Number.isFinite(number)) return number;
+    }
+    return null;
+  }
+  function normalizeRate(value, fallback) {
+    const number = firstFinite(value);
+    if (number == null || number < 0) return fallback;
+    return number > 1 ? number / 100 : number;
+  }
+  function normalizeMinimum(value, fallback) {
+    const number = firstFinite(value);
+    return number != null && number >= 0 ? Math.floor(number) : fallback;
+  }
+  function resolveFeeConfig(currencyContextOrWalletInfo) {
+    const activeOrSupplied = currencyContextOrWalletInfo ?? getActiveCurrencyContext();
+    if (!activeOrSupplied) {
+      return {
+        steamFeeRate: MARKET_STEAM_FEE_RATE,
+        publisherFeeRate: MARKET_PUBLISHER_FEE_RATE,
+        steamFeeMinimumMinor: 1,
+        publisherFeeMinimumMinor: 1,
+        steamFeeBaseMinor: 0
+      };
+    }
+    const context = resolveCurrencyContext(activeOrSupplied);
+    const walletInfo = activeOrSupplied?.walletInfo || (Object.hasOwn(activeOrSupplied, "wallet_currency") ? activeOrSupplied : {});
+    return {
+      steamFeeRate: normalizeRate(firstFinite(
+        activeOrSupplied.steamFeeRate,
+        walletInfo.wallet_fee_percent,
+        context.steamFeeRate
+      ), MARKET_STEAM_FEE_RATE),
+      publisherFeeRate: normalizeRate(firstFinite(
+        activeOrSupplied.publisherFeeRate,
+        walletInfo.wallet_publisher_fee_percent_default,
+        context.publisherFeeRate
+      ), MARKET_PUBLISHER_FEE_RATE),
+      steamFeeMinimumMinor: normalizeMinimum(firstFinite(
+        activeOrSupplied.steamFeeMinimumMinor,
+        walletInfo.wallet_fee_minimum,
+        walletInfo.wallet_market_minimum,
+        context.steamFeeMinimumMinor
+      ), 1),
+      publisherFeeMinimumMinor: normalizeMinimum(firstFinite(
+        activeOrSupplied.publisherFeeMinimumMinor,
+        walletInfo.wallet_publisher_fee_minimum,
+        walletInfo.wallet_fee_minimum,
+        walletInfo.wallet_market_minimum,
+        context.publisherFeeMinimumMinor
+      ), 1),
+      steamFeeBaseMinor: normalizeMinimum(firstFinite(
+        activeOrSupplied.steamFeeBaseMinor,
+        walletInfo.wallet_fee_base,
+        context.steamFeeBaseMinor
+      ), 0)
+    };
+  }
+  function getMarketFeesForSellerReceive(sellerCents, currencyContextOrWalletInfo) {
     const received = Math.max(0, Math.floor(Number(sellerCents) || 0));
     if (received <= 0) {
       return { steamFee: 0, publisherFee: 0, totalFees: 0, buyerCents: 0 };
     }
-    const steamFee = Math.max(1, Math.floor(received * MARKET_STEAM_FEE_RATE));
-    const publisherFee = Math.max(1, Math.floor(received * MARKET_PUBLISHER_FEE_RATE));
+    const config = resolveFeeConfig(currencyContextOrWalletInfo);
+    const steamFee = Math.floor(Math.max(
+      received * config.steamFeeRate,
+      config.steamFeeMinimumMinor
+    ) + config.steamFeeBaseMinor);
+    const publisherFee = Math.floor(Math.max(
+      received * config.publisherFeeRate,
+      config.publisherFeeMinimumMinor
+    ));
     return {
       steamFee,
       publisherFee,
@@ -4473,17 +6274,17 @@
       buyerCents: received + steamFee + publisherFee
     };
   }
-  function getBuyerPriceForSellerReceive(sellerCents) {
-    return getMarketFeesForSellerReceive(sellerCents).buyerCents;
+  function getBuyerPriceForSellerReceive(sellerCents, currencyContextOrWalletInfo) {
+    return getMarketFeesForSellerReceive(sellerCents, currencyContextOrWalletInfo).buyerCents;
   }
-  function getSellerReceiveForBuyerPrice(buyerCents) {
+  function getSellerReceiveForBuyerPrice(buyerCents, currencyContextOrWalletInfo) {
     const total = Math.max(0, Math.floor(Number(buyerCents) || 0));
     let low = 0;
     let high = total;
     let best = 0;
     while (low <= high) {
       const mid = Math.floor((low + high) / 2);
-      if (getBuyerPriceForSellerReceive(mid) <= total) {
+      if (getBuyerPriceForSellerReceive(mid, currencyContextOrWalletInfo) <= total) {
         best = mid;
         low = mid + 1;
       } else {
@@ -4492,16 +6293,18 @@
     }
     return best;
   }
-  function getGemSackSellerNetCents(priceCents) {
-    return getSellerReceiveForBuyerPrice(priceCents);
+  function getGemSackSellerNetCents(priceCents, currencyContextOrWalletInfo) {
+    return getSellerReceiveForBuyerPrice(priceCents, currencyContextOrWalletInfo);
   }
-  function getGemValueSellerNetCents(gems, gemSackPriceCents) {
-    const sackNet = getGemSackSellerNetCents(gemSackPriceCents);
+  function getGemValueSellerNetCents(gems, gemSackPriceCents, currencyContextOrWalletInfo) {
+    const sackNet = getGemSackSellerNetCents(gemSackPriceCents, currencyContextOrWalletInfo);
     return sackNet > 0 ? sackNet * Math.max(0, Number(gems) || 0) / GEM_SACK_SIZE : 0;
   }
-  function getGemBreakEvenBuyerPrice(gems, gemSackPriceCents) {
-    const desiredSellerNet = Math.ceil(getGemValueSellerNetCents(gems, gemSackPriceCents));
-    return desiredSellerNet > 0 ? getBuyerPriceForSellerReceive(desiredSellerNet) : 0;
+  function getGemBreakEvenBuyerPrice(gems, gemSackPriceCents, currencyContextOrWalletInfo) {
+    const desiredSellerNet = Math.ceil(
+      getGemValueSellerNetCents(gems, gemSackPriceCents, currencyContextOrWalletInfo)
+    );
+    return desiredSellerNet > 0 ? getBuyerPriceForSellerReceive(desiredSellerNet, currencyContextOrWalletInfo) : 0;
   }
 
   // src/features/surplus.js
@@ -4694,8 +6497,8 @@
         `库存 ${result.inventoryCount}，预留 ${result.reservedCount}，多余 ${result.surplusCount}`,
         `可出售 ${result.marketableCount}，可交易 ${result.tradableCount}`,
         result.volume === 0 ? "市场成交量 0" : Number.isFinite(result.volume) ? `市场成交量 ${result.volume}` : "市场价格尚未读取",
-        result.priceCents ? `市场参考 ¥${formatCNY(result.priceCents)}，出售税后约 ¥${formatCNY(result.marketNetCents)}` : "",
-        result.gemValueNetCents ? `${result.gemValue} 宝石/张，税后折算约 ¥${formatCNY(result.gemValueNetCents)}` : "",
+        result.priceCents ? `市场参考 ${formatMoney(result.priceCents)}，出售税后约 ${formatMoney(result.marketNetCents)}` : "",
+        result.gemValueNetCents ? `${result.gemValue} 宝石/张，税后折算约 ${formatMoney(result.gemValueNetCents)}` : "",
         state.cfg.surplusCompareGems && result.gemBetter ? "宝石价值高于出售税后到手价" : "",
         result.assetTitle ? `资产ID:
 ${result.assetTitle}` : ""
@@ -4849,7 +6652,7 @@ ${result.assetTitle}` : ""
           state.surplusGemPrice = await loadSidebarGemPrice(queue);
           if (state.surplusGemPrice.priceCents) {
             surplusLog2(
-              `宝石袋 ${state.surplusGemPrice.source} ¥${formatCNY(state.surplusGemPrice.priceCents)}`,
+              `宝石袋 ${state.surplusGemPrice.source} ${formatMoney(state.surplusGemPrice.priceCents)}`,
               "info"
             );
           }
@@ -5199,12 +7002,12 @@ ${result.assetTitle}` : ""
       item.recommendationKey = "grind";
       item.recommendationLabel = "分解";
       item.recommendationClass = "ok";
-      item.recommendationReason = `卖出税后约 ¥${formatCNY(item.marketNetCents)}，低于分解宝石税后约 ¥${formatCNY(item.unitGemValueNetCents)}`;
+      item.recommendationReason = `卖出税后约 ${formatMoney(item.marketNetCents)}，低于分解宝石税后约 ${formatMoney(item.unitGemValueNetCents)}`;
     } else {
       item.recommendationKey = "sell";
       item.recommendationLabel = "卖出";
       item.recommendationClass = "info";
-      item.recommendationReason = `卖出税后约 ¥${formatCNY(item.marketNetCents)}，高于分解宝石税后约 ¥${formatCNY(item.unitGemValueNetCents)}`;
+      item.recommendationReason = `卖出税后约 ${formatMoney(item.marketNetCents)}，高于分解宝石税后约 ${formatMoney(item.unitGemValueNetCents)}`;
     }
     return item;
   }
@@ -5267,7 +7070,7 @@ ${result.assetTitle}` : ""
       (item) => visible.some((visibleItem) => getGrindResultKey(visibleItem) === getGrindResultKey(item))
     ).length;
     const gemPrice = state.grindGemPrice || {};
-    const priceText = gemPrice.priceCents ? `宝石袋 ¥${formatCNY(gemPrice.priceCents)} / 税后 ¥${formatCNY(getGemSackSellerNetCents(gemPrice.priceCents))}` : "暂无宝石袋价格";
+    const priceText = gemPrice.priceCents ? `宝石袋 ${formatMoney(gemPrice.priceCents)} / 税后 ${formatMoney(getGemSackSellerNetCents(gemPrice.priceCents))}` : "暂无宝石袋价格";
     summary.innerHTML = `显示 <b>${visible.length}</b> 种 / <b>${visibleQuantity}</b> 件 · 建议分解 <b>${recommended.length}</b> 种 / <b>${recommendedQuantity}</b> 件 · 预计 <b>${formatInt(recommendedGems)}</b> 宝石 · 已选择 <b>${selectedCount}</b> 项 · ${priceText}`;
     row.style.display = "";
   }
@@ -5293,9 +7096,9 @@ ${result.assetTitle}` : ""
         assetid: asset.assetid,
         selectedAmount: asset.amount
       })));
-      const marketText = item.priceCents ? `¥${formatCNY(item.priceCents)}` : item.marketHashName && item.marketableCount > 0 ? "无价" : "不可售";
-      const marketTitle = item.priceCents ? `${item.priceSource || "市场价"}；卖出税后约 ¥${formatCNY(item.marketNetCents)}` : item.recommendationReason || "";
-      const breakEvenText = item.breakEvenPriceCents ? `¥${formatCNY(item.breakEvenPriceCents)}` : "—";
+      const marketText = item.priceCents ? formatMoney(item.priceCents) : item.marketHashName && item.marketableCount > 0 ? "无价" : "不可售";
+      const marketTitle = item.priceCents ? `${item.priceSource || "市场价"}；卖出税后约 ${formatMoney(item.marketNetCents)}` : item.recommendationReason || "";
+      const breakEvenText = item.breakEvenPriceCents ? formatMoney(item.breakEvenPriceCents) : "—";
       const tile = document.createElement("div");
       tile.className = "stch-inv-tile";
       tile.classList.toggle("stch-volume-zero", item.volume === 0);
@@ -5327,7 +7130,7 @@ ${assetSummary.title}` : ""
       }
       const price = document.createElement("span");
       price.className = "stch-inv-badge";
-      price.textContent = item.priceCents ? `¥${formatCNY(item.priceCents)}` : `x${item.quantity}`;
+      price.textContent = item.priceCents ? formatMoney(item.priceCents) : `x${item.quantity}`;
       price.title = marketTitle || "数量";
       tile.appendChild(price);
       const action = document.createElement("span");
@@ -5404,7 +7207,7 @@ ${assetSummary.title}` : ""
       const sackNet = getGemSackSellerNetCents(gemPrice.priceCents);
       const breakEven10 = getGemBreakEvenBuyerPrice(10, gemPrice.priceCents);
       grindLog(
-        `宝石袋 ${gemPrice.source} ¥${formatCNY(gemPrice.priceCents)}，税后到手约 ¥${formatCNY(sackNet)}；10宝石临界价 ¥${formatCNY(breakEven10)}`,
+        `宝石袋 ${gemPrice.source} ${formatMoney(gemPrice.priceCents)}，税后到手约 ${formatMoney(sackNet)}；10宝石临界价 ${formatMoney(breakEven10)}`,
         "ok"
       );
       const itemModeLabel = state.cfg.surplusItemMode === "emoticon" ? "表情" : "背景";
@@ -5624,7 +7427,7 @@ ${assetSummary.title}` : ""
     let basePriceCents = null;
     if (priceSource === "highest") {
       ui.setStatus(`读取求购最高 ${index + 1}/${total}: ${group.itemName}`);
-      basePriceCents = await fetchHighestBuyPrice(group.marketHashName);
+      basePriceCents = await fetchHighestBuyPrice(group.marketHashName, queue);
     } else {
       ui.setStatus(`读取出售参考价 ${index + 1}/${total}: ${group.itemName}`);
       const price = await priceCard(group.marketHashName, queue);
@@ -5860,23 +7663,25 @@ ${assetSummary.title}` : ""
     const totalQuantity = plan.reduce((sum, item) => sum + item.quantity, 0);
     const totalBuyerCents = plan.reduce((sum, item) => sum + item.totalBuyerCents, 0);
     const totalReceiveCents = plan.reduce((sum, item) => sum + item.totalReceiveCents, 0);
-    const adjustmentText = `${adjustmentCents >= 0 ? "+" : "-"}¥${formatCNY(Math.abs(adjustmentCents))}`;
+    const adjustmentText = adjustmentCents >= 0 ? `+${formatMoney(adjustmentCents)}` : formatMoney(adjustmentCents);
     const notes = [];
     if (skipped.missingHash) notes.push(`${skipped.missingHash} 项缺少市场标识`);
     if (skipped.unmarketable) notes.push(`${skipped.unmarketable} 项不可出售`);
     if (skipped.missingPrice) notes.push(`${skipped.missingPrice} 项缺少所选价格`);
     if (skipped.failedPrice) notes.push(`${skipped.failedPrice} 项查价失败`);
-    if (skipped.clamped) notes.push(`${skipped.clamped} 项低于 Steam 最低售价，已调整到 ¥${formatCNY(minimumBuyerCents)}`);
+    if (skipped.clamped) {
+      notes.push(`${skipped.clamped} 项低于 Steam 最低售价，已调整到 ${formatMoney(minimumBuyerCents)}`);
+    }
     return showProcessingConfirmation({
       title: "确认上架出售",
       rowClass: "sell",
       confirmLabel: "上架出售",
-      summaryHtml: `项目 <b>${plan.length}</b> 项 · 数量 <b>${totalQuantity}</b> 件 · 买家价格合计 <b>¥${formatCNY(totalBuyerCents)}</b> · 税后到手约 <b>¥${formatCNY(totalReceiveCents)}</b><br>价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> · 售价调整 <b>${adjustmentText}</b>`,
+      summaryHtml: `项目 <b>${plan.length}</b> 项 · 数量 <b>${totalQuantity}</b> 件 · 买家价格合计 <b>${formatMoney(totalBuyerCents)}</b> · 税后到手约 <b>${formatMoney(totalReceiveCents)}</b><br>价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> · 售价调整 <b>${adjustmentText}</b>`,
       rows: plan.map((item) => [
         `${item.gameName ? `${item.gameName} · ` : ""}${item.itemName}`,
         `${item.quantity} 件`,
-        `买家 ¥${formatCNY(item.unitBuyerCents)}`,
-        `到手 ¥${formatCNY(item.sellerReceiveCents)}`
+        `买家 ${formatMoney(item.unitBuyerCents)}`,
+        `到手 ${formatMoney(item.sellerReceiveCents)}`
       ]),
       note: `${notes.join("；") || "未发现需跳过的项目"}。将直接提交 Steam 市场上架请求；可能仍需要在 Steam 手机应用中确认。`
     });
@@ -5940,7 +7745,7 @@ ${assetSummary.title}` : ""
           submitted++;
           const confirmationText = result?.requires_confirmation || result?.needs_mobile_confirmation ? "，等待手机确认" : "";
           ui.log(
-            `  ✓ ${asset.item.itemName} x${asset.amount}: 买家 ¥${formatCNY(asset.item.unitBuyerCents)} / 到手 ¥${formatCNY(asset.item.sellerReceiveCents)}${confirmationText}`,
+            `  ✓ ${asset.item.itemName} x${asset.amount}: 买家 ${formatMoney(asset.item.unitBuyerCents)} / 到手 ${formatMoney(asset.item.sellerReceiveCents)}${confirmationText}`,
             "ok"
           );
         } catch (error) {
@@ -6019,8 +7824,323 @@ ${assetSummary.title}` : ""
     }
   }
 
+  // src/utils/xp.js
+  function xpRequiredForLevel(level) {
+    let total = 0;
+    for (let current = 0; current < level; current++) {
+      total += (Math.floor(current / 10) + 1) * 100;
+    }
+    return total;
+  }
+  function xpStepForLevel(level) {
+    return (Math.floor(Math.max(0, level) / 10) + 1) * 100;
+  }
+
+  // src/sidebar/profile.js
+  async function resolveSidebarSteamId(profileUrl, badgeHtml) {
+    const known = getSteamId() || parseSteamIdFromText(badgeHtml) || parseSteamIdFromProfileUrl(profileUrl);
+    if (known) return known;
+    if (!profileUrl) return "";
+    try {
+      const xml = await stchRequestText(`${profileUrl}/?xml=1`);
+      const match = xml.match(/<steamID64>(\d{17})<\/steamID64>/);
+      return match ? match[1] : "";
+    } catch (_) {
+      return "";
+    }
+  }
+  function parseSidebarProfileInfo(doc, html, profileUrl, steamId) {
+    const bodyText = (doc.body?.innerText || doc.body?.textContent || "").replace(/\u00a0/g, " ");
+    const rawName = getFirstText(doc, [
+      ".profile_small_header_name > a",
+      ".profile_small_header_name",
+      ".profile_header .persona_name .actual_persona_name",
+      ".profile_header .persona_name_text_content",
+      ".actual_persona_name",
+      "#global_actions .persona"
+    ]) || getFirstText(document, ["#global_actions .persona"]);
+    const name = rawName.replace(/\s*».*$/, "").trim();
+    const avatarSelectors = [
+      ".profile_small_header_avatar > .playerAvatar > picture img",
+      ".profile_small_header_avatar > .playerAvatar > img",
+      ".profile_header .playerAvatar > picture img",
+      ".profile_header .playerAvatar > img",
+      ".playerAvatarAutoSizeInner > img",
+      "#global_actions a.user_avatar > img"
+    ];
+    const avatar = getFirstImageUrl(doc, avatarSelectors) || getFirstImageUrl(document, avatarSelectors) || normalizeSteamAvatarUrl(getFirstAttr(doc, [
+      "meta[property='og:image']",
+      "meta[name='twitter:image']",
+      "link[rel='image_src']"
+    ], "content") || getFirstAttr(doc, ["link[rel='image_src']"], "href"));
+    const level = parseIntLoose(getFirstText(doc, [
+      ".profile_xp_block .friendPlayerLevelNum",
+      ".friendPlayerLevelNum"
+    ]));
+    const xpMatches = [...bodyText.matchAll(/([\d,，]+)\s*(?:点经验值|XP)/gi)].map((match) => parseIntLoose(match[1])).filter(Boolean);
+    const totalXp = xpMatches.length > 0 ? Math.max(...xpMatches) : 0;
+    let nextLevel = level ? level + 1 : 0;
+    let remainingXp = 0;
+    const zhNextMatch = bodyText.match(/升到\s*(\d+)\s*级还需\s*([\d,，]+)\s*点经验值/i);
+    const enNextMatch = bodyText.match(/([\d,，]+)\s*XP\s*(?:needed|required).*?Level\s*(\d+)/i);
+    if (zhNextMatch) {
+      nextLevel = parseIntLoose(zhNextMatch[1]) || nextLevel;
+      remainingXp = parseIntLoose(zhNextMatch[2]);
+    } else if (enNextMatch) {
+      remainingXp = parseIntLoose(enNextMatch[1]);
+      nextLevel = parseIntLoose(enNextMatch[2]) || nextLevel;
+    } else if (level && totalXp) {
+      remainingXp = Math.max(0, xpRequiredForLevel(level + 1) - totalXp);
+    }
+    const stepXp = level ? xpStepForLevel(level) : 0;
+    const earnedThisLevel = stepXp ? Math.max(0, stepXp - remainingXp) : 0;
+    return {
+      avatar,
+      name: name || "Steam 用户",
+      level,
+      totalXp,
+      nextLevel,
+      remainingXp,
+      stepXp,
+      earnedThisLevel,
+      profileUrl,
+      steamId,
+      html
+    };
+  }
+  async function loadSidebarProfileInfo() {
+    const profileUrl = getProfileUrl();
+    if (!profileUrl) throw new Error("未找到个人资料地址");
+    let html = "";
+    if (location.hostname === "steamcommunity.com" && location.pathname.includes("/badges")) {
+      html = document.documentElement.outerHTML;
+    } else {
+      html = await stchRequestText(`${profileUrl}/badges/`);
+    }
+    const steamId = await resolveSidebarSteamId(profileUrl, html);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return parseSidebarProfileInfo(doc, html, profileUrl, steamId);
+  }
+
+  // src/sidebar/sidebar.js
+  var sidebarLoading = false;
+  var sidebarData = {
+    profile: null,
+    gems: null,
+    gemPrice: null,
+    error: ""
+  };
+  function setSidebarText(id, text, title = "") {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.title = title || text;
+  }
+  function renderSidebar() {
+    const profile = sidebarData.profile || {};
+    const gems = sidebarData.gems || {};
+    const gemPrice = sidebarData.gemPrice || {};
+    const avatar = document.getElementById("stch-sidebar-avatar");
+    if (avatar && profile.avatar) avatar.src = profile.avatar;
+    const hasRemainingXp = Number.isFinite(Number(profile.remainingXp)) && Number.isFinite(Number(profile.stepXp)) && Number(profile.stepXp) > 0;
+    setSidebarText("stch-sidebar-name", profile.name || "Steam 用户");
+    setSidebarText("stch-sidebar-level", profile.level ? `Lv ${formatInt(profile.level)}` : "—");
+    setSidebarText("stch-sidebar-xp", profile.totalXp ? `${formatInt(profile.totalXp)} 点` : "—");
+    setSidebarText(
+      "stch-sidebar-next",
+      hasRemainingXp ? `${formatInt(profile.remainingXp)} / ${formatInt(profile.stepXp)}` : "—"
+    );
+    const progress = document.getElementById("stch-sidebar-progress-bar");
+    if (progress) {
+      const pct = profile.stepXp ? Math.min(100, Math.max(0, profile.earnedThisLevel / profile.stepXp * 100)) : 0;
+      progress.style.width = `${pct}%`;
+    }
+    const gemText = Number.isFinite(gems.totalGems) ? `${formatInt(gems.totalGems)} 宝石${gems.sackCount ? `（${formatInt(gems.sackCount)} 宝石袋）` : ""}` : "—";
+    setSidebarText("stch-sidebar-gems", gemText);
+    const priceEl = document.getElementById("stch-sidebar-gem-price");
+    if (priceEl) {
+      priceEl.replaceChildren();
+      if (gemPrice.priceCents) {
+        const previousPriceCents = Number(gemPrice.previousPriceCents) || 0;
+        if (previousPriceCents > 0) {
+          const changeCents = gemPrice.priceCents - previousPriceCents;
+          const change = document.createElement("span");
+          change.className = changeCents > 0 ? "stch-sidebar-price-rise" : changeCents < 0 ? "stch-sidebar-price-fall" : "stch-sidebar-price-flat";
+          change.textContent = changeCents === 0 ? `(±${formatMoney(0)}) ` : `(${changeCents > 0 ? "+" : ""}${formatMoney(changeCents)}) `;
+          priceEl.appendChild(change);
+        }
+        priceEl.appendChild(
+          document.createTextNode(`${GEM_SACK_SIZE}宝石/${formatMoney(gemPrice.priceCents)}`)
+        );
+      } else {
+        priceEl.textContent = "—";
+      }
+    }
+    const gemSackNetCents = gemPrice.priceCents ? getGemSackSellerNetCents(gemPrice.priceCents) : 0;
+    const priceTitle = gemPrice.priceCents ? `${gemPrice.source}${gemPrice.volume ? `，成交量 ${formatInt(gemPrice.volume)}` : ""}，税后到手约 ${formatMoney(gemSackNetCents)}` : "暂无宝石袋市场价格";
+    if (priceEl) priceEl.title = priceTitle;
+    const breakEven10 = gemPrice.priceCents ? getGemBreakEvenBuyerPrice(10, gemPrice.priceCents) : 0;
+    const breakEvenTitle = breakEven10 ? `按宝石袋税后到手 ${formatMoney(gemSackNetCents)} 计算；物品卖出税后低于该值时，分解成宝石更值` : "暂无宝石袋市场价格";
+    setSidebarText(
+      "stch-sidebar-grind-threshold",
+      breakEven10 ? `10宝石/${formatMoney(breakEven10)}` : "—",
+      breakEvenTitle
+    );
+    const status = document.getElementById("stch-sidebar-status");
+    if (status) {
+      status.textContent = sidebarLoading ? "正在刷新账号信息、库存宝石和市场价格..." : sidebarData.error || (profile.name ? "已同步当前账号信息" : "鼠标移入侧栏后可查看信息");
+    }
+    const refresh = document.getElementById("stch-sidebar-refresh");
+    if (refresh) refresh.disabled = sidebarLoading;
+  }
+  async function refreshSidebarData() {
+    if (sidebarLoading) return;
+    sidebarLoading = true;
+    sidebarData.error = "";
+    renderSidebar();
+    try {
+      const profile = await loadSidebarProfileInfo();
+      sidebarData.profile = profile;
+      renderSidebar();
+      const [gemsResult, priceResult] = await Promise.allSettled([
+        loadSidebarGemInfo(profile.steamId),
+        loadSidebarGemPrice()
+      ]);
+      if (gemsResult.status === "fulfilled") {
+        sidebarData.gems = gemsResult.value;
+      } else {
+        sidebarData.error = gemsResult.reason?.message || "库存宝石读取失败";
+      }
+      if (priceResult.status === "fulfilled") {
+        const currentPriceCents = Number(priceResult.value?.priceCents) || 0;
+        const currencyId = Number(
+          priceResult.value?.currencyId || state?.currencyContext?.currencyId || state?.cfg?.currencyId || 23
+        );
+        const savedGemPrice = GM_getValue(SIDEBAR_GEM_PRICE_KEY, null);
+        const savedCurrencyId = typeof savedGemPrice === "object" ? Number(savedGemPrice?.currencyId || 23) : 23;
+        const previousPriceCents = Number(
+          savedCurrencyId === currencyId && typeof savedGemPrice === "object" ? savedGemPrice?.priceCents : savedCurrencyId === currencyId ? savedGemPrice : 0
+        ) || 0;
+        sidebarData.gemPrice = {
+          ...priceResult.value,
+          previousPriceCents
+        };
+        if (currentPriceCents > 0) {
+          GM_setValue(SIDEBAR_GEM_PRICE_KEY, {
+            schemaVersion: 2,
+            currencyId,
+            priceCents: currentPriceCents,
+            observedAt: Date.now()
+          });
+        }
+      } else if (!sidebarData.error) {
+        sidebarData.error = priceResult.reason?.message || "宝石价格读取失败";
+      }
+    } catch (error) {
+      sidebarData.error = error?.message || "侧栏信息读取失败";
+    } finally {
+      sidebarLoading = false;
+      renderSidebar();
+    }
+  }
+  function setSidebarPinned(pinned) {
+    const sidebar = document.getElementById("stch-sidebar");
+    if (!sidebar) return;
+    sidebar.classList.toggle("pinned", pinned);
+    GM_setValue(SIDEBAR_PINNED_KEY, !!pinned);
+    const pin = document.getElementById("stch-sidebar-pin");
+    if (pin) pin.textContent = pinned ? "收起" : "固定";
+  }
+  function injectSidebar() {
+    if (document.getElementById("stch-sidebar")) return;
+    const sidebar = document.createElement("aside");
+    sidebar.id = "stch-sidebar";
+    sidebar.innerHTML = `
+      <div class="stch-sidebar-panel">
+        <div class="stch-sidebar-head">
+          <img id="stch-sidebar-avatar" class="stch-sidebar-avatar" alt="">
+          <div class="stch-sidebar-title">
+            <div id="stch-sidebar-name" class="stch-sidebar-name">Steam 用户</div>
+          </div>
+          <button id="stch-sidebar-pin" class="stch-sidebar-pin" type="button">固定</button>
+        </div>
+        <div class="stch-sidebar-body">
+          <div class="stch-sidebar-row"><span class="stch-sidebar-key">当前等级</span><span id="stch-sidebar-level" class="stch-sidebar-value">—</span></div>
+          <div class="stch-sidebar-row"><span class="stch-sidebar-key">当前经验值</span><span id="stch-sidebar-xp" class="stch-sidebar-value">—</span></div>
+          <div class="stch-sidebar-row"><span class="stch-sidebar-key">距离下一级</span><span id="stch-sidebar-next" class="stch-sidebar-value">—</span></div>
+          <div class="stch-sidebar-progress"><div id="stch-sidebar-progress-bar" class="stch-sidebar-progress-bar"></div></div>
+          <div class="stch-sidebar-row"><span class="stch-sidebar-key">当前宝石</span><span id="stch-sidebar-gems" class="stch-sidebar-value">—</span></div>
+          <div class="stch-sidebar-row"><span class="stch-sidebar-key">宝石价格参考</span><span id="stch-sidebar-gem-price" class="stch-sidebar-value">—</span></div>
+          <div class="stch-sidebar-row"><span class="stch-sidebar-key">分解临界点</span><span id="stch-sidebar-grind-threshold" class="stch-sidebar-value">—</span></div>
+          <div id="stch-sidebar-status" class="stch-sidebar-status">正在准备侧栏信息...</div>
+          <div class="stch-sidebar-actions"><button id="stch-sidebar-refresh" class="stch-sidebar-refresh" type="button">刷新</button></div>
+        </div>
+      </div>
+      <div id="stch-sidebar-handle" class="stch-sidebar-handle" aria-label="侧栏"></div>
+    `;
+    document.body.appendChild(sidebar);
+    const initialPinned = !!GM_getValue(SIDEBAR_PINNED_KEY, false);
+    setSidebarPinned(initialPinned);
+    document.getElementById("stch-sidebar-pin")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setSidebarPinned(!sidebar.classList.contains("pinned"));
+    });
+    document.getElementById("stch-sidebar-handle")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setSidebarPinned(!sidebar.classList.contains("pinned"));
+    });
+    document.getElementById("stch-sidebar-refresh")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      refreshSidebarData();
+    });
+    renderSidebar();
+    refreshSidebarData();
+  }
+
   // src/ui/modal.js
   var modalEl = null;
+  function getCurrencySourceLabel(context) {
+    if (context?.source === "walletInfo") return "Steam 钱包识别";
+    if (context?.source === "application_config") return "Steam 页面钱包识别";
+    if (context?.source === "page") return "市场页面识别";
+    if (context?.isFallback || context?.source === "configured") return "用户设置回退";
+    return "未识别";
+  }
+  function getCurrencyDisplayStatus(context = getActiveCurrencyContext()) {
+    if (!context?.currencyId) return "未识别币种";
+    return `${context.code} (${context.symbol}) · ${getCurrencySourceLabel(context)}${context.verified ? "" : " · 格式/费用规则未验证"}`;
+  }
+  function resetCurrencyBoundState() {
+    state.results = [];
+    state.selectedResults = /* @__PURE__ */ new Set();
+    state.orderResults = loadOrderCache();
+    state.selectedOrderResults = /* @__PURE__ */ new Set();
+    state.pendingOrderQuantities = /* @__PURE__ */ new Map();
+    state.highestBuyPrices = /* @__PURE__ */ new Map();
+    state.surplusResults = [];
+    state.selectedSurplusResults = /* @__PURE__ */ new Set();
+    state.surplusGemPrice = null;
+    state.grindResults = [];
+    state.selectedGrindResults = /* @__PURE__ */ new Set();
+    state.grindGemPrice = null;
+  }
+  function applyConfiguredCurrency(currencyId) {
+    const previous = getActiveCurrencyContext();
+    if (previous && !previous.isFallback && previous.source !== "unresolved") {
+      state.currencyContext = previous;
+      return false;
+    }
+    const next = setActiveCurrencyContext(createCurrencyContext(currencyId, {
+      source: "configured",
+      isFallback: true
+    }));
+    state.currencyContext = next;
+    if (previous?.currencyId !== next?.currencyId) {
+      resetCurrencyBoundState();
+      return true;
+    }
+    return false;
+  }
   function getOuterHeight(element) {
     if (!element || getComputedStyle(element).display === "none") return 0;
     const rect = element.getBoundingClientRect();
@@ -6093,6 +8213,9 @@ ${assetSummary.title}` : ""
     const seasonalOnly = isPointsShopPage();
     const initialTab = seasonalOnly ? "seasonal" : options.initialTab || "scan";
     const activeClass = (tabName) => initialTab === tabName ? "active" : "";
+    const currencyContext = getActiveCurrencyContext();
+    const currencySymbol = currencyContext?.symbol || "¤";
+    const currencyStatus = getCurrencyDisplayStatus(currencyContext);
     const backdrop = document.createElement("div");
     backdrop.id = "stch-backdrop";
     backdrop.style.display = "block";
@@ -6147,7 +8270,7 @@ ${assetSummary.title}` : ""
             </div>
           </div>
           <div class="stch-toolbar">
-            <label class="stch-primary-label">单套卡牌价格上限 ¥ <input id="stch-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.threshold}"></label>
+            <label class="stch-primary-label">单套卡牌价格上限 ${currencySymbol} <input id="stch-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.threshold}"></label>
             <label class="stch-primary-label" id="stch-buy-mode-label">购买卡牌逻辑 <select id="stch-buy-mode" class="stch-input" style="width:110px">
               <option value="complete1" ${state.cfg.buyMode === "complete1" ? "selected" : ""}>补全单套</option>
               <option value="complete5" ${state.cfg.buyMode === "complete5" ? "selected" : ""}>补至五级</option>
@@ -6173,7 +8296,7 @@ ${assetSummary.title}` : ""
                 <option value="highest" ${state.cfg.orderPriceSource === "highest" ? "selected" : ""}>求购最高</option>
               </select>
             </label>
-            <label class="stch-primary-label">买价调整 ¥ <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
+            <label class="stch-primary-label">买价调整 ${currencySymbol} <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
           </div>
           <div class="stch-scan-actions">
             <div class="stch-btn" id="stch-scan-btn">开始扫描</div>
@@ -6218,7 +8341,7 @@ ${assetSummary.title}` : ""
                 <option value="highest" ${state.cfg.orderPriceSource === "highest" ? "selected" : ""}>求购最高</option>
               </select>
             </label>
-            <label class="stch-primary-label">买价调整 ¥ <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
+            <label class="stch-primary-label">买价调整 ${currencySymbol} <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
             <span class="stch-settings-hint">与卡牌价格扫描页同步；补全总价会实时计入每张卡牌的调整值</span>
           </div>
           <div class="stch-summary" id="stch-order-summary-row" style="display:none">
@@ -6297,7 +8420,7 @@ ${assetSummary.title}` : ""
               <input id="stch-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
               启用自动游戏黑名单
             </label>
-            <label class="stch-primary-label">价格上限 ¥ <input id="stch-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
+            <label class="stch-primary-label">价格上限 ${currencySymbol} <input id="stch-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
             <span style="color:#8f98a0;font-size:12px;">扫描时超过此价格的游戏会自动加入游戏/AppID黑名单</span>
           </div>
           <div class="stch-bl-list" id="stch-bl-list"></div>
@@ -6337,7 +8460,7 @@ ${assetSummary.title}` : ""
                 <option value="highest" ${state.cfg.surplusSellPriceSource === "highest" ? "selected" : ""}>求购最高</option>
               </select>
             </label>
-            <label class="stch-primary-label">售价调整 ¥ <input id="stch-surplus-sell-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.surplusSellPriceAdjustment}" style="width:68px"></label>
+            <label class="stch-primary-label">售价调整 ${currencySymbol} <input id="stch-surplus-sell-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.surplusSellPriceAdjustment}" style="width:68px"></label>
           </div>
           <div class="stch-scan-actions stch-surplus-action-row">
             <div class="stch-btn stch-card-scan-action" id="stch-surplus-scan-btn">开始检测</div>
@@ -6383,6 +8506,16 @@ ${assetSummary.title}` : ""
           <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">全局设定</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
+            <label>无法自动识别币种时使用
+              <select id="stch-currency-fallback" class="stch-input" style="width:138px">
+                <option value="23" ${Number(state.cfg.currencyId) === 23 ? "selected" : ""}>人民币 CNY (¥)</option>
+                <option value="1" ${Number(state.cfg.currencyId) === 1 ? "selected" : ""}>美元 USD ($)</option>
+                <option value="29" ${Number(state.cfg.currencyId) === 29 ? "selected" : ""}>港币 HKD (HK$)</option>
+              </select>
+            </label>
+            <span class="stch-settings-hint">当前使用：${currencyStatus}</span>
+          </div>
+          <div class="stch-toolbar">
             <label>priceoverview请求间隔 <input id="stch-req-interval" class="stch-input" type="number" min="100" step="10" value="${state.cfg.requestInterval}" style="width:70px"> ms</label>
             <label>每 <input id="stch-batch-size" class="stch-input" type="number" min="5" step="1" value="${state.cfg.batchSize}" style="width:55px"> 次priceoverview请求后暂停</label>
             <label><input id="stch-batch-pause" class="stch-input" type="number" min="500" step="500" value="${state.cfg.batchPause}" style="width:75px"> ms</label>
@@ -6413,7 +8546,7 @@ ${assetSummary.title}` : ""
               <input id="stch-settings-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
               启用自动游戏黑名单
             </label>
-            <label class="stch-primary-label">价格上限 ¥ <input id="stch-settings-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
+            <label class="stch-primary-label">价格上限 ${currencySymbol} <input id="stch-settings-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
             <label><input id="stch-settings-early-prediction-auto-blacklist" type="checkbox" ${state.cfg.earlyPredictionAutoBlacklist ? "checked" : ""}> 预测跳过时加入自动黑名单</label>
             <span class="stch-settings-hint">预测价格也必须超过自动黑名单价格上限才会加入</span>
           </div>
@@ -6443,7 +8576,7 @@ ${assetSummary.title}` : ""
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.0.5 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V2.1.0 · 当前币种：${currencyStatus}</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -6714,6 +8847,41 @@ ${assetSummary.title}` : ""
         status.textContent = "";
       }, 3500) : null;
     };
+    document.getElementById("stch-currency-fallback")?.addEventListener("change", (event) => {
+      const input = event.currentTarget;
+      const previousConfiguredId = Number(state.cfg.currencyId || DEFAULT_CONFIG.currencyId);
+      if (isSharedActionBusy()) {
+        input.value = String(previousConfiguredId);
+        setSettingsActionStatus("请先停止当前操作，再修改回退币种");
+        return;
+      }
+      const currencyId = Number(input.value);
+      if (![1, 23, 29].includes(currencyId)) {
+        input.value = String(previousConfiguredId);
+        setSettingsActionStatus("不支持的回退币种");
+        return;
+      }
+      state.cfg.currencyId = currencyId;
+      saveConfig(state.cfg);
+      const activeChanged = applyConfiguredCurrency(currencyId);
+      if (!activeChanged) {
+        setSettingsActionStatus(
+          `回退币种已保存；当前仍使用 ${getCurrencyDisplayStatus()}`
+        );
+        return;
+      }
+      modal.remove();
+      document.getElementById("stch-backdrop")?.remove();
+      modalEl = null;
+      buildModal({ initialTab: "settings", suppressOnboarding: true });
+      const status = document.getElementById("stch-settings-action-status");
+      if (status) status.textContent = `已切换到 ${getCurrencyDisplayStatus()}，请重新查价`;
+      if (document.getElementById("stch-sidebar")) {
+        void refreshSidebarData().catch((error) => {
+          console.warn("[STCH] Sidebar refresh after currency change failed:", error);
+        });
+      }
+    });
     const clearCachedOrders = (event) => {
       if (event.currentTarget.classList.contains("disabled")) return;
       const cachedCount = readRawOrderCache().length;
@@ -6745,6 +8913,7 @@ ${assetSummary.title}` : ""
       );
       state.cfg = { ...DEFAULT_CONFIG, ...preserved };
       saveConfig(state.cfg);
+      applyConfiguredCurrency(state.cfg.currencyId);
       modal.remove();
       document.getElementById("stch-backdrop")?.remove();
       modalEl = null;
@@ -7121,275 +9290,11 @@ ${assetSummary.title}` : ""
     setTimeout(() => observer.disconnect(), 2e4);
   }
 
-  // src/utils/xp.js
-  function xpRequiredForLevel(level) {
-    let total = 0;
-    for (let current = 0; current < level; current++) {
-      total += (Math.floor(current / 10) + 1) * 100;
-    }
-    return total;
-  }
-  function xpStepForLevel(level) {
-    return (Math.floor(Math.max(0, level) / 10) + 1) * 100;
-  }
-
-  // src/sidebar/profile.js
-  async function resolveSidebarSteamId(profileUrl, badgeHtml) {
-    const known = getSteamId() || parseSteamIdFromText(badgeHtml) || parseSteamIdFromProfileUrl(profileUrl);
-    if (known) return known;
-    if (!profileUrl) return "";
-    try {
-      const xml = await stchRequestText(`${profileUrl}/?xml=1`);
-      const match = xml.match(/<steamID64>(\d{17})<\/steamID64>/);
-      return match ? match[1] : "";
-    } catch (_) {
-      return "";
-    }
-  }
-  function parseSidebarProfileInfo(doc, html, profileUrl, steamId) {
-    const bodyText = (doc.body?.innerText || doc.body?.textContent || "").replace(/\u00a0/g, " ");
-    const rawName = getFirstText(doc, [
-      ".profile_small_header_name > a",
-      ".profile_small_header_name",
-      ".profile_header .persona_name .actual_persona_name",
-      ".profile_header .persona_name_text_content",
-      ".actual_persona_name",
-      "#global_actions .persona"
-    ]) || getFirstText(document, ["#global_actions .persona"]);
-    const name = rawName.replace(/\s*».*$/, "").trim();
-    const avatarSelectors = [
-      ".profile_small_header_avatar > .playerAvatar > picture img",
-      ".profile_small_header_avatar > .playerAvatar > img",
-      ".profile_header .playerAvatar > picture img",
-      ".profile_header .playerAvatar > img",
-      ".playerAvatarAutoSizeInner > img",
-      "#global_actions a.user_avatar > img"
-    ];
-    const avatar = getFirstImageUrl(doc, avatarSelectors) || getFirstImageUrl(document, avatarSelectors) || normalizeSteamAvatarUrl(getFirstAttr(doc, [
-      "meta[property='og:image']",
-      "meta[name='twitter:image']",
-      "link[rel='image_src']"
-    ], "content") || getFirstAttr(doc, ["link[rel='image_src']"], "href"));
-    const level = parseIntLoose(getFirstText(doc, [
-      ".profile_xp_block .friendPlayerLevelNum",
-      ".friendPlayerLevelNum"
-    ]));
-    const xpMatches = [...bodyText.matchAll(/([\d,，]+)\s*(?:点经验值|XP)/gi)].map((match) => parseIntLoose(match[1])).filter(Boolean);
-    const totalXp = xpMatches.length > 0 ? Math.max(...xpMatches) : 0;
-    let nextLevel = level ? level + 1 : 0;
-    let remainingXp = 0;
-    const zhNextMatch = bodyText.match(/升到\s*(\d+)\s*级还需\s*([\d,，]+)\s*点经验值/i);
-    const enNextMatch = bodyText.match(/([\d,，]+)\s*XP\s*(?:needed|required).*?Level\s*(\d+)/i);
-    if (zhNextMatch) {
-      nextLevel = parseIntLoose(zhNextMatch[1]) || nextLevel;
-      remainingXp = parseIntLoose(zhNextMatch[2]);
-    } else if (enNextMatch) {
-      remainingXp = parseIntLoose(enNextMatch[1]);
-      nextLevel = parseIntLoose(enNextMatch[2]) || nextLevel;
-    } else if (level && totalXp) {
-      remainingXp = Math.max(0, xpRequiredForLevel(level + 1) - totalXp);
-    }
-    const stepXp = level ? xpStepForLevel(level) : 0;
-    const earnedThisLevel = stepXp ? Math.max(0, stepXp - remainingXp) : 0;
-    return {
-      avatar,
-      name: name || "Steam 用户",
-      level,
-      totalXp,
-      nextLevel,
-      remainingXp,
-      stepXp,
-      earnedThisLevel,
-      profileUrl,
-      steamId,
-      html
-    };
-  }
-  async function loadSidebarProfileInfo() {
-    const profileUrl = getProfileUrl();
-    if (!profileUrl) throw new Error("未找到个人资料地址");
-    let html = "";
-    if (location.hostname === "steamcommunity.com" && location.pathname.includes("/badges")) {
-      html = document.documentElement.outerHTML;
-    } else {
-      html = await stchRequestText(`${profileUrl}/badges/`);
-    }
-    const steamId = await resolveSidebarSteamId(profileUrl, html);
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    return parseSidebarProfileInfo(doc, html, profileUrl, steamId);
-  }
-
-  // src/sidebar/sidebar.js
-  var sidebarLoading = false;
-  var sidebarData = {
-    profile: null,
-    gems: null,
-    gemPrice: null,
-    error: ""
-  };
-  function setSidebarText(id, text, title = "") {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = text;
-    el.title = title || text;
-  }
-  function renderSidebar() {
-    const profile = sidebarData.profile || {};
-    const gems = sidebarData.gems || {};
-    const gemPrice = sidebarData.gemPrice || {};
-    const avatar = document.getElementById("stch-sidebar-avatar");
-    if (avatar && profile.avatar) avatar.src = profile.avatar;
-    const hasRemainingXp = Number.isFinite(Number(profile.remainingXp)) && Number.isFinite(Number(profile.stepXp)) && Number(profile.stepXp) > 0;
-    setSidebarText("stch-sidebar-name", profile.name || "Steam 用户");
-    setSidebarText("stch-sidebar-level", profile.level ? `Lv ${formatInt(profile.level)}` : "—");
-    setSidebarText("stch-sidebar-xp", profile.totalXp ? `${formatInt(profile.totalXp)} 点` : "—");
-    setSidebarText(
-      "stch-sidebar-next",
-      hasRemainingXp ? `${formatInt(profile.remainingXp)} / ${formatInt(profile.stepXp)}` : "—"
-    );
-    const progress = document.getElementById("stch-sidebar-progress-bar");
-    if (progress) {
-      const pct = profile.stepXp ? Math.min(100, Math.max(0, profile.earnedThisLevel / profile.stepXp * 100)) : 0;
-      progress.style.width = `${pct}%`;
-    }
-    const gemText = Number.isFinite(gems.totalGems) ? `${formatInt(gems.totalGems)} 宝石${gems.sackCount ? `（${formatInt(gems.sackCount)} 宝石袋）` : ""}` : "—";
-    setSidebarText("stch-sidebar-gems", gemText);
-    const priceEl = document.getElementById("stch-sidebar-gem-price");
-    if (priceEl) {
-      priceEl.replaceChildren();
-      if (gemPrice.priceCents) {
-        const previousPriceCents = Number(gemPrice.previousPriceCents) || 0;
-        if (previousPriceCents > 0) {
-          const changeCents = gemPrice.priceCents - previousPriceCents;
-          const change = document.createElement("span");
-          change.className = changeCents > 0 ? "stch-sidebar-price-rise" : changeCents < 0 ? "stch-sidebar-price-fall" : "stch-sidebar-price-flat";
-          change.textContent = changeCents === 0 ? `(±¥${formatCNY(0)}) ` : `(${changeCents > 0 ? "+" : "-"}¥${formatCNY(Math.abs(changeCents))}) `;
-          priceEl.appendChild(change);
-        }
-        priceEl.appendChild(
-          document.createTextNode(`${GEM_SACK_SIZE}宝石/¥${formatCNY(gemPrice.priceCents)}`)
-        );
-      } else {
-        priceEl.textContent = "—";
-      }
-    }
-    const gemSackNetCents = gemPrice.priceCents ? getGemSackSellerNetCents(gemPrice.priceCents) : 0;
-    const priceTitle = gemPrice.priceCents ? `${gemPrice.source}${gemPrice.volume ? `，成交量 ${formatInt(gemPrice.volume)}` : ""}，税后到手约 ¥${formatCNY(gemSackNetCents)}` : "暂无宝石袋市场价格";
-    if (priceEl) priceEl.title = priceTitle;
-    const breakEven10 = gemPrice.priceCents ? getGemBreakEvenBuyerPrice(10, gemPrice.priceCents) : 0;
-    const breakEvenTitle = breakEven10 ? `按宝石袋税后到手 ¥${formatCNY(gemSackNetCents)} 计算；物品卖出税后低于该值时，分解成宝石更值` : "暂无宝石袋市场价格";
-    setSidebarText(
-      "stch-sidebar-grind-threshold",
-      breakEven10 ? `10宝石/¥${formatCNY(breakEven10)}` : "—",
-      breakEvenTitle
-    );
-    const status = document.getElementById("stch-sidebar-status");
-    if (status) {
-      status.textContent = sidebarLoading ? "正在刷新账号信息、库存宝石和市场价格..." : sidebarData.error || (profile.name ? "已同步当前账号信息" : "鼠标移入侧栏后可查看信息");
-    }
-    const refresh = document.getElementById("stch-sidebar-refresh");
-    if (refresh) refresh.disabled = sidebarLoading;
-  }
-  async function refreshSidebarData() {
-    if (sidebarLoading) return;
-    sidebarLoading = true;
-    sidebarData.error = "";
-    renderSidebar();
-    try {
-      const profile = await loadSidebarProfileInfo();
-      sidebarData.profile = profile;
-      renderSidebar();
-      const [gemsResult, priceResult] = await Promise.allSettled([
-        loadSidebarGemInfo(profile.steamId),
-        loadSidebarGemPrice()
-      ]);
-      if (gemsResult.status === "fulfilled") {
-        sidebarData.gems = gemsResult.value;
-      } else {
-        sidebarData.error = gemsResult.reason?.message || "库存宝石读取失败";
-      }
-      if (priceResult.status === "fulfilled") {
-        const currentPriceCents = Number(priceResult.value?.priceCents) || 0;
-        const savedGemPrice = GM_getValue(SIDEBAR_GEM_PRICE_KEY, null);
-        const previousPriceCents = Number(
-          typeof savedGemPrice === "object" ? savedGemPrice?.priceCents : savedGemPrice
-        ) || 0;
-        sidebarData.gemPrice = {
-          ...priceResult.value,
-          previousPriceCents
-        };
-        if (currentPriceCents > 0) {
-          GM_setValue(SIDEBAR_GEM_PRICE_KEY, {
-            priceCents: currentPriceCents,
-            observedAt: Date.now()
-          });
-        }
-      } else if (!sidebarData.error) {
-        sidebarData.error = priceResult.reason?.message || "宝石价格读取失败";
-      }
-    } catch (error) {
-      sidebarData.error = error?.message || "侧栏信息读取失败";
-    } finally {
-      sidebarLoading = false;
-      renderSidebar();
-    }
-  }
-  function setSidebarPinned(pinned) {
-    const sidebar = document.getElementById("stch-sidebar");
-    if (!sidebar) return;
-    sidebar.classList.toggle("pinned", pinned);
-    GM_setValue(SIDEBAR_PINNED_KEY, !!pinned);
-    const pin = document.getElementById("stch-sidebar-pin");
-    if (pin) pin.textContent = pinned ? "收起" : "固定";
-  }
-  function injectSidebar() {
-    if (document.getElementById("stch-sidebar")) return;
-    const sidebar = document.createElement("aside");
-    sidebar.id = "stch-sidebar";
-    sidebar.innerHTML = `
-      <div class="stch-sidebar-panel">
-        <div class="stch-sidebar-head">
-          <img id="stch-sidebar-avatar" class="stch-sidebar-avatar" alt="">
-          <div class="stch-sidebar-title">
-            <div id="stch-sidebar-name" class="stch-sidebar-name">Steam 用户</div>
-          </div>
-          <button id="stch-sidebar-pin" class="stch-sidebar-pin" type="button">固定</button>
-        </div>
-        <div class="stch-sidebar-body">
-          <div class="stch-sidebar-row"><span class="stch-sidebar-key">当前等级</span><span id="stch-sidebar-level" class="stch-sidebar-value">—</span></div>
-          <div class="stch-sidebar-row"><span class="stch-sidebar-key">当前经验值</span><span id="stch-sidebar-xp" class="stch-sidebar-value">—</span></div>
-          <div class="stch-sidebar-row"><span class="stch-sidebar-key">距离下一级</span><span id="stch-sidebar-next" class="stch-sidebar-value">—</span></div>
-          <div class="stch-sidebar-progress"><div id="stch-sidebar-progress-bar" class="stch-sidebar-progress-bar"></div></div>
-          <div class="stch-sidebar-row"><span class="stch-sidebar-key">当前宝石</span><span id="stch-sidebar-gems" class="stch-sidebar-value">—</span></div>
-          <div class="stch-sidebar-row"><span class="stch-sidebar-key">宝石价格参考</span><span id="stch-sidebar-gem-price" class="stch-sidebar-value">—</span></div>
-          <div class="stch-sidebar-row"><span class="stch-sidebar-key">分解临界点</span><span id="stch-sidebar-grind-threshold" class="stch-sidebar-value">—</span></div>
-          <div id="stch-sidebar-status" class="stch-sidebar-status">正在准备侧栏信息...</div>
-          <div class="stch-sidebar-actions"><button id="stch-sidebar-refresh" class="stch-sidebar-refresh" type="button">刷新</button></div>
-        </div>
-      </div>
-      <div id="stch-sidebar-handle" class="stch-sidebar-handle" aria-label="侧栏"></div>
-    `;
-    document.body.appendChild(sidebar);
-    const initialPinned = !!GM_getValue(SIDEBAR_PINNED_KEY, false);
-    setSidebarPinned(initialPinned);
-    document.getElementById("stch-sidebar-pin")?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      setSidebarPinned(!sidebar.classList.contains("pinned"));
-    });
-    document.getElementById("stch-sidebar-handle")?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      setSidebarPinned(!sidebar.classList.contains("pinned"));
-    });
-    document.getElementById("stch-sidebar-refresh")?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      refreshSidebarData();
-    });
-    renderSidebar();
-    refreshSidebarData();
-  }
-
   // src/index.js
   GM_addStyle(style_default);
+  state.currencyContext = initializeCurrencyContext({
+    configuredCurrencyId: state.cfg.currencyId
+  });
   state.orderResults = loadOrderCache();
   pruneOrderCache(true);
   var pageUrl = window.location.href;

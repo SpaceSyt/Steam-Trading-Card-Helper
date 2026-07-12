@@ -4,7 +4,11 @@ import { saveConfig, DEFAULT_CONFIG } from "../config.js";
 
 import { SEASONAL_BADGE_NAME, SEASONAL_BADGE_MAX_LEVEL, ONBOARDING_SEEN_KEY } from "../constants.js";
 
-import { formatCNY } from "../utils/format.js";
+import {
+  createCurrencyContext,
+  getActiveCurrencyContext,
+  setActiveCurrencyContext,
+} from "../services/currency.js";
 
 import { isPointsShopPage } from "../utils/steam.js";
 
@@ -28,11 +32,60 @@ import { renderBlacklist, updateBlRow, addToBlacklist, lookupGameName } from "..
 
 import { renderResults, renderOrderResults, updateSummary, updateOrderSummary, updateOrderResultColumns } from "./render.js";
 
-import { updateAllActionStates, updateBulkActionState } from "./action-state.js";
+import { isSharedActionBusy, updateAllActionStates, updateBulkActionState } from "./action-state.js";
 
-import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services/order-cache.js";
+import { clearOrderCache, loadOrderCache, pruneOrderCache, readRawOrderCache } from "../services/order-cache.js";
+
+import { refreshSidebarData } from "../sidebar/sidebar.js";
 
   let modalEl = null;
+
+  function getCurrencySourceLabel(context) {
+    if (context?.source === "walletInfo") return "Steam 钱包识别";
+    if (context?.source === "application_config") return "Steam 页面钱包识别";
+    if (context?.source === "page") return "市场页面识别";
+    if (context?.isFallback || context?.source === "configured") return "用户设置回退";
+    return "未识别";
+  }
+
+  function getCurrencyDisplayStatus(context = getActiveCurrencyContext()) {
+    if (!context?.currencyId) return "未识别币种";
+    return `${context.code} (${context.symbol}) · ${getCurrencySourceLabel(context)}`
+      + `${context.verified ? "" : " · 格式/费用规则未验证"}`;
+  }
+
+  function resetCurrencyBoundState() {
+    state.results = [];
+    state.selectedResults = new Set();
+    state.orderResults = loadOrderCache();
+    state.selectedOrderResults = new Set();
+    state.pendingOrderQuantities = new Map();
+    state.highestBuyPrices = new Map();
+    state.surplusResults = [];
+    state.selectedSurplusResults = new Set();
+    state.surplusGemPrice = null;
+    state.grindResults = [];
+    state.selectedGrindResults = new Set();
+    state.grindGemPrice = null;
+  }
+
+  function applyConfiguredCurrency(currencyId) {
+    const previous = getActiveCurrencyContext();
+    if (previous && !previous.isFallback && previous.source !== "unresolved") {
+      state.currencyContext = previous;
+      return false;
+    }
+    const next = setActiveCurrencyContext(createCurrencyContext(currencyId, {
+      source: "configured",
+      isFallback: true,
+    }));
+    state.currencyContext = next;
+    if (previous?.currencyId !== next?.currencyId) {
+      resetCurrencyBoundState();
+      return true;
+    }
+    return false;
+  }
 
   export function getOuterHeight(element) {
     if (!element || getComputedStyle(element).display === "none") return 0;
@@ -119,6 +172,9 @@ import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services
     const seasonalOnly = isPointsShopPage();
     const initialTab = seasonalOnly ? "seasonal" : options.initialTab || "scan";
     const activeClass = tabName => initialTab === tabName ? "active" : "";
+    const currencyContext = getActiveCurrencyContext();
+    const currencySymbol = currencyContext?.symbol || "¤";
+    const currencyStatus = getCurrencyDisplayStatus(currencyContext);
     const backdrop = document.createElement("div");
     backdrop.id = "stch-backdrop";
     backdrop.style.display = "block";
@@ -174,7 +230,7 @@ import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services
             </div>
           </div>
           <div class="stch-toolbar">
-            <label class="stch-primary-label">单套卡牌价格上限 ¥ <input id="stch-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.threshold}"></label>
+            <label class="stch-primary-label">单套卡牌价格上限 ${currencySymbol} <input id="stch-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.threshold}"></label>
             <label class="stch-primary-label" id="stch-buy-mode-label">购买卡牌逻辑 <select id="stch-buy-mode" class="stch-input" style="width:110px">
               <option value="complete1" ${state.cfg.buyMode === "complete1" ? "selected" : ""}>补全单套</option>
               <option value="complete5" ${state.cfg.buyMode === "complete5" ? "selected" : ""}>补至五级</option>
@@ -200,7 +256,7 @@ import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services
                 <option value="highest" ${state.cfg.orderPriceSource === "highest" ? "selected" : ""}>求购最高</option>
               </select>
             </label>
-            <label class="stch-primary-label">买价调整 ¥ <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
+            <label class="stch-primary-label">买价调整 ${currencySymbol} <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
           </div>
           <div class="stch-scan-actions">
             <div class="stch-btn" id="stch-scan-btn">开始扫描</div>
@@ -245,7 +301,7 @@ import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services
                 <option value="highest" ${state.cfg.orderPriceSource === "highest" ? "selected" : ""}>求购最高</option>
               </select>
             </label>
-            <label class="stch-primary-label">买价调整 ¥ <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
+            <label class="stch-primary-label">买价调整 ${currencySymbol} <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
             <span class="stch-settings-hint">与卡牌价格扫描页同步；补全总价会实时计入每张卡牌的调整值</span>
           </div>
           <div class="stch-summary" id="stch-order-summary-row" style="display:none">
@@ -324,7 +380,7 @@ import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services
               <input id="stch-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
               启用自动游戏黑名单
             </label>
-            <label class="stch-primary-label">价格上限 ¥ <input id="stch-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
+            <label class="stch-primary-label">价格上限 ${currencySymbol} <input id="stch-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
             <span style="color:#8f98a0;font-size:12px;">扫描时超过此价格的游戏会自动加入游戏/AppID黑名单</span>
           </div>
           <div class="stch-bl-list" id="stch-bl-list"></div>
@@ -364,7 +420,7 @@ import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services
                 <option value="highest" ${state.cfg.surplusSellPriceSource === "highest" ? "selected" : ""}>求购最高</option>
               </select>
             </label>
-            <label class="stch-primary-label">售价调整 ¥ <input id="stch-surplus-sell-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.surplusSellPriceAdjustment}" style="width:68px"></label>
+            <label class="stch-primary-label">售价调整 ${currencySymbol} <input id="stch-surplus-sell-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.surplusSellPriceAdjustment}" style="width:68px"></label>
           </div>
           <div class="stch-scan-actions stch-surplus-action-row">
             <div class="stch-btn stch-card-scan-action" id="stch-surplus-scan-btn">开始检测</div>
@@ -410,6 +466,16 @@ import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services
           <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">全局设定</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
+            <label>无法自动识别币种时使用
+              <select id="stch-currency-fallback" class="stch-input" style="width:138px">
+                <option value="23" ${Number(state.cfg.currencyId) === 23 ? "selected" : ""}>人民币 CNY (¥)</option>
+                <option value="1" ${Number(state.cfg.currencyId) === 1 ? "selected" : ""}>美元 USD ($)</option>
+                <option value="29" ${Number(state.cfg.currencyId) === 29 ? "selected" : ""}>港币 HKD (HK$)</option>
+              </select>
+            </label>
+            <span class="stch-settings-hint">当前使用：${currencyStatus}</span>
+          </div>
+          <div class="stch-toolbar">
             <label>priceoverview请求间隔 <input id="stch-req-interval" class="stch-input" type="number" min="100" step="10" value="${state.cfg.requestInterval}" style="width:70px"> ms</label>
             <label>每 <input id="stch-batch-size" class="stch-input" type="number" min="5" step="1" value="${state.cfg.batchSize}" style="width:55px"> 次priceoverview请求后暂停</label>
             <label><input id="stch-batch-pause" class="stch-input" type="number" min="500" step="500" value="${state.cfg.batchPause}" style="width:75px"> ms</label>
@@ -440,7 +506,7 @@ import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services
               <input id="stch-settings-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
               启用自动游戏黑名单
             </label>
-            <label class="stch-primary-label">价格上限 ¥ <input id="stch-settings-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
+            <label class="stch-primary-label">价格上限 ${currencySymbol} <input id="stch-settings-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
             <label><input id="stch-settings-early-prediction-auto-blacklist" type="checkbox" ${state.cfg.earlyPredictionAutoBlacklist ? "checked" : ""}> 预测跳过时加入自动黑名单</label>
             <span class="stch-settings-hint">预测价格也必须超过自动黑名单价格上限才会加入</span>
           </div>
@@ -470,7 +536,7 @@ import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.0.5 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V2.1.0 · 当前币种：${currencyStatus}</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -735,6 +801,44 @@ import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services
         ? setTimeout(() => { status.textContent = ""; }, 3500)
         : null;
     };
+    document.getElementById("stch-currency-fallback")?.addEventListener("change", event => {
+      const input = event.currentTarget;
+      const previousConfiguredId = Number(state.cfg.currencyId || DEFAULT_CONFIG.currencyId);
+      if (isSharedActionBusy()) {
+        input.value = String(previousConfiguredId);
+        setSettingsActionStatus("请先停止当前操作，再修改回退币种");
+        return;
+      }
+
+      const currencyId = Number(input.value);
+      if (![1, 23, 29].includes(currencyId)) {
+        input.value = String(previousConfiguredId);
+        setSettingsActionStatus("不支持的回退币种");
+        return;
+      }
+
+      state.cfg.currencyId = currencyId;
+      saveConfig(state.cfg);
+      const activeChanged = applyConfiguredCurrency(currencyId);
+      if (!activeChanged) {
+        setSettingsActionStatus(
+          `回退币种已保存；当前仍使用 ${getCurrencyDisplayStatus()}`
+        );
+        return;
+      }
+
+      modal.remove();
+      document.getElementById("stch-backdrop")?.remove();
+      modalEl = null;
+      buildModal({ initialTab: "settings", suppressOnboarding: true });
+      const status = document.getElementById("stch-settings-action-status");
+      if (status) status.textContent = `已切换到 ${getCurrencyDisplayStatus()}，请重新查价`;
+      if (document.getElementById("stch-sidebar")) {
+        void refreshSidebarData().catch(error => {
+          console.warn("[STCH] Sidebar refresh after currency change failed:", error);
+        });
+      }
+    });
     const clearCachedOrders = event => {
       if (event.currentTarget.classList.contains("disabled")) return;
       const cachedCount = readRawOrderCache().length;
@@ -766,6 +870,7 @@ import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services
       );
       state.cfg = { ...DEFAULT_CONFIG, ...preserved };
       saveConfig(state.cfg);
+      applyConfiguredCurrency(state.cfg.currencyId);
 
       modal.remove();
       document.getElementById("stch-backdrop")?.remove();

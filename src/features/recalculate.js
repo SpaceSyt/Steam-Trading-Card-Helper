@@ -8,7 +8,7 @@ import { upsertOrderResult, removeOrderResultByKey, getCachedOrderResult, saveOr
 
 import { getBadgeTargetLevel } from "../utils/badge.js";
 
-import { formatCNY } from "../utils/format.js";
+import { formatMoney } from "../utils/format.js";
 
 import { renderResults, renderOrderResults, updateSummary } from "../ui/render.js";
 
@@ -69,7 +69,8 @@ const { setStatus: setOrderStatus } = orderStatus;
             refreshed++;
             logFn(
               `[${existing.appid}] ${existing.gameName}: 重算完成，` +
-              `补全 ¥${next.cheapestSetCNY} | 满级 ¥${next.level5CNY}`,
+              `补全 ${formatMoney(next.cheapestSetCostCents)} | ` +
+              `满级 ${formatMoney(next.level5CostCents)}`,
               "ok"
             );
           }

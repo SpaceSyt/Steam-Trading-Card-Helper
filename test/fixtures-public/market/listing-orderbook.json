@@ -1,0 +1,6 @@
+{
+  "_fixture": "synthetic-public-listing-orderbook",
+  "amtMinSellOrder": 32,
+  "amtMaxBuyOrder": 29,
+  "eCurrency": 23
+}

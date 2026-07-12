@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>v2.1 Market Browser Harness</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      background: #111827;
+      color: #e5e7eb;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+    }
+
+    main {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    #summary[data-state="passed"] { color: #86efac; }
+    #summary[data-state="failed"] { color: #fca5a5; }
+
+    pre {
+      overflow: auto;
+      padding: 16px;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      background: #030712;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>v2.1 Market Browser Harness</h1>
+    <p id="summary" data-state="running">Running synthetic browser regression...</p>
+    <pre id="result">running</pre>
+  </main>
+
+  <script type="module">
+    const resultElement = document.getElementById("result");
+    const summaryElement = document.getElementById("summary");
+    const gmStore = new Map();
+    const gmWrites = [];
+    const unexpectedFetchCalls = [];
+
+    globalThis.GM_getValue = (key, fallback) => (
+      gmStore.has(key) ? gmStore.get(key) : fallback
+    );
+    globalThis.GM_setValue = (key, value) => {
+      gmWrites.push({ key, value });
+      gmStore.set(key, value);
+    };
+
+    // Every application request must use a queue-injected synthetic transport.
+    // Module loading is handled by the browser and does not use window.fetch.
+    globalThis.fetch = async input => {
+      unexpectedFetchCalls.push(String(input));
+      throw new Error(`Unexpected non-synthetic fetch: ${String(input)}`);
+    };
+
+    function render(result) {
+      globalThis.__v21MarketHarnessResult = result;
+      resultElement.textContent = JSON.stringify(result, null, 2);
+      summaryElement.dataset.state = result.passed ? "passed" : "failed";
+      summaryElement.textContent = result.passed
+        ? `PASSED: ${result.summary.passed}/${result.summary.total} scenarios`
+        : `FAILED: ${result.summary.failed}/${result.summary.total} scenarios`;
+      document.title = `${result.passed ? "PASSED" : "FAILED"} - v2.1 Market Browser Harness`;
+    }
+
+    function errorText(error) {
+      return String(error?.stack || error?.message || error);
+    }
+
+    function ensure(condition, message) {
+      if (!condition) throw new Error(message);
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function waitUntil(predicate, description, timeoutMs = 2000) {
+      const deadline = performance.now() + timeoutMs;
+      while (performance.now() < deadline) {
+        if (predicate()) return;
+        await delay(10);
+      }
+      throw new Error(`Timed out waiting for ${description}`);
+    }
+
+    function jsonResponse(status, data) {
+      return new Response(JSON.stringify(data), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    async function main() {
+      const [
+        { priceCard },
+        currencyModule,
+        cacheModule,
+        { RequestQueue },
+      ] = await Promise.all([
+        import("../../src/parsers/price.js"),
+        import("../../src/services/currency.js"),
+        import("../../src/services/market-cache.js"),
+        import("../../src/request/queue.js"),
+      ]);
+      const {
+        clearActiveCurrencyContext,
+        getActiveCurrencyContext,
+        initializeCurrencyContext,
+      } = currencyModule;
+      const {
+        findMarketCache,
+        loadMarketCache,
+      } = cacheModule;
+
+      const scenarios = [];
+      const sharedMarketHashName = "570-v2.1 Shared Currency Card";
+      let cooldownStopCompleted = false;
+
+      function initializeActiveCurrency(currencyId) {
+        const context = initializeCurrencyContext({
+          walletInfo: { wallet_currency: currencyId },
+          configuredCurrencyId: currencyId === 23 ? 1 : 23,
+        });
+        ensure(getActiveCurrencyContext() === context, "active currency context was not retained");
+        ensure(context.currencyId === currencyId, `expected active currency ${currencyId}`);
+        return context;
+      }
+
+      function createSyntheticQueue({
+        responses,
+        batchSize = 20,
+        batchPause = 150,
+      }) {
+        const calls = [];
+        const statusHistory = [];
+        const logHistory = [];
+        let responseIndex = 0;
+        let currentStatus = "";
+        const state = {
+          cfg: {
+            requestInterval: 0,
+            batchSize,
+            batchPause,
+          },
+          stopRequested: false,
+        };
+        const setStatus = (text, scanning = false) => {
+          currentStatus = text || "";
+          statusHistory.push({ text: currentStatus, scanning: Boolean(scanning) });
+        };
+        const fetchImpl = async (url, options = {}) => {
+          const response = responses[responseIndex++];
+          ensure(response, `synthetic response sequence exhausted for ${String(url)}`);
+          const parsedUrl = new URL(String(url));
+          calls.push({
+            url: parsedUrl.href,
+            currency: parsedUrl.searchParams.get("currency"),
+            marketHashName: parsedUrl.searchParams.get("market_hash_name"),
+            status: response.status,
+            credentials: options.credentials || null,
+          });
+          return jsonResponse(response.status, response.data);
+        };
+        const queue = new RequestQueue(
+          0,
+          batchSize,
+          batchPause,
+          state,
+          setStatus,
+          (message, type) => logHistory.push({ message, type }),
+          { fetch: fetchImpl }
+        );
+        return {
+          queue,
+          calls,
+          statusHistory,
+          logHistory,
+          get currentStatus() { return currentStatus; },
+          clearStatus() { setStatus(""); },
+        };
+      }
+
+      function validateRecord(record, expected) {
+        const standardFields = [
+          "appid",
+          "currencyCode",
+          "currencyId",
+          "highestBuyMinor",
+          "lowestSellMinor",
+          "marketHashName",
+          "medianMinor",
+          "observedAt",
+          "schemaVersion",
+          "source",
+          "volume",
+        ];
+        ensure(record && typeof record === "object", "canonical market record is missing");
+        ensure(
+          JSON.stringify(Object.keys(record).sort()) === JSON.stringify(standardFields),
+          `unexpected canonical fields: ${Object.keys(record).sort().join(", ")}`
+        );
+        for (const [key, value] of Object.entries(expected)) {
+          ensure(record[key] === value, `record.${key}: expected ${value}, got ${record[key]}`);
+        }
+        ensure(Number.isInteger(record.observedAt) && record.observedAt > 0, "invalid observedAt");
+        ensure(record.schemaVersion === 1, "unexpected market record schema");
+        ensure(record.source === "priceoverview", "unexpected market record source");
+      }
+
+      async function runScenario(name, operation) {
+        try {
+          const details = await operation();
+          scenarios.push({ name, passed: true, details });
+        } catch (error) {
+          scenarios.push({ name, passed: false, error: errorText(error) });
+        }
+      }
+
+      await runScenario("CNY normal priceoverview", async () => {
+        initializeActiveCurrency(23);
+        const runtime = createSyntheticQueue({
+          responses: [{
+            status: 200,
+            data: {
+              success: true,
+              lowest_price: "\u00a5 0.32",
+              median_price: "\u00a5 0.35",
+              volume: "1,234",
+            },
+          }],
+        });
+        try {
+          const result = await priceCard(sharedMarketHashName, runtime.queue);
+          await waitUntil(() => !runtime.queue.running, "CNY queue to become idle");
+          ensure(runtime.calls.length === 1, "CNY request count was not 1");
+          ensure(runtime.calls[0].currency === "23", "CNY request did not use currency=23");
+          ensure(result?.lowestSellCents === 32, "CNY legacy lowest price mismatch");
+          ensure(result?.medianCents === 35, "CNY legacy median price mismatch");
+          ensure(result?.volume === 1234, "CNY legacy volume mismatch");
+          validateRecord(result?.record, {
+            appid: "753",
+            marketHashName: sharedMarketHashName,
+            currencyId: 23,
+            currencyCode: "CNY",
+            lowestSellMinor: 32,
+            medianMinor: 35,
+            highestBuyMinor: null,
+            volume: 1234,
+          });
+          return {
+            request: runtime.calls[0],
+            legacy: {
+              lowestSellCents: result.lowestSellCents,
+              medianCents: result.medianCents,
+              volume: result.volume,
+              estimated: result.estimated,
+              priceSource: result.priceSource,
+            },
+            record: result.record,
+          };
+        } finally {
+          runtime.queue.stop();
+        }
+      });
+
+      await runScenario("USD normal priceoverview and currency-isolated cache", async () => {
+        initializeActiveCurrency(1);
+        const runtime = createSyntheticQueue({
+          responses: [{
+            status: 200,
+            data: {
+              success: true,
+              lowest_price: "$0.03",
+              median_price: "$0.04",
+              volume: "987",
+            },
+          }],
+        });
+        try {
+          const result = await priceCard(sharedMarketHashName, runtime.queue);
+          await waitUntil(() => !runtime.queue.running, "USD queue to become idle");
+          ensure(runtime.calls.length === 1, "USD request count was not 1");
+          ensure(runtime.calls[0].currency === "1", "USD request did not use currency=1");
+          ensure(result?.lowestSellCents === 3, "USD legacy lowest price mismatch");
+          ensure(result?.medianCents === 4, "USD legacy median price mismatch");
+          ensure(result?.volume === 987, "USD legacy volume mismatch");
+          validateRecord(result?.record, {
+            appid: "753",
+            marketHashName: sharedMarketHashName,
+            currencyId: 1,
+            currencyCode: "USD",
+            lowestSellMinor: 3,
+            medianMinor: 4,
+            highestBuyMinor: null,
+            volume: 987,
+          });
+
+          const loaded = loadMarketCache();
+          ensure(loaded.ok, "GM market cache could not be decoded");
+          const identity = {
+            appid: "753",
+            marketHashName: sharedMarketHashName,
+            source: "priceoverview",
+          };
+          const cnyRecord = findMarketCache(loaded.envelope, { ...identity, currencyId: 23 });
+          const usdRecord = findMarketCache(loaded.envelope, { ...identity, currencyId: 1 });
+          ensure(cnyRecord?.lowestSellMinor === 32, "CNY cache record was overwritten");
+          ensure(usdRecord?.lowestSellMinor === 3, "USD cache record was not isolated");
+          return {
+            request: runtime.calls[0],
+            legacy: {
+              lowestSellCents: result.lowestSellCents,
+              medianCents: result.medianCents,
+              volume: result.volume,
+              estimated: result.estimated,
+              priceSource: result.priceSource,
+            },
+            record: result.record,
+            isolatedCache: {
+              CNY: cnyRecord.lowestSellMinor,
+              USD: usdRecord.lowestSellMinor,
+            },
+          };
+        } finally {
+          runtime.queue.stop();
+        }
+      });
+
+      await runScenario("success response without price data", async () => {
+        initializeActiveCurrency(23);
+        const marketHashName = "570-v2.1 No Price Card";
+        const runtime = createSyntheticQueue({
+          responses: [{ status: 200, data: { success: true } }],
+        });
+        try {
+          const result = await priceCard(marketHashName, runtime.queue);
+          await waitUntil(() => !runtime.queue.running, "no-price queue to become idle");
+          ensure(result?.noPriceData === true, "no-price success was not preserved");
+          ensure(result?.volume === 0, "no-price legacy volume was not 0");
+          validateRecord(result?.record, {
+            appid: "753",
+            marketHashName,
+            currencyId: 23,
+            currencyCode: "CNY",
+            lowestSellMinor: null,
+            medianMinor: null,
+            highestBuyMinor: null,
+            volume: null,
+          });
+          return {
+            request: runtime.calls[0],
+            noPriceData: result.noPriceData,
+            volume: result.volume,
+            record: result.record,
+          };
+        } finally {
+          runtime.queue.stop();
+        }
+      });
+
+      await runScenario("429 cooldown then retry", async () => {
+        initializeActiveCurrency(1);
+        const marketHashName = "570-v2.1 Retry Card";
+        const runtime = createSyntheticQueue({
+          batchPause: 150,
+          responses: [
+            { status: 429, data: { success: false, synthetic: "rate-limit" } },
+            {
+              status: 200,
+              data: {
+                success: true,
+                lowest_price: "$0.05",
+                median_price: "$0.06",
+                volume: "42",
+              },
+            },
+          ],
+        });
+        try {
+          const result = await priceCard(marketHashName, runtime.queue);
+          await waitUntil(() => !runtime.queue.running, "retried queue to become idle");
+          ensure(runtime.calls.length === 2, "429 request was not retried exactly once");
+          ensure(
+            JSON.stringify(runtime.calls.map(call => call.status)) === JSON.stringify([429, 200]),
+            "429 retry response sequence mismatch"
+          );
+          ensure(
+            runtime.statusHistory.some(item => item.text.startsWith("429 限流冷却中")),
+            "429 cooldown status was not displayed"
+          );
+          ensure(result?.lowestSellCents === 5, "retried price result mismatch");
+          return {
+            attempts: runtime.calls,
+            statusHistory: runtime.statusHistory,
+            lowestSellCents: result.lowestSellCents,
+          };
+        } finally {
+          runtime.queue.stop();
+        }
+      });
+
+      await runScenario("stop interrupts proactive cooldown", async () => {
+        initializeActiveCurrency(23);
+        const runtime = createSyntheticQueue({
+          batchSize: 1,
+          batchPause: 1500,
+          responses: [{
+            status: 200,
+            data: {
+              success: true,
+              lowest_price: "\u00a5 0.40",
+              median_price: "\u00a5 0.41",
+              volume: "12",
+            },
+          }],
+        });
+        try {
+          const result = await priceCard("570-v2.1 Stop Card", runtime.queue);
+          ensure(result?.lowestSellCents === 40, "pre-cooldown price result mismatch");
+          await waitUntil(() => runtime.queue.cooling, "proactive cooldown to start");
+          ensure(
+            runtime.currentStatus.startsWith("主动冷却中"),
+            "proactive cooldown status was not displayed"
+          );
+          const statusAtStop = runtime.currentStatus;
+          runtime.queue.stop();
+          runtime.clearStatus();
+          const statusCountAfterClear = runtime.statusHistory.length;
+          await waitUntil(() => !runtime.queue.running, "stopped queue to become idle");
+          await delay(350);
+          ensure(runtime.statusHistory.length === statusCountAfterClear, "status changed after stop");
+          ensure(runtime.currentStatus === "", "cooldown status reappeared after stop");
+          ensure(runtime.queue.stopped, "queue did not enter stopped state");
+          ensure(!runtime.queue.cooling && !runtime.queue.running, "stopped queue was not idle");
+          ensure(runtime.queue._waiters.size === 0, "stopped queue retained a timer waiter");
+          cooldownStopCompleted = true;
+          return {
+            statusAtStop,
+            finalStatus: runtime.currentStatus,
+            statusHistory: runtime.statusHistory,
+            queueState: {
+              stopped: runtime.queue.stopped,
+              running: runtime.queue.running,
+              cooling: runtime.queue.cooling,
+              pendingWaiters: runtime.queue._waiters.size,
+            },
+          };
+        } finally {
+          if (!runtime.queue.stopped) runtime.queue.stop();
+        }
+      });
+
+      await runScenario("new queue recovers after stopped cooldown queue", async () => {
+        ensure(cooldownStopCompleted, "the preceding cooldown queue did not stop cleanly");
+        initializeActiveCurrency(23);
+        const runtime = createSyntheticQueue({
+          responses: [{
+            status: 200,
+            data: {
+              success: true,
+              lowest_price: "\u00a5 0.09",
+              median_price: "\u00a5 0.10",
+              volume: "7",
+            },
+          }],
+        });
+        try {
+          const result = await priceCard("570-v2.1 Recovery Card", runtime.queue);
+          await waitUntil(() => !runtime.queue.running, "new queue to become idle");
+          ensure(result?.lowestSellCents === 9, "new queue price result mismatch");
+          ensure(runtime.calls.length === 1, "new queue did not make exactly one request");
+          ensure(!runtime.queue.stopped, "new queue inherited stopped state");
+          ensure(!runtime.queue.cooling && !runtime.queue.running, "new queue did not settle cleanly");
+          return {
+            request: runtime.calls[0],
+            lowestSellCents: result.lowestSellCents,
+            queueStateBeforeCleanup: {
+              stopped: runtime.queue.stopped,
+              running: runtime.queue.running,
+              cooling: runtime.queue.cooling,
+            },
+          };
+        } finally {
+          runtime.queue.stop();
+        }
+      });
+
+      clearActiveCurrencyContext();
+      const passedCount = scenarios.filter(scenario => scenario.passed).length;
+      const failedCount = scenarios.length - passedCount;
+      const loaded = loadMarketCache();
+      const result = {
+        passed: failedCount === 0 && unexpectedFetchCalls.length === 0,
+        summary: {
+          total: scenarios.length,
+          passed: passedCount,
+          failed: failedCount,
+        },
+        scenarios,
+        storage: {
+          gmWriteCount: gmWrites.length,
+          cacheRecordCount: loaded.ok ? loaded.envelope.records.length : null,
+          cacheDecoded: loaded.ok,
+        },
+        networkGuard: {
+          unexpectedFetchCalls,
+          steamRequestsPerformed: 0,
+        },
+      };
+      render(result);
+    }
+
+    main().catch(error => {
+      render({
+        passed: false,
+        summary: { total: 1, passed: 0, failed: 1 },
+        scenarios: [{ name: "harness bootstrap", passed: false, error: errorText(error) }],
+        storage: { gmWriteCount: gmWrites.length },
+        networkGuard: { unexpectedFetchCalls },
+      });
+    });
+  </script>
+</body>
+</html>

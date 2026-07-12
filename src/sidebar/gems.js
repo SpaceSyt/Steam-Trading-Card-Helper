@@ -1,12 +1,14 @@
 import { unsafeWindow } from "../globals.js";
+import { state } from "../state.js";
 
 import { SIDEBAR_GEM_SACK_HASH, GEM_SACK_SIZE } from "../constants.js";
 
 import { isGemSackDescription, isLooseGemDescription, getDescriptionKey, getAssetAmount } from "../parsers/inventory.js";
 
 import { stchRequestJson } from "../request/http.js";
+import { RequestQueue } from "../request/queue.js";
 
-import { parsePrice } from "../parsers/price.js";
+import { priceCard } from "../parsers/price.js";
 
   export async function loadSidebarGemInfo(steamId) {
     if (!steamId) throw new Error("未找到 SteamID，无法读取库存");
@@ -60,21 +62,30 @@ import { parsePrice } from "../parsers/price.js";
   }
 
   export async function loadSidebarGemPrice(queue = null) {
-    const params = new URLSearchParams({
-      appid: "753",
-      currency: "23",
-      market_hash_name: SIDEBAR_GEM_SACK_HASH,
-    });
-    const url = `https://steamcommunity.com/market/priceoverview/?${params.toString()}`;
-    const data = queue
-      ? (await queue.fetch(url))?.data
-      : await stchRequestJson(url);
-    const lowestCents = parsePrice(data?.lowest_price);
-    const medianCents = parsePrice(data?.median_price);
-    const priceCents = lowestCents || medianCents;
-    return {
-      priceCents,
-      source: lowestCents ? "在售最低" : medianCents ? "平均价格" : "暂无价格",
-      volume: parseInt(String(data?.volume || "").replace(/[^\d]/g, ""), 10) || 0,
-    };
+    const ownedQueue = queue ? null : new RequestQueue(
+      state.cfg.requestInterval,
+      state.cfg.batchSize,
+      state.cfg.batchPause,
+      state
+    );
+    const requestQueue = queue || ownedQueue;
+    try {
+      const price = await priceCard(SIDEBAR_GEM_SACK_HASH, requestQueue);
+      const priceCents = price && !price.noPriceData ? price.lowestSellCents || 0 : 0;
+      return {
+        priceCents,
+        medianCents: price?.medianCents || 0,
+        source: price?.priceSource === "lowest"
+          ? "在售最低"
+          : price?.priceSource === "median"
+            ? "平均价格"
+            : "暂无价格",
+        volume: price?.volume || 0,
+        currencyId: price?.currencyId || state.currencyContext?.currencyId || state.cfg.currencyId,
+        observedAt: price?.observedAt || Date.now(),
+        record: price?.record || null,
+      };
+    } finally {
+      ownedQueue?.stop();
+    }
   }

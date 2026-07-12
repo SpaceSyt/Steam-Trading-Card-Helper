@@ -1,6 +1,21 @@
+import {
+  CURRENCY_IDS,
+  formatMinorAmount,
+  formatMoney,
+  getCurrencyStatus,
+  parseCurrencyAmount,
+} from "../services/currency.js";
+
+export {
+  formatMinorAmount,
+  formatMoney,
+  getCurrencyStatus,
+  parseCurrencyAmount,
+};
+
+  // Compatibility helper for callers that still store and display CNY cents.
   export function formatCNY(cents) {
-    if (cents == null || isNaN(cents)) return "?";
-    return (cents / 100).toFixed(2);
+    return formatMinorAmount(cents, CURRENCY_IDS.CNY, { useGrouping: false });
   }
 
   export function formatInt(value) {

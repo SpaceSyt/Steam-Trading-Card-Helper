@@ -14,7 +14,7 @@ import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
 import { priceCard, predictFullSetLowerBound, estimateMissingLevel5Cost } from "../parsers/price.js";
 
-import { formatCNY } from "../utils/format.js";
+import { formatMoney } from "../utils/format.js";
 
 import { getBadgeModeLabel, getGameCardsUrl, getBadgeTargetLevel } from "../utils/badge.js";
 
@@ -223,6 +223,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           info.targetLevel = getBadgeTargetLevel(info);
           info.gameName = b.gameName || info.gameName || "";
           info.cardPrices = [];
+          info.currencyId = state.currencyContext?.currencyId || state.cfg.currencyId || 23;
           info.cheapestSetCostCents = 0;
           info.fullSetCostCents = 0;
           info.level5CostCents = 0;
@@ -280,6 +281,8 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
             if (pk.noPriceData) {
               log(`  ⚠ 卡牌 "${card.name}" Steam 仅返回 success，无可用价格`, "warn");
               card.priceSource = "none";
+              card.currencyId = pk.currencyId;
+              card.marketRecord = pk.record;
               noPriceCards.push(card);
               info.hasEstimated = true;
               continue;
@@ -289,6 +292,9 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
             card.medianCents = pk.medianCents;
             card.volume = pk.volume;
             card.priceSource = pk.priceSource;
+            card.currencyId = pk.currencyId;
+            card.observedAt = pk.observedAt;
+            card.marketRecord = pk.record;
             if (pk.volume < minVolume) minVolume = pk.volume;
             if (pk.estimated) {
               info.hasEstimated = true;
@@ -301,6 +307,8 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               volume: pk.volume,
               marketHashName: card.marketHashName,
               priceSource: pk.priceSource,
+              currencyId: pk.currencyId,
+              observedAt: pk.observedAt,
             });
 
             const need1 = Math.max(0, 1 - card.owned);
@@ -312,7 +320,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               : 0;
 
             if (fullSetCostCents > getThresholdCents()) {
-              log(`  → 已查${info.cardPrices.length}/${info.totalInSet}张, 全套 ¥${formatCNY(fullSetCostCents)} > ¥${formatCNY(getThresholdCents())}，跳过`, "info");
+              log(`  → 已查${info.cardPrices.length}/${info.totalInSet}张, 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(getThresholdCents())}，跳过`, "info");
               allPriced = false;
               thresholdSkip = true;
               break;
@@ -336,17 +344,17 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
                   && prediction.predictedCents > predictionAutoBlacklistCents;
                 log(
                   `  → 已查${prediction.sampleCount}/${info.totalInSet}张, ` +
-                  `保守预测全套≥¥${formatCNY(prediction.predictedCents)} > ` +
-                  `安全线¥${formatCNY(predictionLimit)}，提前跳过 ` +
-                  `(样本¥${formatCNY(prediction.minPrice)}-${formatCNY(prediction.maxPrice)})`,
+                  `保守预测全套≥${formatMoney(prediction.predictedCents)} > ` +
+                  `安全线${formatMoney(predictionLimit)}，提前跳过 ` +
+                  `(样本${formatMoney(prediction.minPrice)}-${formatMoney(prediction.maxPrice)})`,
                   "info"
                 );
                 if (shouldAutoBlacklistPrediction) {
                   addToBlacklist(b.appid, info.gameName || b.gameName || "", 1);
                   log(
                     `  → 价格预测自动加入游戏黑名单: ` +
-                    `预测全套≥¥${formatCNY(prediction.predictedCents)} > ` +
-                    `¥${formatCNY(predictionAutoBlacklistCents)}`,
+                    `预测全套≥${formatMoney(prediction.predictedCents)} > ` +
+                    formatMoney(predictionAutoBlacklistCents),
                     "info"
                   );
                 }
@@ -399,8 +407,8 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               info.formulaEstimateUnitCents = formulaEstimate.estimatedUnitCents;
               log(
                 `  → ${noPriceCards.length}/${info.totalInSet}张无价格，` +
-                `按已知卡牌几何均价 ¥${formatCNY(formulaEstimate.estimatedUnitCents)} ` +
-                `补充满级估算 ¥${formatCNY(formulaEstimate.estimatedCostCents)}`,
+                `按已知卡牌几何均价 ${formatMoney(formulaEstimate.estimatedUnitCents)} ` +
+                `补充满级估算 ${formatMoney(formulaEstimate.estimatedCostCents)}`,
                 "warn"
               );
             }
@@ -412,27 +420,29 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           info.fullSetCostCents = fullSetCostCents;
           info.level5CostCents = level5CostCents;
           info.minVolume = minVolume === Infinity ? 0 : minVolume;
-          info.cheapestSetCNY = formatCNY(setCostCents);
-          info.fullSetCNY = formatCNY(fullSetCostCents);
-          info.level5CNY = formatCNY(level5CostCents);
-
           const autoBlCents = Math.round((state.cfg.autoBlackThreshold || 0) * 100);
           if (state.cfg.autoBlackEnabled && autoBlCents > 0 && fullSetCostCents > autoBlCents) {
             addToBlacklist(b.appid, info.gameName || b.gameName || "", 1);
-            log(`  → 自动加入游戏黑名单: 全套 ¥${info.fullSetCNY} > ¥${state.cfg.autoBlackThreshold}`, "info");
+            log(`  → 自动加入游戏黑名单: 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(autoBlCents)}`, "info");
             skipped++;
             continue;
           }
 
           if (fullSetCostCents > getThresholdCents()) {
-            log(`  → 整套卡牌价格已大于上限(¥${info.fullSetCNY} > ¥${formatCNY(getThresholdCents())})，跳过`, "info");
+            log(`  → 整套卡牌价格已大于上限(${formatMoney(fullSetCostCents)} > ${formatMoney(getThresholdCents())})，跳过`, "info");
             skipped++;
             continue;
           }
 
           state.results.push(info);
           renderGameRow(info);
-          log(`  ✓ [${b.appid}] ${info.gameName}: 补全 ¥${info.cheapestSetCNY} | 全套 ¥${info.fullSetCNY} | 满级 ¥${info.level5CNY}`, "ok");
+          log(
+            `  ✓ [${b.appid}] ${info.gameName}: ` +
+            `补全 ${formatMoney(setCostCents)} | ` +
+            `全套 ${formatMoney(fullSetCostCents)} | ` +
+            `满级 ${formatMoney(level5CostCents)}`,
+            "ok"
+          );
 
         } catch (e) {
           log(`[${b.appid}] ${b.gameName || ""}: 出错 ${e?.error || e?.status || JSON.stringify(e)}`, "err");
@@ -457,7 +467,13 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
       log(`扫描中断: ${e?.message || JSON.stringify(e)}`, "err");
     } finally {
       queue.stop();
+      if (_stopTimeout) {
+        clearTimeout(_stopTimeout);
+        _stopTimeout = null;
+      }
       state.scanning = false;
+      state.stopRequested = false;
+      state.skipCurrent = false;
       state.queue = null;
       hideProgress();
       setStatus(null);

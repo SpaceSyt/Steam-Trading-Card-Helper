@@ -1,0 +1,39 @@
+{
+  "config": {
+    "configVersion": 18,
+    "threshold": 7.5,
+    "orderCacheDays": 3,
+    "blacklist": "10,20",
+    "blacklistNames": "{\"10\":\"Ten\",\"20\":\"Twenty\"}",
+    "blacklistSources": "{\"10\":\"manual\",\"20\":\"auto\"}",
+    "blacklistDates": "{\"10\":1700000000000,\"20\":1700000100000}",
+    "blacklistFixed": "{\"10\":1,\"20\":0}"
+  },
+  "orderCache": [
+    {
+      "appid": "123",
+      "gameName": "Fixture Game",
+      "isFoil": false,
+      "level": 1,
+      "cards": [
+        {
+          "name": "Card",
+          "marketHashName": "123-Card",
+          "owned": 0
+        }
+      ],
+      "cardPrices": [
+        {
+          "marketHashName": "123-Card",
+          "lowestCents": 12,
+          "medianCents": 13,
+          "volume": 42
+        }
+      ],
+      "cheapestSetCostCents": 12,
+      "fullSetCostCents": 12,
+      "level5CostCents": 48,
+      "cachedAt": 1700000000000
+    }
+  ]
+}

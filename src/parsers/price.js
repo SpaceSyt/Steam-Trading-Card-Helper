@@ -1,31 +1,81 @@
 import { EARLY_PREDICTION_STAGES } from "../constants.js";
+import {
+  CURRENCY_IDS,
+  getActiveCurrencyContext,
+  getCurrencyContextById,
+  parseCurrencyAmount,
+  resolveCurrencyContext,
+} from "../services/currency.js";
+import {
+  normalizePriceOverview,
+  toLegacyPriceResult,
+} from "../services/market-data.js";
+import { upsertStoredMarketCache } from "../services/market-cache.js";
 
-export function parsePrice(str) {
-  if (!str) return 0;
-  const n = parseFloat(str.replace(/[^0-9.,]/g, "").replace(",", "."));
-  return isNaN(n) ? 0 : Math.round(n * 100);
+function getPriceCurrencyContext(options = {}) {
+  if (options.currencyContext) return resolveCurrencyContext(options.currencyContext);
+  if (options.currencyId != null) return getCurrencyContextById(options.currencyId);
+  return getActiveCurrencyContext() || getCurrencyContextById(CURRENCY_IDS.CNY);
 }
 
-export async function priceCard(marketHashName, queue) {
-  try {
-    const url = `https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=${encodeURIComponent(marketHashName)}`;
-    const res = await queue.fetch(url);
+export function parsePrice(str, currencyContext = null) {
+  if (!str) return 0;
+  return parseCurrencyAmount(
+    str,
+    currencyContext || getPriceCurrencyContext()
+  ) ?? 0;
+}
 
-    const lowestCents = parsePrice(res?.data?.lowest_price);
-    const medianCents = parsePrice(res?.data?.median_price);
-    const sellCents = lowestCents || medianCents;
-    if (!sellCents) {
-      return res?.data?.success ? { noPriceData: true, volume: 0 } : null;
+export async function priceCard(marketHashName, queue, options = {}) {
+  try {
+    const currencyContext = getPriceCurrencyContext(options);
+    if (!currencyContext?.currencyId) return null;
+    const appid = String(options.appid || 753);
+    const params = new URLSearchParams({
+      appid,
+      currency: String(currencyContext.currencyId),
+      market_hash_name: marketHashName,
+    });
+    const url = `https://steamcommunity.com/market/priceoverview/?${params.toString()}`;
+    const res = await queue.fetch(url, {
+      ...(options.fetchOptions || {}),
+      requestPolicy: "priceoverview",
+    });
+    const observedAt = Date.now();
+    const record = normalizePriceOverview(res?.data, {
+      appid,
+      marketHashName,
+      currencyId: currencyContext.currencyId,
+      currencyCode: currencyContext.code,
+      decimalDigits: currencyContext.decimalDigits,
+      observedAt,
+    });
+    const legacy = toLegacyPriceResult(record);
+    if (record) {
+      const stored = upsertStoredMarketCache(record);
+      if (!stored.ok && stored.diagnostics?.some(item => (
+        item.code !== "gm-get-unavailable" && item.code !== "gm-set-unavailable"
+      ))) {
+        console.warn("[STCH] Market cache update skipped:", stored.diagnostics);
+      }
     }
 
-    const volume = parseInt(String(res?.data?.volume || "").replace(/[^\d]/g, ""), 10) || 0;
-
+    if (!legacy || legacy.noPriceData) {
+      return res?.data?.success
+        ? {
+          noPriceData: true,
+          volume: legacy?.volume || 0,
+          record,
+          currencyId: currencyContext.currencyId,
+          observedAt,
+        }
+        : null;
+    }
     return {
-      lowestSellCents: sellCents,
-      medianCents,
-      volume,
-      estimated: !lowestCents,
-      priceSource: lowestCents ? "lowest" : "median",
+      ...legacy,
+      record,
+      currencyId: currencyContext.currencyId,
+      observedAt,
     };
   } catch (e) {
     return null;

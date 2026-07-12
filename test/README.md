@@ -2,6 +2,14 @@
 
 - `scripts/`: userscripts, browser harnesses, and the local static server.
 - `fixtures/`: saved Steam pages and generated fixture payloads. This directory is intentionally ignored because fixtures may contain account-specific page data.
+- `fixtures-public/`: committed synthetic, sanitized inputs for currency, market-data, and cache migration tests.
+- `unit/`: Node.js automated tests for shared infrastructure.
+
+Run the automated suite from the repository root:
+
+```powershell
+npm test
+```
 
 Run the local server from any working directory:
 
@@ -13,9 +21,13 @@ Then open `http://127.0.0.1:8765/test/scripts/craft-harness.html`.
 
 Add `?order=1` to the craft harness URL to seed a two-card synthetic order-cache result. Its completion total is ¥0.70 at the default adjustment and ¥0.80 after applying +¥0.05 per missing card.
 
+Add `?wallet=usd` to expose a synthetic USD wallet context and USD price strings. This verifies wallet-first currency detection and `$` UI formatting without a Steam request.
+
 The rate-limit harness is available at `http://127.0.0.1:8765/test/scripts/rate-limit-harness.html`. It intercepts every request locally and returns two 200 responses followed by one 429 response, so it is safe for UI and tuning regression tests.
 
 The request-queue harness is available at `http://127.0.0.1:8765/test/scripts/request-queue-harness.html`. It verifies that stopping immediately after the final `priceoverview` request prevents an active-cooldown countdown from reappearing after the caller clears its status.
+
+The v2.1 market harness is available at `http://127.0.0.1:8765/test/scripts/v2.1-market-harness.html`. It uses only synthetic responses and in-memory GM storage to verify CNY and USD price requests, currency-isolated cache records, a successful response without prices, one 429 retry, stopping an active proactive cooldown, and recovery with a fresh queue. It never sends an application request to Steam. The final JSON is shown on the page and is also exposed as `window.__v21MarketHarnessResult`; a successful run reports `passed: true` and `6/6` scenarios.
 
 ## Rate Limit Probe
 

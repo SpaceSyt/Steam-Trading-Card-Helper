@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "synthetic": true,
+    "description": "Synthetic CNY wallet-format fixture; contains no account or balance data."
+  },
+  "walletInfo": {
+    "wallet_currency": 23,
+    "wallet_market_minimum": 7,
+    "wallet_fee_percent": "0.05",
+    "wallet_fee_minimum": 7,
+    "wallet_publisher_fee_percent_default": "0.10",
+    "wallet_fee_base": 0
+  },
+  "amounts": [
+    { "display": "¥0.21", "minor": 21 },
+    { "display": "¥1,234.56", "minor": 123456 }
+  ]
+}

@@ -2,8 +2,6 @@ import { state } from "../state.js";
 
 import { $J, unsafeWindow } from "../globals.js";
 
-import { formatCNY } from "../utils/format.js";
-
 import { getBadgeTargetLevel, getBadgeUrlSuffix } from "../utils/badge.js";
 
 import { getProfileUrl, getMarketMinimumPriceCents } from "../utils/steam.js";
@@ -13,6 +11,8 @@ import { parseMarketHashNameFromHref, getMarketHashNameFromLink } from "../parse
 import { MULTIBUY_DATA_KEY, MULTIBUY_DATA_TTL, MULTIBUY_FILL_TIMEOUT } from "../constants.js";
 
 import { scanStatus } from "../status-controllers.js";
+
+import { getActiveCurrencyContext } from "../services/currency.js";
 
 const { log } = scanStatus;
 
@@ -169,10 +169,12 @@ const { log } = scanStatus;
     const bufferCents = Math.round(
       (Number.isFinite(adjustmentValue) ? adjustmentValue : 0) * 100
     );
+    const currencyContext = getActiveCurrencyContext();
     const buyData = {
       appid: info.appid,
       isFoil: !!info.isFoil,
       gameName: info.gameName,
+      currencyId: currencyContext?.currencyId ?? null,
       bufferCents,
       createdAt: Date.now(),
       items: toBuy.map(q => q.card.marketHashName),
@@ -212,12 +214,24 @@ const { log } = scanStatus;
     const sameItems = sameMarketItems(currentItems, storedItems);
     const isFresh = Number.isFinite(data?.createdAt)
       && Date.now() - data.createdAt <= MULTIBUY_DATA_TTL;
+    const currencyContext = getActiveCurrencyContext();
+    const sameCurrency = Number.isInteger(currencyContext?.currencyId)
+      && Number(data?.currencyId) === currencyContext.currencyId;
 
-    if (!data || !Array.isArray(data.cards) || data.cards.length === 0 || !sameItems || !isFresh) {
+    if (
+      !data
+      || !Array.isArray(data.cards)
+      || data.cards.length === 0
+      || !sameItems
+      || !isFresh
+      || !sameCurrency
+    ) {
       console.warn("[STCH] Ignoring stale or mismatched multibuy data", {
         currentItems,
         storedItems,
         isFresh,
+        storedCurrencyId: data?.currencyId,
+        activeCurrencyId: currencyContext?.currencyId,
       });
       clearMultibuyData();
       return;
@@ -281,8 +295,9 @@ const { log } = scanStatus;
           changed = setMultibuyFieldValue(
             price,
             (
-              Math.max(getMarketMinimumPriceCents(), card.lowestCents + bufferCents) / 100
-            ).toFixed(2)
+              Math.max(getMarketMinimumPriceCents(), card.lowestCents + bufferCents)
+              / currencyContext.minorUnitFactor
+            ).toFixed(currencyContext.decimalDigits)
           ) || changed;
         }
         if (quantity) {

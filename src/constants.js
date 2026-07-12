@@ -14,6 +14,10 @@
 
   export const ORDER_CACHE_KEY = "stch_order_cache";
 
+  export const ORDER_CACHE_BACKUP_KEY = "stch_order_cache_backup";
+
+  export const ORDER_CACHE_SCHEMA_VERSION = 2;
+
   export const SIDEBAR_GEM_SACK_HASH = "753-Sack of Gems";
 
   export const GEM_SACK_SIZE = 1000;

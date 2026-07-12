@@ -1,6 +1,9 @@
-import { unsafeWindow } from "../globals.js";
-
+import { getActiveCurrencyContext, resolveCurrencyContext } from "../services/currency.js";
 import { decodeHtmlEntities } from "./format.js";
+
+const unsafeWindow = typeof globalThis !== "undefined"
+  ? (globalThis.unsafeWindow || globalThis.window || globalThis)
+  : {};
 
   export function getProfileUrl() {
     const url = unsafeWindow.g_strProfileURL
@@ -54,9 +57,41 @@ import { decodeHtmlEntities } from "./format.js";
     return match ? match[1] : "";
   }
 
-  export function getMarketMinimumPriceCents() {
-    const walletMinimum = Number(unsafeWindow.g_rgWalletInfo?.wallet_market_minimum);
-    return Number.isFinite(walletMinimum) && walletMinimum > 0 ? walletMinimum * 3 : 21;
+  export function getMarketMinimumPriceMinor(currencyContextOrWalletInfo) {
+    const suppliedWalletInfo = currencyContextOrWalletInfo?.walletInfo
+      || (
+        currencyContextOrWalletInfo
+        && typeof currencyContextOrWalletInfo === "object"
+        && Object.hasOwn(currencyContextOrWalletInfo, "wallet_market_minimum")
+          ? currencyContextOrWalletInfo
+          : null
+      );
+    const walletInfo = suppliedWalletInfo
+      || (currencyContextOrWalletInfo == null ? unsafeWindow.g_rgWalletInfo : null);
+    const walletMinimum = Number(walletInfo?.wallet_market_minimum);
+    if (Number.isFinite(walletMinimum) && walletMinimum > 0) {
+      return Math.floor(walletMinimum) * 3;
+    }
+
+    const activeContext = currencyContextOrWalletInfo == null
+      ? getActiveCurrencyContext()
+      : currencyContextOrWalletInfo;
+    if (activeContext || walletInfo) {
+      const context = resolveCurrencyContext(activeContext || walletInfo);
+      const minimum = Number(
+        context.minimumBuyerMinor
+        ?? context.marketMinimumBuyerMinor
+        ?? (Number(context.marketMinimumMinor) * 3),
+      );
+      if (Number.isFinite(minimum) && minimum > 0) return Math.floor(minimum);
+    }
+
+    // Preserve the historical no-argument CNY behavior until initialization.
+    return 21;
+  }
+
+  export function getMarketMinimumPriceCents(currencyContextOrWalletInfo) {
+    return getMarketMinimumPriceMinor(currencyContextOrWalletInfo);
   }
 
   export function getSessionId() {

@@ -1,0 +1,14 @@
+{
+  "_meta": {
+    "synthetic": true,
+    "description": "Synthetic unknown Steam currency ID used to verify the unverified fallback path."
+  },
+  "walletInfo": {
+    "wallet_currency": 77,
+    "wallet_market_minimum": 1,
+    "wallet_fee_percent": "0.05",
+    "wallet_fee_minimum": 1,
+    "wallet_publisher_fee_percent_default": "0.10",
+    "wallet_fee_base": 0
+  }
+}

@@ -8,8 +8,6 @@ import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
 import { priceCard, estimateMissingLevel5Cost } from "../parsers/price.js";
 
-import { formatCNY } from "../utils/format.js";
-
   export function getResultKey(info) {
     return `${info.appid}_${info.isFoil ? 1 : 0}`;
   }
@@ -39,6 +37,7 @@ import { formatCNY } from "../utils/format.js";
     info.targetLevel = getBadgeTargetLevel(info);
     info.gameName = existing.gameName || info.gameName || "";
     info.cardPrices = [];
+    info.currencyId = state.currencyContext?.currencyId || state.cfg.currencyId || 23;
     info.cheapestSetCostCents = 0;
     info.fullSetCostCents = 0;
     info.level5CostCents = 0;
@@ -63,6 +62,8 @@ import { formatCNY } from "../utils/format.js";
       }
       if (pk.noPriceData) {
         card.priceSource = "none";
+        card.currencyId = pk.currencyId;
+        card.marketRecord = pk.record;
         noPriceCards.push(card);
         info.hasEstimated = true;
         continue;
@@ -72,6 +73,9 @@ import { formatCNY } from "../utils/format.js";
       card.medianCents = pk.medianCents;
       card.volume = pk.volume;
       card.priceSource = pk.priceSource;
+      card.currencyId = pk.currencyId;
+      card.observedAt = pk.observedAt;
+      card.marketRecord = pk.record;
       minVolume = Math.min(minVolume, pk.volume);
       if (pk.estimated) {
         info.hasEstimated = true;
@@ -84,6 +88,8 @@ import { formatCNY } from "../utils/format.js";
         volume: pk.volume,
         marketHashName: card.marketHashName,
         priceSource: pk.priceSource,
+        currencyId: pk.currencyId,
+        observedAt: pk.observedAt,
       });
 
       const need1 = Math.max(0, 1 - card.owned);
@@ -116,8 +122,5 @@ import { formatCNY } from "../utils/format.js";
     info.fullSetCostCents = fullSetCostCents;
     info.level5CostCents = level5CostCents;
     info.minVolume = minVolume === Infinity ? 0 : minVolume;
-    info.cheapestSetCNY = formatCNY(setCostCents);
-    info.fullSetCNY = formatCNY(fullSetCostCents);
-    info.level5CNY = formatCNY(level5CostCents);
     return info;
   }

@@ -13,11 +13,22 @@
     window.g_steamID = "76561198000000000";
     window.g_sessionID = "fixture-session";
     window.jQuery = () => ({});
+    const fixtureParams = new URLSearchParams(location.search);
+    const fixtureUsd = fixtureParams.get("wallet") === "usd";
+    if (fixtureUsd) {
+      window.g_rgWalletInfo = {
+        wallet_currency: 1,
+        wallet_market_minimum: 1,
+        wallet_fee_percent: "0.05",
+        wallet_fee_minimum: 1,
+        wallet_publisher_fee_percent_default: "0.10",
+      };
+    }
     window.__gmStore = new Map([
       ["stch_sidebar_gem_price", { priceCents: 446, observedAt: Date.now() - 60000 }],
       ["stch_onboarding_seen", true],
     ]);
-    if (new URLSearchParams(location.search).get("order") === "1") {
+    if (fixtureParams.get("order") === "1") {
       window.__gmStore.set("stch_order_cache", JSON.stringify([{
         appid: "999001",
         gameName: "Order Summary Fixture",
@@ -119,8 +130,8 @@
       if (target.includes("/market/priceoverview/")) {
         return new Response(JSON.stringify({
           success: true,
-          lowest_price: "¥4.40",
-          median_price: "¥4.42",
+          lowest_price: fixtureUsd ? "$4.40" : "¥4.40",
+          median_price: fixtureUsd ? "$4.42" : "¥4.42",
           volume: "1,234",
         }), {
           status: 200,

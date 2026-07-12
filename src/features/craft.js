@@ -6,7 +6,7 @@ import { parseCraftableGameCardsHtml, parseCraftCandidatesHtml } from "../parser
 
 import { getResultKey } from "../services/result-info.js";
 
-import { formatCNY, formatInt } from "../utils/format.js";
+import { formatInt } from "../utils/format.js";
 
 import { getBadgeTargetLevel, getBadgeModeLabel, getGameCardsUrl } from "../utils/badge.js";
 

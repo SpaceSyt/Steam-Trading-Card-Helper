@@ -4,7 +4,7 @@ import { RequestQueue } from "../request/queue.js";
 
 import { unsafeWindow } from "../globals.js";
 
-import { formatCNY, formatInt } from "../utils/format.js";
+import { formatInt, formatMoney } from "../utils/format.js";
 
 import { getSteamId } from "../utils/steam.js";
 
@@ -334,13 +334,13 @@ export { updateGrindActionState };
       item.recommendationLabel = "分解";
       item.recommendationClass = "ok";
       item.recommendationReason =
-        `卖出税后约 ¥${formatCNY(item.marketNetCents)}，低于分解宝石税后约 ¥${formatCNY(item.unitGemValueNetCents)}`;
+        `卖出税后约 ${formatMoney(item.marketNetCents)}，低于分解宝石税后约 ${formatMoney(item.unitGemValueNetCents)}`;
     } else {
       item.recommendationKey = "sell";
       item.recommendationLabel = "卖出";
       item.recommendationClass = "info";
       item.recommendationReason =
-        `卖出税后约 ¥${formatCNY(item.marketNetCents)}，高于分解宝石税后约 ¥${formatCNY(item.unitGemValueNetCents)}`;
+        `卖出税后约 ${formatMoney(item.marketNetCents)}，高于分解宝石税后约 ${formatMoney(item.unitGemValueNetCents)}`;
     }
     return item;
   }
@@ -413,7 +413,7 @@ export { updateGrindActionState };
     ).length;
     const gemPrice = state.grindGemPrice || {};
     const priceText = gemPrice.priceCents
-      ? `宝石袋 ¥${formatCNY(gemPrice.priceCents)} / 税后 ¥${formatCNY(getGemSackSellerNetCents(gemPrice.priceCents))}`
+      ? `宝石袋 ${formatMoney(gemPrice.priceCents)} / 税后 ${formatMoney(getGemSackSellerNetCents(gemPrice.priceCents))}`
       : "暂无宝石袋价格";
     summary.innerHTML =
       `显示 <b>${visible.length}</b> 种 / <b>${visibleQuantity}</b> 件 · ` +
@@ -452,15 +452,15 @@ export { updateGrindActionState };
         selectedAmount: asset.amount,
       })));
       const marketText = item.priceCents
-        ? `¥${formatCNY(item.priceCents)}`
+        ? formatMoney(item.priceCents)
         : item.marketHashName && item.marketableCount > 0
           ? "无价"
           : "不可售";
       const marketTitle = item.priceCents
-        ? `${item.priceSource || "市场价"}；卖出税后约 ¥${formatCNY(item.marketNetCents)}`
+        ? `${item.priceSource || "市场价"}；卖出税后约 ${formatMoney(item.marketNetCents)}`
         : item.recommendationReason || "";
       const breakEvenText = item.breakEvenPriceCents
-        ? `¥${formatCNY(item.breakEvenPriceCents)}`
+        ? formatMoney(item.breakEvenPriceCents)
         : "—";
 
       const tile = document.createElement("div");
@@ -495,7 +495,7 @@ export { updateGrindActionState };
 
       const price = document.createElement("span");
       price.className = "stch-inv-badge";
-      price.textContent = item.priceCents ? `¥${formatCNY(item.priceCents)}` : `x${item.quantity}`;
+      price.textContent = item.priceCents ? formatMoney(item.priceCents) : `x${item.quantity}`;
       price.title = marketTitle || "数量";
       tile.appendChild(price);
 
@@ -593,7 +593,7 @@ export { updateGrindActionState };
       const sackNet = getGemSackSellerNetCents(gemPrice.priceCents);
       const breakEven10 = getGemBreakEvenBuyerPrice(10, gemPrice.priceCents);
       grindLog(
-        `宝石袋 ${gemPrice.source} ¥${formatCNY(gemPrice.priceCents)}，税后到手约 ¥${formatCNY(sackNet)}；10宝石临界价 ¥${formatCNY(breakEven10)}`,
+        `宝石袋 ${gemPrice.source} ${formatMoney(gemPrice.priceCents)}，税后到手约 ${formatMoney(sackNet)}；10宝石临界价 ${formatMoney(breakEven10)}`,
         "ok"
       );
 

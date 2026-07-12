@@ -1,0 +1,8 @@
+{
+  "_fixture": "synthetic-public-price-history",
+  "success": true,
+  "prices": [
+    ["Jul 10 2026 01: +0", 0.31, "12"],
+    ["Jul 11 2026 01: +0", 0.32, "18"]
+  ]
+}

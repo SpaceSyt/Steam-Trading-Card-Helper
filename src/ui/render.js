@@ -4,7 +4,7 @@ import { createTextSpan, createCheckboxHit } from "../utils/dom.js";
 
 import { getProfileUrl, getMarketMinimumPriceCents } from "../utils/steam.js";
 
-import { formatCNY } from "../utils/format.js";
+import { formatMoney } from "../utils/format.js";
 
 import { getBadgeTargetLevel, getBadgeUrlSuffix } from "../utils/badge.js";
 
@@ -218,7 +218,7 @@ import { updateResultColumns } from "../features/scan.js";
     if (info.hasFormulaEstimate) {
       estimateNotes.push(
         `Steam返回信息不全：${info.formulaEstimatedCards}张卡牌无价格，` +
-        `使用已知卡牌几何均价 ¥${formatCNY(info.formulaEstimateUnitCents)} 估算`
+        `使用已知卡牌几何均价 ${formatMoney(info.formulaEstimateUnitCents)} 估算`
       );
     }
     if (info.hasMedianFallback) {
@@ -241,9 +241,9 @@ import { updateResultColumns } from "../features/scan.js";
     row.appendChild(createTextSpan("stch-name", info.gameName || "(未知)"));
     row.appendChild(createTextSpan("stch-level", `Lv${info.level}/${targetLevel}`));
     row.appendChild(createTextSpan("stch-cards", `${ownedCards}/${info.totalInSet}`));
-    row.appendChild(createTextSpan("stch-cost", `¥${info.cheapestSetCNY}`));
-    row.appendChild(createTextSpan("stch-full", `¥${info.fullSetCNY}`));
-    const lv5 = createTextSpan("stch-lv5", `¥${info.level5CNY}`);
+    row.appendChild(createTextSpan("stch-cost", formatMoney(info.cheapestSetCostCents)));
+    row.appendChild(createTextSpan("stch-full", formatMoney(info.fullSetCostCents)));
+    const lv5 = createTextSpan("stch-lv5", formatMoney(info.level5CostCents));
     lv5.style.cssText = lv5Color;
     lv5.title = lv5Title;
     row.appendChild(lv5);
@@ -344,11 +344,12 @@ import { updateResultColumns } from "../features/scan.js";
     if (!summary) return;
     const count = state.results.length;
     const modeLabel = state.results.some(info => info.isFoil) ? "闪卡" : "普通卡";
-    const totalCNY = (state.results.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0) / 100).toFixed(2);
-    const fullCNY = (state.results.reduce((s, r) => s + r.fullSetCostCents, 0) / 100).toFixed(2);
-    const lv5CNY = (state.results.reduce((s, r) => s + r.level5CostCents, 0) / 100).toFixed(2);
+    const thresholdCents = Math.round((Number(state.cfg.threshold) || 0) * 100);
+    const totalCents = state.results.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0);
+    const fullCents = state.results.reduce((s, r) => s + (Number(r.fullSetCostCents) || 0), 0);
+    const lv5Cents = state.results.reduce((s, r) => s + (Number(r.level5CostCents) || 0), 0);
     summary.innerHTML = `
-      共 <b>${count}</b> 个${modeLabel} ≤ ¥${state.cfg.threshold} (单套卡牌价格上限)，补全总价 <b>¥${totalCNY}</b>，全套总价 ¥${fullCNY}，满级总价 ¥${lv5CNY}
+      共 <b>${count}</b> 个${modeLabel} ≤ ${formatMoney(thresholdCents)} (单套卡牌价格上限)，补全总价 <b>${formatMoney(totalCents)}</b>，全套总价 ${formatMoney(fullCents)}，满级总价 ${formatMoney(lv5Cents)}
     `;
   }
 
@@ -363,11 +364,11 @@ import { updateResultColumns } from "../features/scan.js";
     pruneOrderCache(true);
     const count = state.orderResults.length;
     const selectedCount = getSelectedOrderResults().length;
-    const totalCNY = (state.orderResults.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0) / 100).toFixed(2);
-    const fullCNY = (state.orderResults.reduce((s, r) => s + r.fullSetCostCents, 0) / 100).toFixed(2);
-    const lv5CNY = (state.orderResults.reduce((s, r) => s + r.level5CostCents, 0) / 100).toFixed(2);
+    const totalCents = state.orderResults.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0);
+    const fullCents = state.orderResults.reduce((s, r) => s + (Number(r.fullSetCostCents) || 0), 0);
+    const lv5Cents = state.orderResults.reduce((s, r) => s + (Number(r.level5CostCents) || 0), 0);
     summary.innerHTML = `
-      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>¥${totalCNY}</b>，全套总价 ¥${fullCNY}，满级总价 ¥${lv5CNY}
+      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>${formatMoney(totalCents)}</b>，全套总价 ${formatMoney(fullCents)}，满级总价 ${formatMoney(lv5Cents)}
     `;
   }
 
