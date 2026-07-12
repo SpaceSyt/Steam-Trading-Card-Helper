@@ -33,8 +33,12 @@ test("config normalization removes obsolete keys and rejects invalid currency id
     configVersion: 1,
     currencyId: "not-a-currency",
     removedSetting: true,
+    seasonalTargetLevel: 40,
+    seasonalInterval: 200,
   });
 
   assert.equal(migrated.currencyId, DEFAULT_CONFIG.currencyId);
   assert.equal("removedSetting" in migrated, false);
+  assert.equal("seasonalTargetLevel" in migrated, false);
+  assert.equal("seasonalInterval" in migrated, false);
 });

@@ -36,11 +36,6 @@ const unsafeWindow = typeof globalThis !== "undefined"
     return htmlMatch ? htmlMatch[1] : "";
   }
 
-  export function isPointsShopPage() {
-    return location.hostname === "store.steampowered.com"
-      && location.pathname.startsWith("/points/shop");
-  }
-
   export function isInventoryPage() {
     return location.hostname === "steamcommunity.com"
       && /\/inventory\/?$/i.test(location.pathname);

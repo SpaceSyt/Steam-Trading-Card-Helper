@@ -16,6 +16,7 @@ import { formatMinorAmount, getCurrencyContextById } from "./currency.js";
 import { getResultKey } from "./result-info.js";
 
 const LEGACY_ORDER_CACHE_CURRENCY_ID = 23;
+const normalizedOrderResults = new WeakSet();
 
 function normalizeCurrencyId(value, fallback = LEGACY_ORDER_CACHE_CURRENCY_ID) {
   const currencyId = Number(value);
@@ -68,21 +69,50 @@ export function normalizeOrderResult(info, cachedAt = Date.now(), currencyId = n
   copy.cheapestSetCNY = copy.cheapestSetCNY || formatCNY(copy.cheapestSetCostCents);
   copy.fullSetCNY = copy.fullSetCNY || formatCNY(copy.fullSetCostCents);
   copy.level5CNY = copy.level5CNY || formatCNY(copy.level5CostCents);
+  normalizedOrderResults.add(copy);
   return copy.appid ? copy : null;
 }
 
-function normalizePartition(value, currencyId, now = Date.now()) {
+function normalizePartition(value, currencyId, now = Date.now(), reuseNormalized = false) {
   const items = Array.isArray(value) ? value : value?.items;
   return {
     currencyId,
     updatedAt: Number(value?.updatedAt) || now,
     items: (Array.isArray(items) ? items : [])
       .map(item => {
-        const normalized = normalizeOrderResult(item, item?.cachedAt || now, currencyId);
+        const canReuse = reuseNormalized
+          && normalizedOrderResults.has(item)
+          && item.currencyId === currencyId;
+        const normalized = canReuse
+          ? item
+          : normalizeOrderResult(item, item?.cachedAt || now, currencyId);
         if (normalized) normalized.currencyId = currencyId;
         return normalized;
       })
       .filter(Boolean),
+  };
+}
+
+function replaceDecodedOrderCachePartition(
+  envelope,
+  currencyId,
+  items,
+  now,
+  reuseNormalized = false
+) {
+  const normalizedCurrencyId = normalizeCurrencyId(currencyId);
+  return {
+    schemaVersion: ORDER_CACHE_SCHEMA_VERSION,
+    updatedAt: now,
+    partitions: {
+      ...envelope.partitions,
+      [String(normalizedCurrencyId)]: normalizePartition(
+        { items, updatedAt: now },
+        normalizedCurrencyId,
+        now,
+        reuseNormalized
+      ),
+    },
   };
 }
 
@@ -140,14 +170,7 @@ export function decodeOrderCache(raw, options = {}) {
 export function replaceOrderCachePartition(envelope, currencyId, items, now = Date.now()) {
   const next = decodeOrderCache(envelope, { now });
   const safeEnvelope = next.corrupt ? createOrderCacheEnvelope(now) : next.envelope;
-  const normalizedCurrencyId = normalizeCurrencyId(currencyId);
-  safeEnvelope.partitions[String(normalizedCurrencyId)] = normalizePartition(
-    { items, updatedAt: now },
-    normalizedCurrencyId,
-    now
-  );
-  safeEnvelope.updatedAt = now;
-  return safeEnvelope;
+  return replaceDecodedOrderCachePartition(safeEnvelope, currencyId, items, now);
 }
 
 function readStoredOrderCache(options = {}) {
@@ -189,10 +212,12 @@ export function loadOrderCache(currencyId = getActiveOrderCurrencyId()) {
     const items = partition?.items || [];
     const freshItems = items.filter(isOrderCacheFresh);
     if (freshItems.length !== items.length) {
-      persistEnvelope(replaceOrderCachePartition(
+      persistEnvelope(replaceDecodedOrderCachePartition(
         decoded.envelope,
         normalizedCurrencyId,
-        freshItems
+        freshItems,
+        Date.now(),
+        true
       ));
     }
     return freshItems;
@@ -215,7 +240,13 @@ export function saveOrderCache(currencyId = getActiveOrderCurrencyId()) {
     GM_setValue(ORDER_CACHE_BACKUP_KEY, decoded.raw);
   }
   const base = decoded.corrupt ? createOrderCacheEnvelope(now) : decoded.envelope;
-  const envelope = replaceOrderCachePartition(base, currencyId, state.orderResults, now);
+  const envelope = replaceDecodedOrderCachePartition(
+    base,
+    currencyId,
+    state.orderResults,
+    now,
+    true
+  );
   persistEnvelope(envelope);
 }
 
@@ -230,13 +261,16 @@ export function clearOrderCache() {
 export function pruneOrderCache(persist = false) {
   const before = state.orderResults.length;
   state.orderResults = state.orderResults
-    .map(item => normalizeOrderResult(item, item?.cachedAt, getActiveOrderCurrencyId()))
+    .map(item => normalizedOrderResults.has(item)
+      ? item
+      : normalizeOrderResult(item, item?.cachedAt, getActiveOrderCurrencyId()))
     .filter(Boolean)
     .filter(isOrderCacheFresh);
   if (persist && state.orderResults.length !== before) {
     saveOrderCache();
+    const retainedKeys = new Set(state.orderResults.map(getResultKey));
     state.selectedOrderResults.forEach(key => {
-      if (!state.orderResults.some(item => getResultKey(item) === key)) {
+      if (!retainedKeys.has(key)) {
         state.selectedOrderResults.delete(key);
       }
     });

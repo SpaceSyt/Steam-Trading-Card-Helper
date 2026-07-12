@@ -26,17 +26,26 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
 
 export { updateGrindActionState };
 
+  let cachedBlacklistSource = null;
+  let cachedBlacklistAppids = new Set();
+
+  function readBlacklistAppids() {
+    const source = state.cfg.blacklist || "";
+    if (source !== cachedBlacklistSource) {
+      cachedBlacklistSource = source;
+      cachedBlacklistAppids = new Set(
+        source.split(",").map(value => value.trim()).filter(Boolean)
+      );
+    }
+    return cachedBlacklistAppids;
+  }
+
   export function getBlacklistAppids() {
-    return new Set(
-      (state.cfg.blacklist || "")
-        .split(",")
-        .map(value => value.trim())
-        .filter(Boolean)
-    );
+    return new Set(readBlacklistAppids());
   }
 
   export function isBlacklistedAppid(appid) {
-    return !!appid && getBlacklistAppids().has(String(appid));
+    return !!appid && readBlacklistAppids().has(String(appid));
   }
 
   const grindGemValueCache = new Map();
@@ -408,9 +417,11 @@ export { updateGrindActionState };
     const visibleQuantity = visible.reduce((sum, item) => sum + item.quantity, 0);
     const recommendedQuantity = recommended.reduce((sum, item) => sum + item.quantity, 0);
     const recommendedGems = recommended.reduce((sum, item) => sum + item.totalGems, 0);
-    const selectedCount = getSelectedGrindResults().filter(item =>
-      visible.some(visibleItem => getGrindResultKey(visibleItem) === getGrindResultKey(item))
-    ).length;
+    const selected = state.selectedGrindResults || new Set();
+    const selectedCount = visible.reduce(
+      (count, item) => count + Number(selected.has(getGrindResultKey(item))),
+      0
+    );
     const gemPrice = state.grindGemPrice || {};
     const priceText = gemPrice.priceCents
       ? `宝石袋 ${formatMoney(gemPrice.priceCents)} / 税后 ${formatMoney(getGemSackSellerNetCents(gemPrice.priceCents))}`
@@ -543,7 +554,6 @@ export { updateGrindActionState };
       || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
-      || state.seasonalActionRunning
       || state.surplusActionRunning
       || state.surplusScanning
     ) {

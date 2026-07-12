@@ -136,7 +136,6 @@ import { updateResultColumns } from "../features/scan.js";
   }
 
   export function getSortedOrderResults() {
-    pruneOrderCache(true);
     return getSortedGameResults(state.orderResults, state.orderSortKey, state.orderSortAsc);
   }
 
@@ -149,9 +148,11 @@ import { updateResultColumns } from "../features/scan.js";
       updateResultColumns();
       return;
     }
-    renderHeader(list);
+    const fragment = document.createDocumentFragment();
+    renderHeader(fragment);
     const sorted = getSortedResults();
-    sorted.forEach(info => renderDataRow(list, info));
+    sorted.forEach(info => renderDataRow(fragment, info));
+    list.appendChild(fragment);
     updateBulkActionState();
     updateResultColumns();
   }
@@ -161,23 +162,26 @@ import { updateResultColumns } from "../features/scan.js";
     if (!list) return;
     pruneOrderCache(true);
     list.innerHTML = "";
+    const fragment = document.createDocumentFragment();
     if (state.orderResults.length === 0) {
       const row = document.createElement("div");
       row.className = "stch-game-row";
       const text = createTextSpan("", "订购卡牌缓存为空。价格扫描结果会实时进入这里，也可以手动输入 AppID。");
       text.style.color = "#8f98a0";
       row.appendChild(text);
-      list.appendChild(row);
+      fragment.appendChild(row);
+      list.appendChild(fragment);
       setOrderSummaryVisibility(false);
       updateOrderActionState();
       updateOrderResultColumns();
       return;
     }
-    renderHeader(list, { source: "order", showCacheAge: true });
+    renderHeader(fragment, { source: "order", showCacheAge: true });
     getSortedOrderResults().forEach(info => {
-      renderDataRow(list, info, { source: "order", showCacheAge: true });
+      renderDataRow(fragment, info, { source: "order", showCacheAge: true });
     });
-    updateOrderSummary();
+    list.appendChild(fragment);
+    updateOrderSummary({ prune: false });
     setOrderSummaryVisibility(true);
     updateOrderActionState();
     updateOrderResultColumns();
@@ -358,10 +362,10 @@ import { updateResultColumns } from "../features/scan.js";
     if (row) row.style.display = visible ? "" : "none";
   }
 
-  export function updateOrderSummary() {
+  export function updateOrderSummary(options = {}) {
     const summary = document.getElementById("stch-order-summary");
     if (!summary) return;
-    pruneOrderCache(true);
+    if (options.prune !== false) pruneOrderCache(true);
     const count = state.orderResults.length;
     const selectedCount = getSelectedOrderResults().length;
     const totalCents = state.orderResults.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0);

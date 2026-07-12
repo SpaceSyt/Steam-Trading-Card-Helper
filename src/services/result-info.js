@@ -8,6 +8,18 @@ import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
 import { priceCard, estimateMissingLevel5Cost } from "../parsers/price.js";
 
+import { upsertManyStoredMarketCache } from "./market-cache.js";
+
+function persistMarketRecords(records) {
+  if (records.length === 0) return;
+  const stored = upsertManyStoredMarketCache(records);
+  if (!stored.ok && stored.diagnostics?.some(item => (
+    item.code !== "gm-get-unavailable" && item.code !== "gm-set-unavailable"
+  ))) {
+    console.warn("[STCH] Market cache batch update skipped:", stored.diagnostics);
+  }
+}
+
   export function getResultKey(info) {
     return `${info.appid}_${info.isFoil ? 1 : 0}`;
   }
@@ -48,57 +60,63 @@ import { priceCard, estimateMissingLevel5Cost } from "../parsers/price.js";
     let minVolume = Infinity;
     const setsToTarget = Math.max(0, info.targetLevel - info.level);
     const noPriceCards = [];
+    const marketRecords = [];
     let failedPriceCount = 0;
 
-    for (const card of info.cards) {
-      if (!card.marketHashName) {
-        throw new Error(`卡牌“${card.name}”缺少 market hash name`);
-      }
-      const pk = await priceCard(card.marketHashName, queue);
-      if (!pk) {
-        failedPriceCount++;
-        info.hasEstimated = true;
-        continue;
-      }
-      if (pk.noPriceData) {
-        card.priceSource = "none";
+    try {
+      for (const card of info.cards) {
+        if (!card.marketHashName) {
+          throw new Error(`卡牌“${card.name}”缺少 market hash name`);
+        }
+        const pk = await priceCard(card.marketHashName, queue, { persistMarketCache: false });
+        if (pk?.record) marketRecords.push(pk.record);
+        if (!pk) {
+          failedPriceCount++;
+          info.hasEstimated = true;
+          continue;
+        }
+        if (pk.noPriceData) {
+          card.priceSource = "none";
+          card.currencyId = pk.currencyId;
+          card.marketRecord = pk.record;
+          noPriceCards.push(card);
+          info.hasEstimated = true;
+          continue;
+        }
+
+        card.lowestCents = pk.lowestSellCents;
+        card.medianCents = pk.medianCents;
+        card.volume = pk.volume;
+        card.priceSource = pk.priceSource;
         card.currencyId = pk.currencyId;
+        card.observedAt = pk.observedAt;
         card.marketRecord = pk.record;
-        noPriceCards.push(card);
-        info.hasEstimated = true;
-        continue;
-      }
+        minVolume = Math.min(minVolume, pk.volume);
+        if (pk.estimated) {
+          info.hasEstimated = true;
+          info.hasMedianFallback = true;
+        }
+        info.cardPrices.push({
+          name: card.name,
+          lowestCents: pk.lowestSellCents,
+          medianCents: pk.medianCents,
+          volume: pk.volume,
+          marketHashName: card.marketHashName,
+          priceSource: pk.priceSource,
+          currencyId: pk.currencyId,
+          observedAt: pk.observedAt,
+        });
 
-      card.lowestCents = pk.lowestSellCents;
-      card.medianCents = pk.medianCents;
-      card.volume = pk.volume;
-      card.priceSource = pk.priceSource;
-      card.currencyId = pk.currencyId;
-      card.observedAt = pk.observedAt;
-      card.marketRecord = pk.record;
-      minVolume = Math.min(minVolume, pk.volume);
-      if (pk.estimated) {
-        info.hasEstimated = true;
-        info.hasMedianFallback = true;
+        const need1 = Math.max(0, 1 - card.owned);
+        const need5 = Math.max(0, setsToTarget - card.owned);
+        setCostCents += pk.lowestSellCents * need1;
+        fullSetCostCents += pk.lowestSellCents;
+        level5CostCents += need5 > 0
+          ? pk.lowestSellCents + (need5 - 1) * Math.max(pk.lowestSellCents, pk.medianCents)
+          : 0;
       }
-      info.cardPrices.push({
-        name: card.name,
-        lowestCents: pk.lowestSellCents,
-        medianCents: pk.medianCents,
-        volume: pk.volume,
-        marketHashName: card.marketHashName,
-        priceSource: pk.priceSource,
-        currencyId: pk.currencyId,
-        observedAt: pk.observedAt,
-      });
-
-      const need1 = Math.max(0, 1 - card.owned);
-      const need5 = Math.max(0, setsToTarget - card.owned);
-      setCostCents += pk.lowestSellCents * need1;
-      fullSetCostCents += pk.lowestSellCents;
-      level5CostCents += need5 > 0
-        ? pk.lowestSellCents + (need5 - 1) * Math.max(pk.lowestSellCents, pk.medianCents)
-        : 0;
+    } finally {
+      persistMarketRecords(marketRecords);
     }
 
     if (info.cardPrices.length === 0) {

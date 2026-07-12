@@ -1,4 +1,4 @@
-import { build } from "esbuild";
+import { build, transform } from "esbuild";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -19,16 +19,29 @@ await build({
   bundle: true,
   format: "iife",
   charset: "utf8",
+  minify: true,
+  keepNames: true,
   legalComments: "none",
   sourcemap: false,
   loader: { ".css": "text" },
   plugins: [{
-    name: "normalize-text-newlines",
+    name: "minify-css-text",
     setup(buildContext) {
-      buildContext.onLoad({ filter: /\.css$/ }, args => ({
-        contents: normalizeNewlines(readFileSync(args.path, "utf8")),
-        loader: "text",
-      }));
+      buildContext.onLoad({ filter: /\.css$/ }, async args => {
+        const result = await transform(
+          normalizeNewlines(readFileSync(args.path, "utf8")),
+          {
+            loader: "css",
+            minify: true,
+            charset: "utf8",
+            legalComments: "none",
+          }
+        );
+        return {
+          contents: normalizeNewlines(result.code).trim(),
+          loader: "text",
+        };
+      });
     },
   }],
   banner: { js: banner },

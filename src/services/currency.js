@@ -77,6 +77,7 @@ const CURRENCY_DEFINITION_MAP = Object.freeze({
 export const CURRENCY_DEFINITIONS = CURRENCY_DEFINITION_MAP;
 
 let activeCurrencyContext = null;
+const normalizedCurrencyContexts = new WeakSet();
 
 function firstDefined(...values) {
   return values.find(value => value !== undefined && value !== null && value !== "");
@@ -229,7 +230,7 @@ export function createCurrencyContext(currencyOrOptions, metadata = {}) {
   const status = verified ? (isFallback ? "fallback" : "verified") : "unverified";
   const code = base.code;
 
-  return Object.freeze({
+  const context = Object.freeze({
     currencyId,
     id: currencyId,
     currency: currencyId,
@@ -273,6 +274,8 @@ export function createCurrencyContext(currencyOrOptions, metadata = {}) {
     source,
     isFallback,
   });
+  normalizedCurrencyContexts.add(context);
+  return context;
 }
 
 function decodeHtmlAttribute(value) {
@@ -486,6 +489,7 @@ export function resolveCurrencyContext(context) {
   if (typeof context === "number" || typeof context === "string") {
     return createCurrencyContext(context, { source: "manual", isFallback: false });
   }
+  if (normalizedCurrencyContexts.has(context)) return context;
   if (context.currencyContext) return resolveCurrencyContext(context.currencyContext);
   if (currencyIdFromObject(context) != null || isWalletInfoLike(context)) {
     return createCurrencyContext(context, {
@@ -520,8 +524,7 @@ function minorAmountToBigInt(value) {
   return /^[+-]?\d+$/.test(text) ? BigInt(text) : null;
 }
 
-export function formatMinorAmount(amount, contextOrOptions, maybeOptions) {
-  const { context, options } = formatArguments(contextOrOptions, maybeOptions);
+function formatMinorAmountWithContext(amount, context, options) {
   const minorAmount = minorAmountToBigInt(amount);
   if (minorAmount == null) return options.invalidPlaceholder || "?";
 
@@ -541,9 +544,14 @@ export function formatMinorAmount(amount, contextOrOptions, maybeOptions) {
   return `${negative ? "-" : ""}${majorText}${fractionText}`;
 }
 
+export function formatMinorAmount(amount, contextOrOptions, maybeOptions) {
+  const { context, options } = formatArguments(contextOrOptions, maybeOptions);
+  return formatMinorAmountWithContext(amount, context, options);
+}
+
 export function formatMoney(amount, contextOrOptions, maybeOptions) {
   const { context, options } = formatArguments(contextOrOptions, maybeOptions);
-  const formatted = formatMinorAmount(amount, context, options);
+  const formatted = formatMinorAmountWithContext(amount, context, options);
   const invalidPlaceholder = options.invalidPlaceholder || "?";
   if (formatted === invalidPlaceholder) return invalidPlaceholder;
 

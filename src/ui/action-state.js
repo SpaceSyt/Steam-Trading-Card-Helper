@@ -4,10 +4,6 @@ import { getSelectedResults, getSelectedOrderResults } from "../services/result-
 
 import { getExpiredOrderCacheCount } from "../services/order-cache.js";
 
-import { clampNumber } from "../utils/format.js";
-
-import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
-
   function getSurplusProcessingMode() {
     const value = document.getElementById("stch-surplus-item-mode")?.value
       || state.cfg.surplusItemMode
@@ -42,48 +38,11 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
     });
   }
 
-  export function updateSeasonalActionState() {
-    const seasonalBusy = state.seasonalActionRunning;
-    const otherBusy = state.scanning
-      || state.bulkActionRunning
-      || state.orderActionRunning
-      || state.craftScanning
-      || state.craftActionRunning
-      || state.surplusActionRunning
-      || state.surplusScanning
-      || state.grindScanning;
-    const plan = (() => {
-      const targetLevel = clampNumber(
-        document.getElementById("stch-seasonal-target")?.value,
-        1,
-        SEASONAL_BADGE_MAX_LEVEL,
-        state.cfg.seasonalTargetLevel
-      );
-      return { levels: Math.max(0, targetLevel) };
-    })();
-
-    document.getElementById("stch-seasonal-buy-btn")?.classList.toggle(
-      "disabled",
-      seasonalBusy || otherBusy || plan.levels <= 0
-    );
-    document.getElementById("stch-seasonal-stop-btn")?.classList.toggle(
-      "disabled",
-      !seasonalBusy
-    );
-    [
-      "stch-seasonal-target",
-    ].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.disabled = seasonalBusy || otherBusy;
-    });
-  }
-
   export function updateCraftActionState() {
     const craftBusy = state.craftScanning || state.craftActionRunning;
     const otherBusy = state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
-      || state.seasonalActionRunning
       || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning;
@@ -124,7 +83,6 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
-      || state.seasonalActionRunning
       || state.surplusActionRunning
       || state.grindScanning;
     document.getElementById("stch-surplus-scan-btn")?.classList.toggle(
@@ -153,7 +111,6 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
-      || state.seasonalActionRunning
       || state.surplusActionRunning
       || state.surplusScanning;
     document.getElementById("stch-grind-scan-btn")?.classList.toggle(
@@ -177,7 +134,6 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
       || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
-      || state.seasonalActionRunning
       || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning;
@@ -228,7 +184,6 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
   export function updateAllActionStates() {
     updateBulkActionState();
     updateCraftActionState();
-    updateSeasonalActionState();
     updateSurplusActionState();
     updateGrindActionState();
     const settingsBusy = isSharedActionBusy();

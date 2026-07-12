@@ -9,12 +9,6 @@
       font-size: 13px;
     }
     .stch-btn-entry:hover { background: rgba(87, 157, 199, 1); }
-    .stch-store-entry-wrap {
-      margin-top: 8px;
-    }
-    .stch-store-entry-wrap .stch-btn-entry {
-      margin-left: 0;
-    }
     .inventory_rightnav .stch-btn-entry.stch-inventory-entry {
       margin: 0 12px 0 0;
       padding: 0 12px;
@@ -798,26 +792,6 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .stch-seasonal-panel {
-      border: 1px solid #2a3f5a;
-      border-radius: 3px;
-      background: rgba(0,0,0,0.2);
-      padding: 12px;
-      margin-bottom: 10px;
-      color: #c6d4df;
-      line-height: 1.6;
-    }
-    .stch-seasonal-panel b { color: #fff; }
-    .stch-seasonal-note {
-      color: #8f98a0;
-      font-size: 12px;
-      margin-top: 8px;
-    }
-    .stch-seasonal-warning {
-      color: #ffc902;
-      font-size: 12px;
-      margin-top: 4px;
-    }
     .stch-scan-actions {
       display: flex;
       align-items: center;
@@ -1051,7 +1025,6 @@
 
     #stch-log,
     #stch-craft-log,
-    #stch-seasonal-log,
     #stch-surplus-log,
     #stch-grind-log {
       margin-top: 0;
@@ -1069,16 +1042,15 @@
       word-break: break-all;
     }
     #stch-craft-log,
-    #stch-seasonal-log,
     #stch-surplus-log,
     #stch-grind-log {
       flex: 0 0 19vh;
     }
-    #stch-log .ok, #stch-craft-log .ok, #stch-seasonal-log .ok, #stch-surplus-log .ok, #stch-grind-log .ok { color: #75b022; }
-    #stch-log .warn, #stch-craft-log .warn, #stch-seasonal-log .warn, #stch-surplus-log .warn, #stch-grind-log .warn { color: #ffc902; }
-    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-seasonal-log .warn-ip, #stch-surplus-log .warn-ip, #stch-grind-log .warn-ip { color: #fff; }
-    #stch-log .err, #stch-craft-log .err, #stch-seasonal-log .err, #stch-surplus-log .err, #stch-grind-log .err { color: #c04040; }
-    #stch-log .info, #stch-craft-log .info, #stch-seasonal-log .info, #stch-surplus-log .info, #stch-grind-log .info { color: #67c1f5; }
+    #stch-log .ok, #stch-craft-log .ok, #stch-surplus-log .ok, #stch-grind-log .ok { color: #75b022; }
+    #stch-log .warn, #stch-craft-log .warn, #stch-surplus-log .warn, #stch-grind-log .warn { color: #ffc902; }
+    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-surplus-log .warn-ip, #stch-grind-log .warn-ip { color: #fff; }
+    #stch-log .err, #stch-craft-log .err, #stch-surplus-log .err, #stch-grind-log .err { color: #c04040; }
+    #stch-log .info, #stch-craft-log .info, #stch-surplus-log .info, #stch-grind-log .info { color: #67c1f5; }
 
     .stch-progress {
       height: 20px;

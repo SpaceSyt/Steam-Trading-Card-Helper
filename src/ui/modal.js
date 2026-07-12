@@ -2,15 +2,13 @@ import { state } from "../state.js";
 
 import { saveConfig, DEFAULT_CONFIG } from "../config.js";
 
-import { SEASONAL_BADGE_NAME, SEASONAL_BADGE_MAX_LEVEL, ONBOARDING_SEEN_KEY } from "../constants.js";
+import { ONBOARDING_SEEN_KEY } from "../constants.js";
 
 import {
   createCurrencyContext,
   getActiveCurrencyContext,
   setActiveCurrencyContext,
 } from "../services/currency.js";
-
-import { isPointsShopPage } from "../utils/steam.js";
 
 import { startScan, requestStop, skipCurrentBadge, applyScanModeTheme, updateResultColumns } from "../features/scan.js";
 
@@ -19,8 +17,6 @@ import { recalculateSelectedResults, recalculateSelectedOrderResults } from "../
 import { submitSelectedBuyOrders, submitSelectedOrderBuyOrders, addManualOrderAppid, deleteExpiredOrderResults } from "../features/orders.js";
 
 import { startCraftScan, requestCraftStop, setAllCraftCounts, submitCraftPlan, renderCraftResults, updateCraftActionState, updateCraftSummary } from "../features/craft.js";
-
-import { startSeasonalPurchase, requestSeasonalStop, normalizeSeasonalInputs, updateSeasonalSummary, updateSeasonalActionState } from "../features/seasonal.js";
 
 import { startSurplusScan, requestSurplusStop, renderSurplusResults, updateSurplusActionState, setAllVisibleSurplusSelection } from "../features/surplus.js";
 
@@ -169,8 +165,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
   }
 
   export function buildModal(options = {}) {
-    const seasonalOnly = isPointsShopPage();
-    const initialTab = seasonalOnly ? "seasonal" : options.initialTab || "scan";
+    const initialTab = options.initialTab || "scan";
     const activeClass = tabName => initialTab === tabName ? "active" : "";
     const currencyContext = getActiveCurrencyContext();
     const currencySymbol = currencyContext?.symbol || "¤";
@@ -191,16 +186,12 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
       </div>
       <div class="stch-body">
         <div class="stch-tabs">
-          ${seasonalOnly ? `
-          <span class="stch-tab ${activeClass("seasonal")}" data-tab="seasonal">季节徽章</span>
-          ` : `
           <span class="stch-tab ${activeClass("scan")}" data-tab="scan">卡牌价格扫描</span>
           <span class="stch-tab" data-tab="orders">订购卡牌</span>
           <span class="stch-tab" data-tab="craft">徽章合成</span>
           <span class="stch-tab" data-tab="blacklist">游戏/AppID黑名单</span>
           <span class="stch-tab" data-tab="surplus">多余物品处理</span>
           <span class="stch-tab stch-tab-right ${activeClass("settings")}" data-tab="settings">设置</span>
-          `}
         </div>
         <div class="stch-tab-content ${activeClass("scan")}" id="stch-tab-scan">
           <div class="stch-onboarding" id="stch-onboarding" style="display:none">
@@ -302,7 +293,6 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
               </select>
             </label>
             <label class="stch-primary-label">买价调整 ${currencySymbol} <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
-            <span class="stch-settings-hint">与卡牌价格扫描页同步；补全总价会实时计入每张卡牌的调整值</span>
           </div>
           <div class="stch-summary" id="stch-order-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-order-summary"></span>
@@ -343,25 +333,6 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
           <div class="stch-game-list stch-craft-list" id="stch-craft-list"></div>
           <div class="stch-log-resizer" data-log="stch-craft-log" data-content="stch-craft-list" title="上下拖动调整日志区域"></div>
           <div id="stch-craft-log"></div>
-        </div>
-        <div class="stch-tab-content ${activeClass("seasonal")}" id="stch-tab-seasonal">
-          <div class="stch-toolbar">
-            <label class="stch-primary-label">目标等级 <input id="stch-seasonal-target" class="stch-input" type="number" min="1" max="${SEASONAL_BADGE_MAX_LEVEL}" step="1" value="${state.cfg.seasonalTargetLevel}" style="width:56px"></label>
-          </div>
-          <div class="stch-scan-actions">
-            <div class="stch-btn" id="stch-seasonal-buy-btn">开始购买</div>
-            <div class="stch-btn alt disabled" id="stch-seasonal-stop-btn">停止</div>
-          </div>
-          <div class="stch-progress" id="stch-seasonal-progress-wrap" style="display:none">
-            <div class="stch-progress-bar" id="stch-seasonal-progress-bar" style="width:0"></div>
-            <div class="stch-progress-text" id="stch-seasonal-progress-text">0/0</div>
-          </div>
-          <div class="stch-seasonal-panel" id="stch-seasonal-summary">
-            2026 夏季徽章
-          </div>
-          <div class="stch-status-text" id="stch-seasonal-status"></div>
-          <div class="stch-log-resizer" data-log="stch-seasonal-log" title="上下拖动调整日志区域"></div>
-          <div id="stch-seasonal-log"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-blacklist">
           <div class="stch-bl-form">
@@ -485,19 +456,16 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
               <input id="stch-show-no-result-logs" type="checkbox" ${state.cfg.showNoResultLogs ? "checked" : ""}>
               显示无结果日志
             </label>
-            <span class="stch-settings-hint">包括“没有升满后剩余”等常规信息，默认隐藏</span>
           </div>
           <div class="stch-settings-hint stch-settings-hint-block">价格 API 默认使用 330ms 间隔，每 20 次请求主动冷却 53s；如遇 429 可适当调高。</div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">卡牌价格扫描</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
             <label><input id="stch-early-price-prediction" type="checkbox" ${state.cfg.earlyPricePrediction ? "checked" : ""}> 价格预测提早跳过</label>
-            <span class="stch-settings-hint">扫描部分卡牌后保守预测全套价格，超过扫描上限时提前跳过</span>
           </div>
           <div class="stch-toolbar">
             <label>订购卡牌缓存 <input id="stch-order-cache-days" class="stch-input" type="number" min="0" step="1" value="${state.cfg.orderCacheDays}" style="width:55px"> 天</label>
             <label><input id="stch-skip-cached-orders" type="checkbox" ${state.cfg.skipCachedOrderResults ? "checked" : ""}> 扫描时跳过缓存内结果</label>
-            <span class="stch-settings-hint">缓存超期会自动删除；天数显示与黑名单一致，0 为今天</span>
           </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">游戏/AppID 黑名单</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
@@ -514,7 +482,6 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
             <label>每次合成请求间隔 <input id="stch-craft-interval" class="stch-input" type="number" min="200" step="100" value="${state.cfg.craftInterval}" style="width:70px"> ms</label>
-            <span class="stch-settings-hint">逐级升级按每一级等待；一次升满按每个徽章等待</span>
           </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">多余物品处理</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
@@ -525,18 +492,16 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
               重复物品计算包含点数商店物品
             </label>
           </div>
-          ${seasonalOnly ? "" : `
           <div class="stch-settings-page-actions">
             <span class="stch-footer-status" id="stch-settings-action-status"></span>
             <div class="stch-btn alt" id="stch-onboarding-open">重新查看使用说明</div>
             <div class="stch-btn alt" id="stch-settings-clear-cache" title="清除订购卡牌缓存">清除缓存</div>
             <div class="stch-btn stch-btn-danger" id="stch-settings-reset">恢复默认设定</div>
           </div>
-          `}
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.1.0 · 当前币种：${currencyStatus}</span>
+        <span class="stch-label">V2.1.5 · 当前币种：${currencyStatus}</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -668,11 +633,6 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         { integer: true, min: 200 }
       );
       state.cfg.craftMode = document.getElementById("stch-craft-mode")?.value || state.cfg.craftMode;
-      state.cfg.seasonalTargetLevel = readNumberInput(
-        "stch-seasonal-target",
-        state.cfg.seasonalTargetLevel ?? DEFAULT_CONFIG.seasonalTargetLevel,
-        { integer: true, min: 1, max: SEASONAL_BADGE_MAX_LEVEL }
-      );
       saveConfig(state.cfg);
       const craftMaxPages = document.getElementById("stch-craft-max-pages");
       if (craftMaxPages) craftMaxPages.value = String(state.cfg.maxBadgePages);
@@ -701,10 +661,6 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         state.grindGemPrice = null;
       }
       if (changedId?.startsWith("stch-grind-")) renderGrindResults();
-      if (changedId?.startsWith("stch-seasonal-")) {
-        normalizeSeasonalInputs();
-        updateSeasonalSummary();
-      }
     };
     const cfgIds = ["stch-threshold", "stch-req-interval",
       "stch-max-pages", "stch-include-drops",
@@ -712,7 +668,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
       "stch-batch-size", "stch-batch-pause", "stch-show-no-result-logs", "stch-buy-mode",
       "stch-early-price-prediction", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
       "stch-skip-cached-orders", "stch-craft-interval",
-      "stch-craft-mode", "stch-seasonal-target", "stch-surplus-item-mode",
+      "stch-craft-mode", "stch-surplus-item-mode",
       "stch-surplus-only-maxed", "stch-surplus-only-tradable", "stch-surplus-compare-gems", "stch-surplus-sell-price-source",
       "stch-surplus-sell-adjustment", "stch-grind-only-recommended",
       "stch-grind-include-surplus-cards", "stch-grind-reserve-copies",
@@ -906,8 +862,6 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
     document.getElementById("stch-craft-max-btn").addEventListener("click", () => setAllCraftCounts("max"));
     document.getElementById("stch-craft-clear-btn").addEventListener("click", () => setAllCraftCounts("clear"));
     document.getElementById("stch-craft-submit-btn").addEventListener("click", submitCraftPlan);
-    document.getElementById("stch-seasonal-buy-btn").addEventListener("click", startSeasonalPurchase);
-    document.getElementById("stch-seasonal-stop-btn").addEventListener("click", requestSeasonalStop);
     document.getElementById("stch-surplus-scan-btn").addEventListener("click", startSurplusScan);
     document.getElementById("stch-surplus-stop-btn").addEventListener("click", requestSurplusStop);
     document.getElementById("stch-grind-scan-btn").addEventListener("click", startGrindScan);
@@ -988,7 +942,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
 
     applyScanModeTheme();
 
-    if (!options.suppressOnboarding && !isPointsShopPage() && !GM_getValue(ONBOARDING_SEEN_KEY, false)) {
+    if (!options.suppressOnboarding && !GM_getValue(ONBOARDING_SEEN_KEY, false)) {
       showOnboarding();
     }
 
@@ -1122,9 +1076,6 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
     });
 
     renderBlacklist();
-    normalizeSeasonalInputs();
-    updateSeasonalActionState();
-    updateSeasonalSummary();
     applySurplusItemMode();
     updateSurplusActionState();
     renderSurplusResults();

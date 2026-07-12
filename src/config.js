@@ -1,6 +1,6 @@
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 19;
+  export const CONFIG_SCHEMA_VERSION = 20;
 
   export const DEFAULT_CONFIG = {
     configVersion: CONFIG_SCHEMA_VERSION,
@@ -29,8 +29,6 @@
     earlyPredictionAutoBlacklist: false,
     craftInterval: 500,
     craftMode: "step",
-    seasonalTargetLevel: 40,
-    seasonalInterval: 200,
     surplusOnlyMaxed: false,
     surplusOnlyTradable: false,
     surplusCompareGems: false,

@@ -51,7 +51,7 @@ export async function priceCard(marketHashName, queue, options = {}) {
       observedAt,
     });
     const legacy = toLegacyPriceResult(record);
-    if (record) {
+    if (record && options.persistMarketCache !== false) {
       const stored = upsertStoredMarketCache(record);
       if (!stored.ok && stored.diagnostics?.some(item => (
         item.code !== "gm-get-unavailable" && item.code !== "gm-set-unavailable"

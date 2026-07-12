@@ -235,7 +235,6 @@ export class RequestQueue {
       this.state?.stopRequested
       || this.state?.craftStopRequested
       || this.state?.surplusStopRequested
-      || this.state?.seasonalStopRequested
       || this.state?.grindStopRequested
     );
   }

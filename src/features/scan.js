@@ -18,7 +18,9 @@ import { formatMoney } from "../utils/format.js";
 
 import { getBadgeModeLabel, getGameCardsUrl, getBadgeTargetLevel } from "../utils/badge.js";
 
-import { getCachedOrderResult, upsertOrderResult, getOrderCacheAgeDays } from "../services/order-cache.js";
+import { getCachedOrderResult, getOrderCacheAgeDays } from "../services/order-cache.js";
+
+import { upsertManyStoredMarketCache } from "../services/market-cache.js";
 
 import { addToBlacklist } from "./blacklist.js";
 
@@ -29,6 +31,16 @@ import { updateAllActionStates, updateSurplusActionState, updateGrindActionState
 import { scanStatus } from "../status-controllers.js";
 
 const { log, setStatus, setProgress, hideProgress } = scanStatus;
+
+function persistMarketRecords(records) {
+  if (records.length === 0) return;
+  const stored = upsertManyStoredMarketCache(records);
+  if (!stored.ok && stored.diagnostics?.some(item => (
+    item.code !== "gm-get-unavailable" && item.code !== "gm-set-unavailable"
+  ))) {
+    console.warn("[STCH] Market cache batch update skipped:", stored.diagnostics);
+  }
+}
 
   export function skipCurrentBadge() {
     state.skipCurrent = true;
@@ -156,6 +168,18 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
       let processed = 0;
       let skipped = 0;
       const getThresholdCents = () => Math.round((Number(state.cfg.threshold) || 0) * 100);
+      let blacklistSource = null;
+      let blacklistedAppids = new Set();
+      const getBlacklistedAppids = () => {
+        const source = cfg.blacklist || "";
+        if (source !== blacklistSource) {
+          blacklistSource = source;
+          blacklistedAppids = new Set(
+            source.split(",").map(value => value.trim()).filter(Boolean)
+          );
+        }
+        return blacklistedAppids;
+      };
 
       for (const b of badges) {
         if (state.stopRequested) { log("已手动停止", "warn"); break; }
@@ -166,8 +190,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           continue;
         }
         // blacklist check
-        const blAppids = (cfg.blacklist || "").split(",").map(s => s.trim()).filter(Boolean);
-        if (blAppids.includes(String(b.appid))) {
+        if (getBlacklistedAppids().has(String(b.appid))) {
           log(`[${b.appid}] ${b.gameName || ""}: 在游戏/AppID黑名单中, 跳过`, "info");
           skipped++;
           continue;
@@ -188,6 +211,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
         setProgress(processed, badges.length,
           `阶段2: 获取卡牌详情 ${processed}/${badges.length} · ${b.gameName || b.appid}`);
 
+        const marketRecords = [];
         try {
           const url = getGameCardsUrl(profileUrl, b.appid, b, { language: "english" });
           let res;
@@ -271,7 +295,8 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               break;
             }
 
-            const pk = await priceCard(card.marketHashName, queue);
+            const pk = await priceCard(card.marketHashName, queue, { persistMarketCache: false });
+            if (pk?.record) marketRecords.push(pk.record);
             if (!pk) {
               log(`  ⚠ 卡牌 "${card.name}" (market: ${card.marketHashName}) 查价失败, 跳过此卡`, "warn");
               failedPriceCount++;
@@ -351,6 +376,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
                 );
                 if (shouldAutoBlacklistPrediction) {
                   addToBlacklist(b.appid, info.gameName || b.gameName || "", 1);
+                  blacklistedAppids.add(String(b.appid));
                   log(
                     `  → 价格预测自动加入游戏黑名单: ` +
                     `预测全套≥${formatMoney(prediction.predictedCents)} > ` +
@@ -423,6 +449,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           const autoBlCents = Math.round((state.cfg.autoBlackThreshold || 0) * 100);
           if (state.cfg.autoBlackEnabled && autoBlCents > 0 && fullSetCostCents > autoBlCents) {
             addToBlacklist(b.appid, info.gameName || b.gameName || "", 1);
+            blacklistedAppids.add(String(b.appid));
             log(`  → 自动加入游戏黑名单: 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(autoBlCents)}`, "info");
             skipped++;
             continue;
@@ -447,6 +474,8 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
         } catch (e) {
           log(`[${b.appid}] ${b.gameName || ""}: 出错 ${e?.error || e?.status || JSON.stringify(e)}`, "err");
           skipped++;
+        } finally {
+          persistMarketRecords(marketRecords);
         }
       }
 

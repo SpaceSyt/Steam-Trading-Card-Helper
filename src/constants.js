@@ -1,13 +1,3 @@
-  export const SEASONAL_BADGE_NAME = "2026 夏季徽章";
-
-  export const SEASONAL_BADGE_DEFID = 3094368;
-
-  export const SEASONAL_BADGE_MAX_LEVEL = 40;
-
-  export const SEASONAL_BADGE_DEFAULT_COST = 1000;
-
-  export const SEASONAL_POINTS_SHOP_URL = "https://store.steampowered.com/points/shop/c/steambadge";
-
   export const SIDEBAR_PINNED_KEY = "stch_sidebar_pinned";
 
   export const SIDEBAR_GEM_PRICE_KEY = "stch_sidebar_gem_price";

@@ -197,9 +197,11 @@ export { updateSurplusActionState };
     const surplusTotal = visible.reduce((sum, result) => sum + result.surplusCount, 0);
     const marketableTotal = visible.reduce((sum, result) => sum + result.marketableCount, 0);
     const tradableTotal = visible.reduce((sum, result) => sum + result.tradableCount, 0);
-    const selectedCount = getSelectedSurplusResults().filter(result =>
-      visible.some(visibleResult => getSurplusResultKey(visibleResult) === getSurplusResultKey(result))
-    ).length;
+    const selected = state.selectedSurplusResults || new Set();
+    const selectedCount = visible.reduce(
+      (count, result) => count + Number(selected.has(getSurplusResultKey(result))),
+      0
+    );
     summary.innerHTML =
       `共 <b>${badgeCount}</b> 个徽章 · ` +
       `<b>${visible.length}</b> 种卡牌 · ` +
@@ -327,7 +329,6 @@ export { updateSurplusActionState };
       || state.orderActionRunning
       || state.craftScanning
       || state.craftActionRunning
-      || state.seasonalActionRunning
       || state.surplusActionRunning
       || state.grindScanning
     ) {

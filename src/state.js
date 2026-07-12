@@ -19,8 +19,6 @@ import { loadConfig } from "./config.js";
     craftActionRunning: false,
     craftStopRequested: false,
     craftQueue: null,
-    seasonalActionRunning: false,
-    seasonalStopRequested: false,
     surplusResults: [],
     selectedSurplusResults: new Set(),
     surplusScanning: false,

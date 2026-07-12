@@ -15,6 +15,8 @@ import {
   normalizeMarketCache,
   pruneMarketCache,
   saveMarketCache,
+  upsertManyMarketCache,
+  upsertManyStoredMarketCache,
   upsertMarketCache,
   upsertStoredMarketCache,
 } from "../../src/services/market-cache.js";
@@ -84,6 +86,29 @@ test("upsert is immutable and keeps the newest observation by default", () => {
   assert.equal(original.records[0].lowestSellMinor, 32);
 });
 
+test("bulk upsert is equivalent to sequential updates without mutating its input", () => {
+  const original = createMarketCacheEnvelope([
+    makeRecord({ marketHashName: "existing", observedAt: 100, lowestSellMinor: 10 }),
+    makeRecord({ marketHashName: "untouched", observedAt: 150, lowestSellMinor: 15 }),
+  ]);
+  const snapshot = structuredClone(original);
+  const updates = [
+    makeRecord({ marketHashName: "existing", observedAt: 90, lowestSellMinor: 9 }),
+    makeRecord({ marketHashName: "new", observedAt: 200, lowestSellMinor: 20 }),
+    makeRecord({ marketHashName: "existing", observedAt: 300, lowestSellMinor: 30 }),
+    makeRecord({ marketHashName: "new", observedAt: 200, lowestSellMinor: 21 }),
+  ];
+  const expected = updates.reduce(
+    (cache, record) => upsertMarketCache(cache, record),
+    original
+  );
+
+  const actual = upsertManyMarketCache(original, updates);
+
+  assert.deepEqual(actual, expected);
+  assert.deepEqual(original, snapshot);
+});
+
 test("prune applies TTL first and then retains newest entries up to the limit", () => {
   const cache = normalizeMarketCache({
     schemaVersion: MARKET_CACHE_SCHEMA_VERSION,
@@ -107,6 +132,21 @@ test("prune applies TTL first and then retains newest entries up to the limit", 
     now: 1_000,
     ttlMs: 500,
   }), null);
+});
+
+test("single-entry overflow evicts the same oldest record while preserving order", () => {
+  const cache = createMarketCacheEnvelope([
+    makeRecord({ marketHashName: "old-first", observedAt: 100 }),
+    makeRecord({ marketHashName: "old-second", observedAt: 100 }),
+    makeRecord({ marketHashName: "latest", observedAt: 200 }),
+  ]);
+
+  const pruned = pruneMarketCache(cache, { ttlMs: Infinity, maxEntries: 2 });
+
+  assert.deepEqual(
+    pruned.records.map(record => record.marketHashName),
+    ["old-second", "latest"]
+  );
 });
 
 test("decode reports malformed JSON without manufacturing an empty success", () => {
@@ -187,6 +227,79 @@ test("safe stored upsert refuses to overwrite corrupt raw GM data", () => {
   assert.equal(result.diagnostics[0].code, "invalid-json");
   assert.equal(writeCount, 0);
   assert.equal(storedValue, raw);
+});
+
+test("stored upsert reads and writes once while pruning a canonical envelope", () => {
+  let readCount = 0;
+  let writeCount = 0;
+  let storedValue = JSON.stringify(createMarketCacheEnvelope([
+    makeRecord({ marketHashName: "old", observedAt: 100 }),
+    makeRecord({ marketHashName: "current", observedAt: 200 }),
+  ]));
+
+  const result = upsertStoredMarketCache(
+    makeRecord({ marketHashName: "new", observedAt: 300 }),
+    {
+      ttlMs: Infinity,
+      maxEntries: 2,
+      getValue: () => {
+        readCount += 1;
+        return storedValue;
+      },
+      setValue: (_key, value) => {
+        writeCount += 1;
+        storedValue = value;
+      },
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.saved, true);
+  assert.equal(readCount, 1);
+  assert.equal(writeCount, 1);
+  assert.deepEqual(
+    JSON.parse(storedValue).records.map(record => record.marketHashName),
+    ["current", "new"]
+  );
+});
+
+test("stored bulk upsert persists multiple observations in one transaction", () => {
+  let readCount = 0;
+  let writeCount = 0;
+  const initial = createMarketCacheEnvelope([
+    makeRecord({ marketHashName: "existing", observedAt: 100 }),
+    makeRecord({ marketHashName: "current", observedAt: 200 }),
+  ]);
+  let storedValue = JSON.stringify(initial);
+  const updates = [
+    makeRecord({ marketHashName: "new", observedAt: 300 }),
+    makeRecord({ marketHashName: "existing", observedAt: 400, lowestSellMinor: 20 }),
+  ];
+  const options = { ttlMs: Infinity, maxEntries: 2 };
+  const expected = updates.reduce(
+    (cache, record) => pruneMarketCache(upsertMarketCache(cache, record), options),
+    initial
+  );
+
+  const result = upsertManyStoredMarketCache(updates, {
+    ...options,
+    getValue: () => {
+      readCount += 1;
+      return storedValue;
+    },
+    setValue: (_key, value) => {
+      writeCount += 1;
+      storedValue = value;
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.saved, true);
+  assert.equal(readCount, 1);
+  assert.equal(writeCount, 1);
+  const records = JSON.parse(storedValue).records;
+  assert.deepEqual(records, expected.records);
+  assert.deepEqual(records.map(record => record.marketHashName), ["new", "existing"]);
 });
 
 test("cache refuses records without a known currency id", () => {

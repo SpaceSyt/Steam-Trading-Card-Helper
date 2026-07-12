@@ -7,7 +7,6 @@ import { loadOrderCache, pruneOrderCache } from "./services/order-cache.js";
 import { observeEntryBtn } from "./ui/entry.js";
 import { injectSidebar } from "./sidebar/sidebar.js";
 import { initMultibuyAutoFill } from "./features/multibuy.js";
-import { isPointsShopPage } from "./utils/steam.js";
 
 GM_addStyle(css);
 
@@ -33,11 +32,6 @@ if (pageUrl.includes("/market/multibuy")) {
       return;
     }
     initMultibuyAutoFill();
-  });
-} else if (isPointsShopPage()) {
-  initWhenReady(() => {
-    observeEntryBtn();
-    injectSidebar();
   });
 } else {
   initWhenReady(() => {

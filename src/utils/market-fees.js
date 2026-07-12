@@ -68,13 +68,7 @@ function resolveFeeConfig(currencyContextOrWalletInfo) {
   };
 }
 
-export function getMarketFeesForSellerReceive(sellerCents, currencyContextOrWalletInfo) {
-  const received = Math.max(0, Math.floor(Number(sellerCents) || 0));
-  if (received <= 0) {
-    return { steamFee: 0, publisherFee: 0, totalFees: 0, buyerCents: 0 };
-  }
-
-  const config = resolveFeeConfig(currencyContextOrWalletInfo);
+function getMarketFeesWithConfig(received, config) {
   const steamFee = Math.floor(Math.max(
     received * config.steamFeeRate,
     config.steamFeeMinimumMinor,
@@ -91,18 +85,35 @@ export function getMarketFeesForSellerReceive(sellerCents, currencyContextOrWall
   };
 }
 
+function getBuyerPriceWithConfig(sellerCents, config) {
+  const received = Math.max(0, Math.floor(Number(sellerCents) || 0));
+  return received > 0
+    ? getMarketFeesWithConfig(received, config).buyerCents
+    : 0;
+}
+
+export function getMarketFeesForSellerReceive(sellerCents, currencyContextOrWalletInfo) {
+  const received = Math.max(0, Math.floor(Number(sellerCents) || 0));
+  if (received <= 0) {
+    return { steamFee: 0, publisherFee: 0, totalFees: 0, buyerCents: 0 };
+  }
+  return getMarketFeesWithConfig(received, resolveFeeConfig(currencyContextOrWalletInfo));
+}
+
 export function getBuyerPriceForSellerReceive(sellerCents, currencyContextOrWalletInfo) {
   return getMarketFeesForSellerReceive(sellerCents, currencyContextOrWalletInfo).buyerCents;
 }
 
 export function getSellerReceiveForBuyerPrice(buyerCents, currencyContextOrWalletInfo) {
   const total = Math.max(0, Math.floor(Number(buyerCents) || 0));
+  if (total <= 0) return 0;
+  const config = resolveFeeConfig(currencyContextOrWalletInfo);
   let low = 0;
   let high = total;
   let best = 0;
   while (low <= high) {
     const mid = Math.floor((low + high) / 2);
-    if (getBuyerPriceForSellerReceive(mid, currencyContextOrWalletInfo) <= total) {
+    if (getBuyerPriceWithConfig(mid, config) <= total) {
       best = mid;
       low = mid + 1;
     } else {

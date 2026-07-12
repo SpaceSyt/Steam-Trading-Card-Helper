@@ -109,3 +109,17 @@ test("wallet fee overrides are applied without treating an unknown ID as CNY", (
   assert.equal(getMarketMinimumPriceMinor(context), 6);
 });
 
+test("inverse fee conversion returns the greatest affordable seller amount", async () => {
+  const contexts = [
+    detectCurrencyContext({ walletInfo: await readWalletFixture("cny-wallet.json") }),
+    detectCurrencyContext({ walletInfo: await readWalletFixture("usd-wallet.json") }),
+  ];
+
+  for (const context of contexts) {
+    for (let buyer = 0; buyer <= 2000; buyer += 1) {
+      const seller = getSellerReceiveForBuyerPrice(buyer, context);
+      assert.ok(getBuyerPriceForSellerReceive(seller, context) <= buyer);
+      assert.ok(getBuyerPriceForSellerReceive(seller + 1, context) > buyer);
+    }
+  }
+});

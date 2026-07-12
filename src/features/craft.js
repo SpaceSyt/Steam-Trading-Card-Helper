@@ -98,7 +98,6 @@ export { updateCraftActionState };
     selectAll.indeterminate = selectedCount > 0 && selectedCount < state.craftResults.length;
     selectAll.disabled = state.craftScanning
       || state.craftActionRunning
-      || state.seasonalActionRunning
       || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning;
@@ -157,7 +156,6 @@ export { updateCraftActionState };
         : "输入本次要逐级合成的次数";
       countInput.disabled = state.craftScanning
         || state.craftActionRunning
-        || state.seasonalActionRunning
         || state.surplusActionRunning
         || state.surplusScanning
         || state.grindScanning
@@ -181,7 +179,6 @@ export { updateCraftActionState };
       checkbox.checked = !!result.selected;
       checkbox.disabled = state.craftScanning
         || state.craftActionRunning
-        || state.seasonalActionRunning
         || state.surplusActionRunning
         || state.surplusScanning
         || state.grindScanning
@@ -240,7 +237,6 @@ export { updateCraftActionState };
       || state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
-      || state.seasonalActionRunning
       || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning
@@ -268,7 +264,6 @@ export { updateCraftActionState };
       || state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
-      || state.seasonalActionRunning
       || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning
@@ -571,7 +566,6 @@ export { updateCraftActionState };
       || state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
-      || state.seasonalActionRunning
       || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning

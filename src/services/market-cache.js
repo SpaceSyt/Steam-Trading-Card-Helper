@@ -30,6 +30,16 @@ function getInputRecords(value) {
   return isObject(value) && Array.isArray(value.records) ? value.records : [];
 }
 
+function getNormalizedMarketCacheKey(record) {
+  if (!record || record.currencyId === null) return null;
+  return JSON.stringify([
+    record.appid,
+    record.marketHashName,
+    record.currencyId,
+    record.source,
+  ]);
+}
+
 function normalizeCacheRecords(records) {
   const byKey = new Map();
   let invalidCount = 0;
@@ -56,7 +66,7 @@ function normalizeCacheRecords(records) {
     }
 
     const normalized = normalizeMarketRecord(record);
-    const key = getMarketCacheKey(normalized);
+    const key = getNormalizedMarketCacheKey(normalized);
     if (!normalized || key === null || normalized.observedAt === null) {
       invalidCount += 1;
       return;
@@ -91,13 +101,7 @@ export function createMarketCacheEnvelope(records = []) {
  */
 export function getMarketCacheKey(identity) {
   const normalized = normalizeMarketRecord(identity);
-  if (!normalized || normalized.currencyId === null) return null;
-  return JSON.stringify([
-    normalized.appid,
-    normalized.marketHashName,
-    normalized.currencyId,
-    normalized.source,
-  ]);
+  return getNormalizedMarketCacheKey(normalized);
 }
 
 /** Normalize and de-duplicate an envelope without mutating the input. */
@@ -269,9 +273,7 @@ export function decodeMarketCache(raw) {
   };
 }
 
-/** Upsert one exact app/item/currency/source identity without mutating input. */
-export function upsertMarketCache(cache, record, options = {}) {
-  const envelope = normalizeMarketCache(cache);
+function normalizeMarketCacheUpsertRecord(record) {
   if (
     isObject(record)
     && record.schemaVersion !== undefined
@@ -280,15 +282,19 @@ export function upsertMarketCache(cache, record, options = {}) {
     throw new TypeError(`Unsupported market record schema ${record.schemaVersion}.`);
   }
   const normalized = normalizeMarketRecord(record);
-  const key = getMarketCacheKey(normalized);
+  const key = getNormalizedMarketCacheKey(normalized);
   if (!normalized || key === null || normalized.observedAt === null) {
     throw new TypeError("A cache record requires appid, marketHashName, currencyId, source, and observedAt.");
   }
   if (normalized.schemaVersion !== MARKET_DATA_SCHEMA_VERSION) {
     throw new TypeError(`Unsupported market record schema ${normalized.schemaVersion}.`);
   }
+  return { normalized, key };
+}
 
-  const index = envelope.records.findIndex(item => getMarketCacheKey(item) === key);
+function upsertNormalizedMarketCache(envelope, record, options = {}) {
+  const { normalized, key } = normalizeMarketCacheUpsertRecord(record);
+  const index = envelope.records.findIndex(item => getNormalizedMarketCacheKey(item) === key);
   if (index < 0) {
     return {
       ...envelope,
@@ -304,6 +310,43 @@ export function upsertMarketCache(cache, record, options = {}) {
     ...envelope,
     records: envelope.records.map((item, itemIndex) => itemIndex === index ? normalized : item),
   };
+}
+
+/** Upsert one exact app/item/currency/source identity without mutating input. */
+export function upsertMarketCache(cache, record, options = {}) {
+  return upsertNormalizedMarketCache(normalizeMarketCache(cache), record, options);
+}
+
+function upsertManyNormalizedMarketCache(envelope, records, options = {}) {
+  if (!Array.isArray(records)) {
+    throw new TypeError("Market cache records must be an array.");
+  }
+
+  const nextRecords = [...envelope.records];
+  const indexByKey = new Map(
+    nextRecords.map((record, index) => [getNormalizedMarketCacheKey(record), index])
+  );
+
+  for (const record of records) {
+    const { normalized, key } = normalizeMarketCacheUpsertRecord(record);
+    const index = indexByKey.get(key);
+    if (index === undefined) {
+      indexByKey.set(key, nextRecords.length);
+      nextRecords.push(normalized);
+      continue;
+    }
+    if (options.preferNewest !== false && nextRecords[index].observedAt > normalized.observedAt) {
+      continue;
+    }
+    nextRecords[index] = normalized;
+  }
+
+  return { ...envelope, records: nextRecords };
+}
+
+/** Upsert multiple records with the same ordering and newest-value semantics as sequential calls. */
+export function upsertManyMarketCache(cache, records, options = {}) {
+  return upsertManyNormalizedMarketCache(normalizeMarketCache(cache), records, options);
 }
 
 export function isMarketCacheRecordFresh(record, options = {}) {
@@ -326,7 +369,9 @@ export function findMarketCache(cache, identity, options = {}) {
   const key = getMarketCacheKey(identity);
   if (key === null) return null;
 
-  const record = normalizeMarketCache(cache).records.find(item => getMarketCacheKey(item) === key) || null;
+  const record = normalizeMarketCache(cache).records.find(
+    item => getNormalizedMarketCacheKey(item) === key
+  ) || null;
   if (!record) return null;
   if (options.ttlMs !== undefined || options.now !== undefined) {
     return isMarketCacheRecordFresh(record, options) ? record : null;
@@ -334,9 +379,7 @@ export function findMarketCache(cache, identity, options = {}) {
   return record;
 }
 
-/** Apply TTL and maximum-entry eviction while preserving retained record order. */
-export function pruneMarketCache(cache, options = {}) {
-  const envelope = normalizeMarketCache(cache);
+function pruneNormalizedMarketCache(envelope, options = {}) {
   const now = options.now === undefined ? Date.now() : Number(options.now);
   const ttlMs = options.ttlMs === undefined
     ? DEFAULT_MARKET_CACHE_TTL_MS
@@ -357,6 +400,22 @@ export function pruneMarketCache(cache, options = {}) {
 
   const limit = Math.max(0, Math.floor(maxEntries));
   if (fresh.length <= limit) return { ...envelope, records: fresh };
+  if (limit === 0) return { ...envelope, records: [] };
+
+  // The common steady-state case is one insertion beyond the cache cap. A
+  // linear oldest-record scan avoids sorting the entire cache for one eviction.
+  if (fresh.length === limit + 1) {
+    let oldestIndex = 0;
+    for (let index = 1; index < fresh.length; index += 1) {
+      if (fresh[index].observedAt < fresh[oldestIndex].observedAt) {
+        oldestIndex = index;
+      }
+    }
+    return {
+      ...envelope,
+      records: fresh.filter((_, index) => index !== oldestIndex),
+    };
+  }
 
   const retainedIndexes = new Set(
     fresh
@@ -371,6 +430,11 @@ export function pruneMarketCache(cache, options = {}) {
   };
 }
 
+/** Apply TTL and maximum-entry eviction while preserving retained record order. */
+export function pruneMarketCache(cache, options = {}) {
+  return pruneNormalizedMarketCache(normalizeMarketCache(cache), options);
+}
+
 function resolveGMGetValue(explicit) {
   if (typeof explicit === "function") return explicit;
   if (typeof GM_getValue === "function") return GM_getValue;
@@ -381,6 +445,51 @@ function resolveGMSetValue(explicit) {
   if (typeof explicit === "function") return explicit;
   if (typeof GM_setValue === "function") return GM_setValue;
   return null;
+}
+
+function writeMarketCacheEnvelope(envelope, storageKey, setValue, diagnostics = []) {
+  const raw = JSON.stringify(envelope);
+  try {
+    setValue(storageKey, raw);
+  } catch (error) {
+    return {
+      ok: false,
+      envelope,
+      cache: envelope,
+      raw,
+      storageKey,
+      diagnostics: [diagnostic(
+        "gm-write-failed",
+        "Failed to write the market cache.",
+        "error",
+        { error: String(error?.message || error) }
+      )],
+    };
+  }
+
+  return {
+    ok: true,
+    envelope,
+    cache: envelope,
+    raw,
+    storageKey,
+    diagnostics,
+  };
+}
+
+function saveNormalizedMarketCache(envelope, options = {}) {
+  const storageKey = options.storageKey || options.key || MARKET_CACHE_STORAGE_KEY;
+  const setValue = resolveGMSetValue(options.setValue);
+  return setValue
+    ? writeMarketCacheEnvelope(envelope, storageKey, setValue)
+    : {
+        ok: false,
+        envelope: null,
+        cache: null,
+        raw: undefined,
+        storageKey,
+        diagnostics: [diagnostic("gm-set-unavailable", "GM_setValue is not available.")],
+      };
 }
 
 /** Read and decode GM storage. This wrapper intentionally performs no write. */
@@ -449,34 +558,12 @@ export function saveMarketCache(cache, options = {}) {
       storageKey,
     };
   }
-
-  const raw = JSON.stringify(decoded.envelope);
-  try {
-    setValue(storageKey, raw);
-  } catch (error) {
-    return {
-      ok: false,
-      envelope: decoded.envelope,
-      cache: decoded.envelope,
-      raw,
-      storageKey,
-      diagnostics: [diagnostic(
-        "gm-write-failed",
-        "Failed to write the market cache.",
-        "error",
-        { error: String(error?.message || error) }
-      )],
-    };
-  }
-
-  return {
-    ok: true,
-    envelope: decoded.envelope,
-    cache: decoded.envelope,
-    raw,
+  return writeMarketCacheEnvelope(
+    decoded.envelope,
     storageKey,
-    diagnostics: decoded.diagnostics,
-  };
+    setValue,
+    decoded.diagnostics
+  );
 }
 
 /**
@@ -489,16 +576,40 @@ export function upsertStoredMarketCache(record, options = {}) {
     return { ...loaded, saved: false };
   }
 
-  const updated = pruneMarketCache(
-    upsertMarketCache(loaded.envelope, record, options),
+  const updated = pruneNormalizedMarketCache(
+    upsertNormalizedMarketCache(loaded.envelope, record, options),
     options
   );
-  const saved = saveMarketCache(updated, options);
+  const saved = saveNormalizedMarketCache(updated, options);
+  return { ...saved, saved: saved.ok };
+}
+
+/** Read, upsert, prune, and persist a group of observations in one storage transaction. */
+export function upsertManyStoredMarketCache(records, options = {}) {
+  if (!Array.isArray(records)) {
+    throw new TypeError("Market cache records must be an array.");
+  }
+  const loaded = loadMarketCache(options);
+  if (!loaded.ok || !loaded.envelope || records.length === 0) {
+    return { ...loaded, saved: false };
+  }
+
+  // Prune after each logical update so batching changes storage I/O only, not
+  // max-entry eviction order or the result of a later update to an evicted key.
+  const updated = records.reduce(
+    (cache, record) => pruneNormalizedMarketCache(
+      upsertNormalizedMarketCache(cache, record, options),
+      options
+    ),
+    loaded.envelope
+  );
+  const saved = saveNormalizedMarketCache(updated, options);
   return { ...saved, saved: saved.ok };
 }
 
 export const makeMarketCacheKey = getMarketCacheKey;
 export const upsertMarketCacheRecord = upsertMarketCache;
+export const upsertManyMarketCacheRecords = upsertManyMarketCache;
 export const findMarketCacheRecord = findMarketCache;
 export const pruneMarketCacheRecords = pruneMarketCache;
 export const readMarketCacheFromGM = loadMarketCache;

@@ -28,18 +28,6 @@ export {
     return Number.isFinite(number) ? number : 0;
   }
 
-  export function escapeHtml(value) {
-    const div = document.createElement("div");
-    div.textContent = String(value ?? "");
-    return div.innerHTML;
-  }
-
-  export function clampNumber(value, min, max, fallback) {
-    const parsed = parseInt(value, 10);
-    const usable = Number.isFinite(parsed) ? parsed : fallback;
-    return Math.max(min, Math.min(max, usable));
-  }
-
   export function decodeHtmlEntities(value) {
     const textarea = document.createElement("textarea");
     textarea.innerHTML = String(value || "");

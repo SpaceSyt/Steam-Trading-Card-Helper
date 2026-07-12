@@ -3,28 +3,23 @@
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
 // @version      __VERSION__
-// @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, buy seasonal badge levels, find surplus cards, and process surplus items
-// @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章、购买季节徽章等级，并检测和处理多余卡牌/背景/表情
+// @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, and process surplus items
+// @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章，并检测和处理多余卡牌/背景/表情
 // @author       SpaceSyt
 // @homepageURL  https://github.com/SpaceSyt/Steam-Trading-Card-Helper
 // @supportURL   https://github.com/SpaceSyt/Steam-Trading-Card-Helper/issues
 // @downloadURL  https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper.user.js
 // @updateURL    https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper.user.js
-// @match        *://steamcommunity.com/*/badges*
-// @match        *://steamcommunity.com/id/*/badges*
-// @match        *://steamcommunity.com/profiles/*/badges*
-// @match        *://steamcommunity.com/*/inventory*
-// @match        *://steamcommunity.com/id/*/inventory*
-// @match        *://steamcommunity.com/profiles/*/inventory*
-// @match        *://steamcommunity.com/market/multibuy*
-// @match        *://store.steampowered.com/points/shop*
+// @match        https://steamcommunity.com/id/*/badges*
+// @match        https://steamcommunity.com/profiles/*/badges*
+// @match        https://steamcommunity.com/id/*/inventory*
+// @match        https://steamcommunity.com/profiles/*/inventory*
+// @match        https://steamcommunity.com/market/multibuy*
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
-// @connect      store.steampowered.com
 // @connect      steamcommunity.com
-// @connect      api.steampowered.com
 // @license      MIT
 // ==/UserScript==

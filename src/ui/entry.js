@@ -1,19 +1,6 @@
-import { isPointsShopPage, isInventoryPage } from "../utils/steam.js";
+import { isInventoryPage } from "../utils/steam.js";
 
 import { openModal } from "./modal.js";
-
-  export function findPointsBalanceContainer() {
-    const candidates = Array.from(document.querySelectorAll("a, span, div"));
-    const label = candidates.find(el =>
-      /^(您的点数余额|your points balance)$/i.test((el.textContent || "").trim())
-    ) || candidates.find(el => {
-      const text = (el.textContent || "").trim();
-      return text.length <= 80 && /您的点数余额|your points balance/i.test(text);
-    });
-    const container = label?.parentElement;
-    if (container) return container;
-    return null;
-  }
 
   export function getEntryBtn() {
     let btn = document.getElementById("stch-entry-btn");
@@ -49,16 +36,6 @@ import { openModal } from "./modal.js";
     const btn = getEntryBtn();
     btn.classList.remove("stch-inventory-entry");
 
-    if (isPointsShopPage()) {
-      const container = findPointsBalanceContainer();
-      if (!container) return false;
-      const wrapper = document.createElement("div");
-      wrapper.className = "stch-store-entry-wrap";
-      wrapper.appendChild(btn);
-      container.appendChild(wrapper);
-      return true;
-    }
-
     if (isInventoryPage()) {
       return placeInventoryEntryBtn(btn);
     }
@@ -87,8 +64,4 @@ import { openModal } from "./modal.js";
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
     setTimeout(() => observer.disconnect(), 20000);
-  }
-
-  export function observePointsShopEntry() {
-    observeEntryBtn();
   }

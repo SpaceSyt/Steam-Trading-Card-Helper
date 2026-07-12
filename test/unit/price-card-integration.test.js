@@ -209,6 +209,27 @@ test("priceCard preserves a successful response with no price data", async () =>
   assert.deepEqual(findMarketCache(loaded.envelope, record), record);
 });
 
+test("priceCard can defer persistence for a batch caller without changing its result", async () => {
+  const observedAt = 1_720_000_002_500;
+  const queue = new FakeRequestQueue({
+    23: {
+      success: true,
+      lowest_price: "\u00a5 0.32",
+      median_price: "\u00a5 0.35",
+      volume: "123",
+    },
+  });
+  initializeActiveCurrency(23);
+  Date.now = () => observedAt;
+
+  const result = await priceCard(MARKET_HASH_NAME, queue, { persistMarketCache: false });
+
+  assert.equal(result.lowestSellCents, 32);
+  assert.equal(result.record.observedAt, observedAt);
+  assert.equal(gmWrites.length, 0);
+  assert.equal(gmStore.has(MARKET_CACHE_STORAGE_KEY), false);
+});
+
 test("an HKD page context sends currency 29 instead of the configured CNY fallback", async () => {
   const queue = new FakeRequestQueue({
     29: {
