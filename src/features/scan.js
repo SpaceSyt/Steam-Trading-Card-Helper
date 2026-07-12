@@ -111,8 +111,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
       cfg.batchPause,
       state,
       setStatus,
-      log,
-      cfg.scanInterval
+      log
     );
 
 
@@ -120,9 +119,11 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
     const profileUrl = getProfileUrl();
     if (!profileUrl) {
       log("未找到 Profile URL", "err");
+      queue.stop();
       state.scanning = false;
       state.queue = null;
       hideProgress();
+      setStatus(null);
       document.getElementById("stch-scan-btn")?.classList.remove("disabled");
       document.getElementById("stch-skip-btn")?.classList.add("disabled");
       document.getElementById("stch-stop-btn")?.classList.add("disabled");
@@ -325,6 +326,14 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               );
               const predictionLimit = Math.ceil(getThresholdCents() * EARLY_PREDICTION_MARGIN);
               if (prediction && prediction.predictedCents > predictionLimit) {
+                const predictionAutoBlacklistCents = Math.round(
+                  (state.cfg.autoBlackThreshold || 0) * 100
+                );
+                const shouldAutoBlacklistPrediction =
+                  state.cfg.earlyPredictionAutoBlacklist
+                  && state.cfg.autoBlackEnabled
+                  && predictionAutoBlacklistCents > 0
+                  && prediction.predictedCents > predictionAutoBlacklistCents;
                 log(
                   `  → 已查${prediction.sampleCount}/${info.totalInSet}张, ` +
                   `保守预测全套≥¥${formatCNY(prediction.predictedCents)} > ` +
@@ -332,6 +341,15 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
                   `(样本¥${formatCNY(prediction.minPrice)}-${formatCNY(prediction.maxPrice)})`,
                   "info"
                 );
+                if (shouldAutoBlacklistPrediction) {
+                  addToBlacklist(b.appid, info.gameName || b.gameName || "", 1);
+                  log(
+                    `  → 价格预测自动加入游戏黑名单: ` +
+                    `预测全套≥¥${formatCNY(prediction.predictedCents)} > ` +
+                    `¥${formatCNY(predictionAutoBlacklistCents)}`,
+                    "info"
+                  );
+                }
                 allPriced = false;
                 thresholdSkip = true;
                 break;
@@ -353,9 +371,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           }
 
           if (!allPriced) {
-            if (thresholdSkip) {
-              log(`  → 整套卡牌价格已大于上限，跳过`, "info");
-            } else {
+            if (!thresholdSkip) {
               log(`  → 部分卡牌无法取价, 跳过`, "warn");
             }
             skipped++;
@@ -440,6 +456,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
     } catch (e) {
       log(`扫描中断: ${e?.message || JSON.stringify(e)}`, "err");
     } finally {
+      queue.stop();
       state.scanning = false;
       state.queue = null;
       hideProgress();

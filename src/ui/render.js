@@ -2,7 +2,7 @@ import { state } from "../state.js";
 
 import { createTextSpan, createCheckboxHit } from "../utils/dom.js";
 
-import { getProfileUrl } from "../utils/steam.js";
+import { getProfileUrl, getMarketMinimumPriceCents } from "../utils/steam.js";
 
 import { formatCNY } from "../utils/format.js";
 
@@ -321,12 +321,30 @@ import { updateResultColumns } from "../features/scan.js";
     updateResultColumns();
   }
 
+  export function getAdjustedCompletionCostCents(info) {
+    const originalTotal = Math.max(0, Number(info?.cheapestSetCostCents) || 0);
+    const adjustmentCents = Math.round((Number(state.cfg.priceAdjustment) || 0) * 100);
+    if (adjustmentCents === 0) return originalTotal;
+
+    const minimumCents = getMarketMinimumPriceCents();
+    let knownOriginalTotal = 0;
+    let knownAdjustedTotal = 0;
+    for (const card of Array.isArray(info?.cards) ? info.cards : []) {
+      const quantity = Math.max(0, 1 - (Number(card.owned) || 0));
+      const basePriceCents = Number(card.lowestCents);
+      if (quantity <= 0 || !Number.isFinite(basePriceCents) || basePriceCents <= 0) continue;
+      knownOriginalTotal += basePriceCents * quantity;
+      knownAdjustedTotal += Math.max(minimumCents, basePriceCents + adjustmentCents) * quantity;
+    }
+    return Math.max(0, originalTotal - knownOriginalTotal) + knownAdjustedTotal;
+  }
+
   export function updateSummary() {
     const summary = document.getElementById("stch-summary");
     if (!summary) return;
     const count = state.results.length;
     const modeLabel = state.results.some(info => info.isFoil) ? "闪卡" : "普通卡";
-    const totalCNY = (state.results.reduce((s, r) => s + r.cheapestSetCostCents, 0) / 100).toFixed(2);
+    const totalCNY = (state.results.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0) / 100).toFixed(2);
     const fullCNY = (state.results.reduce((s, r) => s + r.fullSetCostCents, 0) / 100).toFixed(2);
     const lv5CNY = (state.results.reduce((s, r) => s + r.level5CostCents, 0) / 100).toFixed(2);
     summary.innerHTML = `
@@ -345,7 +363,7 @@ import { updateResultColumns } from "../features/scan.js";
     pruneOrderCache(true);
     const count = state.orderResults.length;
     const selectedCount = getSelectedOrderResults().length;
-    const totalCNY = (state.orderResults.reduce((s, r) => s + r.cheapestSetCostCents, 0) / 100).toFixed(2);
+    const totalCNY = (state.orderResults.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0) / 100).toFixed(2);
     const fullCNY = (state.orderResults.reduce((s, r) => s + r.fullSetCostCents, 0) / 100).toFixed(2);
     const lv5CNY = (state.orderResults.reduce((s, r) => s + r.level5CostCents, 0) / 100).toFixed(2);
     summary.innerHTML = `

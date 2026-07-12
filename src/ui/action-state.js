@@ -231,4 +231,8 @@ import { SEASONAL_BADGE_MAX_LEVEL } from "../constants.js";
     updateSeasonalActionState();
     updateSurplusActionState();
     updateGrindActionState();
+    const settingsBusy = isSharedActionBusy();
+    ["stch-settings-clear-cache", "stch-settings-reset"].forEach(id => {
+      document.getElementById(id)?.classList.toggle("disabled", settingsBusy);
+    });
   }

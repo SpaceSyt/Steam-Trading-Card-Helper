@@ -578,15 +578,14 @@ export { updateGrindActionState };
       cfg.batchPause,
       state,
       setGrindStatus,
-      grindLog,
-      cfg.scanInterval
+      grindLog
     );
     state.grindQueue = queue;
 
     try {
       grindLog("【阶段 1/3】读取宝石袋市场价格");
       setGrindProgress(0, 1, "阶段1: 读取宝石价格");
-      const gemPrice = await loadSidebarGemPrice();
+      const gemPrice = await loadSidebarGemPrice(queue);
       if (!gemPrice.priceCents) {
         throw new Error("宝石袋暂无可用市场价格，无法计算分解临界点");
       }

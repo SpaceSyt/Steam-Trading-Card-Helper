@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Rate Limit Probe Harness</title>
+  <script>
+    let requestCount = 0;
+    const responseDelayMs = 30;
+    const nextStatus = () => (++requestCount % 3 === 0 ? 429 : 200);
+    const responseText = status => status >= 200 && status < 300 ? "{}" : "";
+
+    window.fetch = () => new Promise(resolve => {
+      const status = nextStatus();
+      setTimeout(() => resolve(new Response(responseText(status), { status })), responseDelayMs);
+    });
+
+    window.XMLHttpRequest = class FakeXMLHttpRequest {
+      open(_method, url) { this.responseURL = url; }
+      send() {
+        this.status = nextStatus();
+        this.responseText = responseText(this.status);
+        setTimeout(() => this.onload?.(), responseDelayMs);
+      }
+    };
+
+    window.GM_xmlhttpRequest = options => {
+      const status = nextStatus();
+      setTimeout(() => options.onload?.({ status, responseText: responseText(status) }), responseDelayMs);
+    };
+    window.GM_addStyle = css => {
+      const style = document.createElement("style");
+      style.textContent = css;
+      document.head.appendChild(style);
+    };
+
+    window.unsafeWindow = window;
+    window.g_strProfileURL = "http://127.0.0.1:8765/profile";
+    window.g_steamID = "76561198000000000";
+    window.jQuery = {
+      ajax() {
+        const status = nextStatus();
+        let doneCallback = null;
+        let failCallback = null;
+        let scheduled = false;
+        const schedule = () => {
+          if (scheduled) return;
+          scheduled = true;
+          setTimeout(() => {
+            const jqXHR = { status, responseText: responseText(status) };
+            if (status >= 200 && status < 300) doneCallback?.("{}", "success", jqXHR);
+            else failCallback?.(jqXHR, "error", `HTTP ${status}`);
+          }, responseDelayMs);
+        };
+        return {
+          done(callback) { doneCallback = callback; schedule(); return this; },
+          fail(callback) { failCallback = callback; schedule(); return this; }
+        };
+      }
+    };
+  </script>
+</head>
+<body>
+  <div class="badges_header"></div>
+  <script src="rate-limit-probe.user.js"></script>
+</body>
+</html>

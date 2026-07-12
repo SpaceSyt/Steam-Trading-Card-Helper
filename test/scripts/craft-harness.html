@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>STCH Craft Harness</title>
+</head>
+<body>
+  <div class="profile_xp_block"></div>
+  <script src="../fixtures/dmc-craft-fixture.js"></script>
+  <script>
+    window.unsafeWindow = window;
+    window.g_strProfileURL = "https://steamcommunity.com/id/FixtureUser";
+    window.g_steamID = "76561198000000000";
+    window.g_sessionID = "fixture-session";
+    window.jQuery = () => ({});
+    window.__gmStore = new Map([
+      ["stch_sidebar_gem_price", { priceCents: 446, observedAt: Date.now() - 60000 }],
+      ["stch_onboarding_seen", true],
+    ]);
+    if (new URLSearchParams(location.search).get("order") === "1") {
+      window.__gmStore.set("stch_order_cache", JSON.stringify([{
+        appid: "999001",
+        gameName: "Order Summary Fixture",
+        level: 0,
+        targetLevel: 5,
+        totalInSet: 2,
+        isFoil: false,
+        cards: [
+          { name: "Fixture A", owned: 0, lowestCents: 30, medianCents: 32, marketHashName: "999001-A", priceSource: "lowest" },
+          { name: "Fixture B", owned: 0, lowestCents: 40, medianCents: 42, marketHashName: "999001-B", priceSource: "lowest" },
+        ],
+        cardPrices: [],
+        cheapestSetCostCents: 70,
+        fullSetCostCents: 70,
+        level5CostCents: 350,
+        cheapestSetCNY: "0.70",
+        fullSetCNY: "0.70",
+        level5CNY: "3.50",
+        minVolume: 10,
+        cachedAt: Date.now(),
+      }]));
+    }
+    window.GM_getValue = (key, fallback) => window.__gmStore.has(key)
+      ? window.__gmStore.get(key)
+      : fallback;
+    window.GM_setValue = (key, value) => window.__gmStore.set(key, value);
+    window.GM_addStyle = css => {
+      const style = document.createElement("style");
+      style.textContent = css;
+      document.head.appendChild(style);
+    };
+
+    const badgesHtml = `
+      <div class="badges_sheet">
+        <div class="badge_row">
+          <a class="badge_row_overlay"
+             href="https://steamcommunity.com/id/FixtureUser/gamecards/329050/"></a>
+          <div class="badge_title">Devil May Cry 4 Special Edition <span>查看详情</span></div>
+          <div class="badge_progress_info">
+            <a class="badge_craft_button"
+               href="https://steamcommunity.com/id/FixtureUser/gamecards/329050/">收集齐全</a>
+          </div>
+        </div>
+      </div>
+    `;
+    window.__craftRequests = [];
+    window.fetch = async (url, options = {}) => {
+      const target = String(url);
+      if (target.includes("/badges/")) {
+        return new Response(badgesHtml, {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+      if (target.includes("/gamecards/329050/")) {
+        const fixtureHtml = typeof window.__dmcCraftFixture === "string"
+          ? window.__dmcCraftFixture
+          : window.__dmcCraftFixture?.value || "";
+        return new Response(fixtureHtml, {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+      if (target.includes("/ajaxcraftbadge/")) {
+        window.__craftRequests.push({
+          url: target,
+          method: options.method,
+          headers: options.headers,
+          body: options.body,
+        });
+        return new Response(JSON.stringify({
+          success: 1,
+          rgDroppedItems: [
+            { title: "Fixture Background" },
+            { title: ":fixture:" },
+          ],
+          Badge: {
+            title: "Green Orb",
+            xp: "200",
+            game: "Devil May Cry 4 Special Edition",
+          },
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+      if (target.includes("/inventory/")) {
+        return new Response(JSON.stringify({
+          success: 1,
+          total_inventory_count: 0,
+          assets: [],
+          descriptions: [],
+          more_items: 0,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+      if (target.includes("/market/priceoverview/")) {
+        return new Response(JSON.stringify({
+          success: true,
+          lowest_price: "¥4.40",
+          median_price: "¥4.42",
+          volume: "1,234",
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    };
+  </script>
+  <script src="../../steam-trading-card-helper.user.js"></script>
+</body>
+</html>

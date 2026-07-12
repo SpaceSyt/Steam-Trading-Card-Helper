@@ -151,6 +151,10 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    #stch-sidebar-gem-price { font-size: 12px; }
+    .stch-sidebar-price-rise { color: #d85c5c; }
+    .stch-sidebar-price-fall { color: #68b86b; }
+    .stch-sidebar-price-flat { color: #8f98a0; }
     .stch-sidebar-progress {
       height: 6px;
       background: #0e1621;
@@ -241,6 +245,28 @@
       align-items: center;
       flex-wrap: wrap;
       font-size: 13px;
+    }
+    .stch-settings-page-actions {
+      margin-top: 20px;
+      padding-top: 12px;
+      border-top: 1px solid #45556b;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .stch-settings-page-actions .stch-footer-status { margin-right: auto; }
+    .stch-settings-page-actions .stch-btn {
+      padding: 6px 11px;
+      font-size: 13px;
+    }
+    .stch-footer-status {
+      color: #8db7d7;
+      min-height: 16px;
+    }
+    #stch-tab-settings {
+      overflow-y: auto;
+      padding-right: 4px;
     }
     .stch-input {
       background: #0e1621;
@@ -842,6 +868,12 @@
       color: #8f98a0;
     }
     .stch-toolbar label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+    .stch-settings-hint {
+      color: #697887;
+      font-size: 12px;
+    }
+    .stch-settings-hint::before { content: "* "; }
+    .stch-settings-hint-block { margin-top: 4px; }
     .stch-primary-label { color: #fff !important; font-weight: bold; }
     .stch-foil-mode-label {
       color: #d9a4e8;

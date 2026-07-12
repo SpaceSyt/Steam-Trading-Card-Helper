@@ -298,8 +298,7 @@ export { updateCraftActionState };
       cfg.batchPause,
       state,
       null,
-      craftLog,
-      cfg.scanInterval
+      craftLog
     );
     state.craftQueue = queue;
 

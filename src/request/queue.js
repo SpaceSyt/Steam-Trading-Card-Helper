@@ -5,13 +5,11 @@
       batchPause = 53000,
       state = null,
       onStatus = null,
-      onLog = null,
-      otherInterval = 0
+      onLog = null
     ) {
       this.interval = interval;
       this.batchSize = batchSize;
       this.batchPause = batchPause;
-      this.otherInterval = otherInterval;
       this.state = state;
       this.onStatus = onStatus;
       this.onLog = onLog;
@@ -39,10 +37,6 @@
 
     _priceInterval() {
       return this._cfgNumber("requestInterval", this.interval, 0);
-    }
-
-    _otherRequestInterval() {
-      return this._cfgNumber("scanInterval", this.otherInterval, 0);
     }
 
     _batchSizeLimit() {
@@ -174,13 +168,9 @@
               );
               continue;
             }
+            const elapsed = Date.now() - requestStartedAt;
+            await this._sleep(Math.max(0, this._priceInterval() - elapsed));
           }
-
-          const targetInterval = isPriceOverview
-            ? this._priceInterval()
-            : this._otherRequestInterval();
-          const elapsed = Date.now() - requestStartedAt;
-          await this._sleep(Math.max(0, targetInterval - elapsed));
         }
       } finally {
         this.running = false;

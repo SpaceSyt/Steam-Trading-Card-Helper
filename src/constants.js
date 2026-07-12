@@ -10,6 +10,8 @@
 
   export const SIDEBAR_PINNED_KEY = "stch_sidebar_pinned";
 
+  export const SIDEBAR_GEM_PRICE_KEY = "stch_sidebar_gem_price";
+
   export const ORDER_CACHE_KEY = "stch_order_cache";
 
   export const SIDEBAR_GEM_SACK_HASH = "753-Sack of Gems";

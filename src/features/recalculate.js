@@ -39,8 +39,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       cfg.batchPause,
       state,
       statusFn,
-      logFn,
-      cfg.scanInterval
+      logFn
     );
 
     let refreshed = 0;

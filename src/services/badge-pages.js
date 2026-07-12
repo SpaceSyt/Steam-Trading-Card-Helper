@@ -88,8 +88,6 @@ import { getProfileUrl } from "../utils/steam.js";
 
       const nextLink = doc.querySelector(`a.pagebtn[href*="p=${page + 1}"]`);
       if (!nextLink) break;
-
-      await new Promise(r => setTimeout(r, cfg.scanInterval));
     }
 
     onProgress?.(`徽章列表扫描完成, 共 ${candidates.length} 个${scanModeLabel}候选`);

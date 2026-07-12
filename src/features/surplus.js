@@ -363,8 +363,7 @@ export { updateSurplusActionState };
       cfg.batchPause,
       state,
       setSurplusStatus,
-      surplusLog,
-      cfg.scanInterval
+      surplusLog
     );
     state.surplusQueue = queue;
 
@@ -408,7 +407,9 @@ export { updateSurplusActionState };
         try {
           const rows = await resolveSurplusForBadge(group, profileUrl, queue);
           if (rows.length === 0) {
-            surplusLog(`[${group.appid}] ${label}: 没有升满后剩余`, "info");
+            if (state.cfg.showNoResultLogs) {
+              surplusLog(`[${group.appid}] ${label}: 没有升满后剩余`, "info");
+            }
             continue;
           }
           state.surplusResults.push(...rows);
@@ -442,7 +443,7 @@ export { updateSurplusActionState };
       if (!state.surplusStopRequested && state.surplusResults.length > 0) {
         surplusLog("【阶段 3/3】正在查询市场成交量并计算宝石价值");
         try {
-          state.surplusGemPrice = await loadSidebarGemPrice();
+          state.surplusGemPrice = await loadSidebarGemPrice(queue);
           if (state.surplusGemPrice.priceCents) {
             surplusLog(
               `宝石袋 ${state.surplusGemPrice.source} ¥${formatCNY(state.surplusGemPrice.priceCents)}`,

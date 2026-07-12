@@ -51,8 +51,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       cfg.batchPause,
       state,
       setOrderStatus,
-      orderLog,
-      cfg.scanInterval
+      orderLog
     );
 
     try {

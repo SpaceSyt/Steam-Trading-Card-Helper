@@ -18,7 +18,7 @@ export async function priceCard(marketHashName, queue) {
       return res?.data?.success ? { noPriceData: true, volume: 0 } : null;
     }
 
-    const volume = parseInt(res?.data?.volume, 10) || 0;
+    const volume = parseInt(String(res?.data?.volume || "").replace(/[^\d]/g, ""), 10) || 0;
 
     return {
       lowestSellCents: sellCents,

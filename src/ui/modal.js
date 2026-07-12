@@ -26,11 +26,11 @@ import { submitSelectedProcessingSell, submitSelectedProcessingGems } from "../f
 
 import { renderBlacklist, updateBlRow, addToBlacklist, lookupGameName } from "../features/blacklist.js";
 
-import { renderResults, renderOrderResults, updateOrderResultColumns } from "./render.js";
+import { renderResults, renderOrderResults, updateSummary, updateOrderSummary, updateOrderResultColumns } from "./render.js";
 
 import { updateAllActionStates, updateBulkActionState } from "./action-state.js";
 
-import { pruneOrderCache } from "../services/order-cache.js";
+import { clearOrderCache, pruneOrderCache, readRawOrderCache } from "../services/order-cache.js";
 
   let modalEl = null;
 
@@ -115,9 +115,9 @@ import { pruneOrderCache } from "../services/order-cache.js";
     buildModal();
   }
 
-  export function buildModal() {
+  export function buildModal(options = {}) {
     const seasonalOnly = isPointsShopPage();
-    const initialTab = seasonalOnly ? "seasonal" : "scan";
+    const initialTab = seasonalOnly ? "seasonal" : options.initialTab || "scan";
     const activeClass = tabName => initialTab === tabName ? "active" : "";
     const backdrop = document.createElement("div");
     backdrop.id = "stch-backdrop";
@@ -143,7 +143,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
           <span class="stch-tab" data-tab="craft">徽章合成</span>
           <span class="stch-tab" data-tab="blacklist">游戏/AppID黑名单</span>
           <span class="stch-tab" data-tab="surplus">多余物品处理</span>
-          <span class="stch-tab stch-tab-right" data-tab="settings">设置</span>
+          <span class="stch-tab stch-tab-right ${activeClass("settings")}" data-tab="settings">设置</span>
           `}
         </div>
         <div class="stch-tab-content ${activeClass("scan")}" id="stch-tab-scan">
@@ -235,6 +235,18 @@ import { pruneOrderCache } from "../services/order-cache.js";
             <div class="stch-btn alt disabled" id="stch-order-recalculate-btn">重新计算</div>
             <div class="stch-btn disabled" id="stch-order-submit-orders-btn">提交订购单</div>
             <div class="stch-btn alt stch-btn-danger disabled stch-order-tools" id="stch-order-delete-btn">删除过期</div>
+          </div>
+          <div class="stch-toolbar">
+            <label class="stch-primary-label">购买价格
+              <span class="stch-help" title="在售最低：当前最低卖单价格，通常可立即成交&#10;平均价格：Steam 返回的 median_price，用作市场参考价&#10;求购最高：当前最高买单价格，通常需要等待卖家成交">?</span>
+              <select id="stch-order-page-price-source" class="stch-input" style="width:118px">
+                <option value="lowest" ${state.cfg.orderPriceSource === "lowest" ? "selected" : ""}>在售最低</option>
+                <option value="median" ${state.cfg.orderPriceSource === "median" ? "selected" : ""}>平均价格</option>
+                <option value="highest" ${state.cfg.orderPriceSource === "highest" ? "selected" : ""}>求购最高</option>
+              </select>
+            </label>
+            <label class="stch-primary-label">买价调整 ¥ <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
+            <span class="stch-settings-hint">与卡牌价格扫描页同步；补全总价会实时计入每张卡牌的调整值</span>
           </div>
           <div class="stch-summary" id="stch-order-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-order-summary"></span>
@@ -394,32 +406,49 @@ import { pruneOrderCache } from "../services/order-cache.js";
             <div id="stch-grind-log"></div>
           </div>
         </div>
-        <div class="stch-tab-content" id="stch-tab-settings">
-          <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">卡牌价格扫描</div>
+        <div class="stch-tab-content ${activeClass("settings")}" id="stch-tab-settings">
+          <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">全局设定</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
             <label>priceoverview请求间隔 <input id="stch-req-interval" class="stch-input" type="number" min="100" step="10" value="${state.cfg.requestInterval}" style="width:70px"> ms</label>
-            <label>gamecard请求间隔 <input id="stch-scan-interval" class="stch-input" type="number" min="0" step="100" value="${state.cfg.scanInterval}"> ms</label>
-          </div>
-          <div class="stch-toolbar">
             <label>每 <input id="stch-batch-size" class="stch-input" type="number" min="5" step="1" value="${state.cfg.batchSize}" style="width:55px"> 次priceoverview请求后暂停</label>
             <label><input id="stch-batch-pause" class="stch-input" type="number" min="500" step="500" value="${state.cfg.batchPause}" style="width:75px"> ms</label>
           </div>
           <div class="stch-toolbar">
+            <label title="显示扫描过程中没有产生结果的常规信息">
+              <input id="stch-show-no-result-logs" type="checkbox" ${state.cfg.showNoResultLogs ? "checked" : ""}>
+              显示无结果日志
+            </label>
+            <span class="stch-settings-hint">包括“没有升满后剩余”等常规信息，默认隐藏</span>
+          </div>
+          <div class="stch-settings-hint stch-settings-hint-block">价格 API 默认使用 330ms 间隔，每 20 次请求主动冷却 53s；如遇 429 可适当调高。</div>
+          <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">卡牌价格扫描</div>
+          <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+          <div class="stch-toolbar">
             <label><input id="stch-early-price-prediction" type="checkbox" ${state.cfg.earlyPricePrediction ? "checked" : ""}> 价格预测提早跳过</label>
-            <span style="color:#8f98a0;font-size:12px;">扫描部分卡牌后保守预测全套价格，超过上限时提前跳过</span>
+            <span class="stch-settings-hint">扫描部分卡牌后保守预测全套价格，超过扫描上限时提前跳过</span>
           </div>
           <div class="stch-toolbar">
             <label>订购卡牌缓存 <input id="stch-order-cache-days" class="stch-input" type="number" min="0" step="1" value="${state.cfg.orderCacheDays}" style="width:55px"> 天</label>
             <label><input id="stch-skip-cached-orders" type="checkbox" ${state.cfg.skipCachedOrderResults ? "checked" : ""}> 扫描时跳过缓存内结果</label>
-            <span style="color:#8f98a0;font-size:12px;">缓存超期会自动删除；天数显示与黑名单一致，0 为今天</span>
+            <span class="stch-settings-hint">缓存超期会自动删除；天数显示与黑名单一致，0 为今天</span>
           </div>
-          <div style="color:#8f98a0;font-size:12px;margin-top:4px;">默认值为作者测试稳定配置 (330ms / 53s)。如遇 429 可调高 100ms / 5s。gamecard 通常不需要调整，保持 0 即可。</div>
+          <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">游戏/AppID 黑名单</div>
+          <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+          <div class="stch-toolbar">
+            <label>
+              <input id="stch-settings-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
+              启用自动游戏黑名单
+            </label>
+            <label class="stch-primary-label">价格上限 ¥ <input id="stch-settings-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
+            <label><input id="stch-settings-early-prediction-auto-blacklist" type="checkbox" ${state.cfg.earlyPredictionAutoBlacklist ? "checked" : ""}> 预测跳过时加入自动黑名单</label>
+            <span class="stch-settings-hint">预测价格也必须超过自动黑名单价格上限才会加入</span>
+          </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">徽章合成</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
             <label>每次合成请求间隔 <input id="stch-craft-interval" class="stch-input" type="number" min="200" step="100" value="${state.cfg.craftInterval}" style="width:70px"> ms</label>
-            <span style="color:#8f98a0;font-size:12px;">逐级升级按每一级等待；一次升满按每个徽章等待</span>
+            <span class="stch-settings-hint">逐级升级按每一级等待；一次升满按每个徽章等待</span>
           </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">多余物品处理</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
@@ -430,15 +459,18 @@ import { pruneOrderCache } from "../services/order-cache.js";
               重复物品计算包含点数商店物品
             </label>
           </div>
-          <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">使用说明</div>
-          <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
-          <div class="stch-toolbar">
+          ${seasonalOnly ? "" : `
+          <div class="stch-settings-page-actions">
+            <span class="stch-footer-status" id="stch-settings-action-status"></span>
             <div class="stch-btn alt" id="stch-onboarding-open">重新查看使用说明</div>
+            <div class="stch-btn alt" id="stch-settings-clear-cache" title="清除订购卡牌缓存">清除缓存</div>
+            <div class="stch-btn stch-btn-danger" id="stch-settings-reset">恢复默认设定</div>
           </div>
+          `}
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.0.1 · 默认货币：人民币(CNY)</span>
+        <span class="stch-label">V2.0.5 · 默认货币：人民币(CNY)</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -498,11 +530,6 @@ import { pruneOrderCache } from "../services/order-cache.js";
         state.cfg.threshold ?? DEFAULT_CONFIG.threshold,
         { min: 0 }
       );
-      state.cfg.scanInterval = readNumberInput(
-        "stch-scan-interval",
-        state.cfg.scanInterval ?? DEFAULT_CONFIG.scanInterval,
-        { integer: true, min: 0 }
-      );
       state.cfg.requestInterval = readNumberInput(
         "stch-req-interval",
         state.cfg.requestInterval ?? DEFAULT_CONFIG.requestInterval,
@@ -525,6 +552,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
         state.cfg.batchPause ?? DEFAULT_CONFIG.batchPause,
         { integer: true, min: 0 }
       );
+      state.cfg.showNoResultLogs = !!document.getElementById("stch-show-no-result-logs")?.checked;
       const buyModeEl = document.getElementById("stch-buy-mode");
       if (state.cfg.foilScanMode) {
         state.cfg.buyMode = buyModeEl?.dataset.normalValue || state.cfg.buyMode || DEFAULT_CONFIG.buyMode;
@@ -539,6 +567,7 @@ import { pruneOrderCache } from "../services/order-cache.js";
         state.cfg.priceAdjustment ?? DEFAULT_CONFIG.priceAdjustment
       );
       state.cfg.earlyPricePrediction = !!document.getElementById("stch-early-price-prediction")?.checked;
+      state.cfg.earlyPredictionAutoBlacklist = !!document.getElementById("stch-settings-early-prediction-auto-blacklist")?.checked;
       state.cfg.orderCacheDays = readNumberInput(
         "stch-order-cache-days",
         state.cfg.orderCacheDays ?? DEFAULT_CONFIG.orderCacheDays,
@@ -611,12 +640,11 @@ import { pruneOrderCache } from "../services/order-cache.js";
         updateSeasonalSummary();
       }
     };
-    const cfgIds = ["stch-threshold", "stch-scan-interval",
-      "stch-req-interval", "stch-max-pages", "stch-include-drops",
+    const cfgIds = ["stch-threshold", "stch-req-interval",
+      "stch-max-pages", "stch-include-drops",
       "stch-foil-scan-mode",
-      "stch-batch-size", "stch-batch-pause", "stch-buy-mode",
-      "stch-order-price-source", "stch-price-adjustment",
-      "stch-early-price-prediction", "stch-order-cache-days",
+      "stch-batch-size", "stch-batch-pause", "stch-show-no-result-logs", "stch-buy-mode",
+      "stch-early-price-prediction", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
       "stch-skip-cached-orders", "stch-craft-interval",
       "stch-craft-mode", "stch-seasonal-target", "stch-surplus-item-mode",
       "stch-surplus-only-maxed", "stch-surplus-only-tradable", "stch-surplus-compare-gems", "stch-surplus-sell-price-source",
@@ -629,6 +657,52 @@ import { pruneOrderCache } from "../services/order-cache.js";
       el.addEventListener("input", () => syncConfigFromInputs(id));
       el.addEventListener("change", () => syncConfigFromInputs(id));
     });
+
+    const orderPriceSourceIds = [
+      "stch-order-price-source",
+      "stch-order-page-price-source",
+    ];
+    const orderPriceAdjustmentIds = [
+      "stch-price-adjustment",
+      "stch-order-page-price-adjustment",
+    ];
+    const refreshPricingSummaries = () => {
+      updateSummary();
+      updateOrderSummary();
+    };
+    const renderOrderPricingControls = (exceptId = "") => {
+      orderPriceSourceIds.forEach(id => {
+        if (id === exceptId) return;
+        const input = document.getElementById(id);
+        if (input) input.value = state.cfg.orderPriceSource || DEFAULT_CONFIG.orderPriceSource;
+      });
+      orderPriceAdjustmentIds.forEach(id => {
+        if (id === exceptId) return;
+        const input = document.getElementById(id);
+        if (input) input.value = String(state.cfg.priceAdjustment ?? DEFAULT_CONFIG.priceAdjustment);
+      });
+    };
+    orderPriceSourceIds.forEach(id => {
+      document.getElementById(id)?.addEventListener("change", event => {
+        state.cfg.orderPriceSource = event.currentTarget.value;
+        renderOrderPricingControls();
+        saveConfig(state.cfg);
+        refreshPricingSummaries();
+      });
+    });
+    const syncOrderPriceAdjustment = (event, normalizeSource = false) => {
+      const parsed = parseFloat(event.currentTarget.value);
+      state.cfg.priceAdjustment = Number.isFinite(parsed) ? parsed : 0;
+      renderOrderPricingControls(normalizeSource ? "" : event.currentTarget.id);
+      saveConfig(state.cfg);
+      refreshPricingSummaries();
+    };
+    orderPriceAdjustmentIds.forEach(id => {
+      const input = document.getElementById(id);
+      input?.addEventListener("input", event => syncOrderPriceAdjustment(event, false));
+      input?.addEventListener("change", event => syncOrderPriceAdjustment(event, true));
+    });
+    renderOrderPricingControls();
 
     const activateTab = tabName => {
       modal.querySelectorAll(".stch-tab").forEach(tab => {
@@ -651,6 +725,55 @@ import { pruneOrderCache } from "../services/order-cache.js";
       const onboarding = document.getElementById("stch-onboarding");
       if (onboarding) onboarding.style.display = "none";
     };
+    let settingsStatusTimer = null;
+    const setSettingsActionStatus = text => {
+      const status = document.getElementById("stch-settings-action-status");
+      if (!status) return;
+      status.textContent = text;
+      if (settingsStatusTimer) clearTimeout(settingsStatusTimer);
+      settingsStatusTimer = text
+        ? setTimeout(() => { status.textContent = ""; }, 3500)
+        : null;
+    };
+    const clearCachedOrders = event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      const cachedCount = readRawOrderCache().length;
+      if (cachedCount === 0) {
+        clearOrderCache();
+        renderOrderResults();
+        updateAllActionStates();
+        setSettingsActionStatus("订购缓存为空");
+        return;
+      }
+      if (!confirm(`将移除 ${cachedCount} 项订购卡牌缓存，确定？`)) return;
+      clearOrderCache();
+      renderOrderResults();
+      updateAllActionStates();
+      setSettingsActionStatus(`已移除 ${cachedCount} 项缓存`);
+    };
+    const restoreDefaultSettings = event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      if (!confirm("将恢复所有设置项为默认值。游戏/AppID黑名单和订购缓存会保留，确定？")) return;
+      const preservedKeys = [
+        "blacklist",
+        "blacklistNames",
+        "blacklistSources",
+        "blacklistDates",
+        "blacklistFixed",
+      ];
+      const preserved = Object.fromEntries(
+        preservedKeys.map(key => [key, state.cfg[key] ?? DEFAULT_CONFIG[key]])
+      );
+      state.cfg = { ...DEFAULT_CONFIG, ...preserved };
+      saveConfig(state.cfg);
+
+      modal.remove();
+      document.getElementById("stch-backdrop")?.remove();
+      modalEl = null;
+      buildModal({ initialTab: "settings", suppressOnboarding: true });
+      const status = document.getElementById("stch-settings-action-status");
+      if (status) status.textContent = "已恢复默认设定";
+    };
 
     // Tab switching
     modal.querySelectorAll(".stch-tab[data-tab]").forEach(tab => {
@@ -660,7 +783,9 @@ import { pruneOrderCache } from "../services/order-cache.js";
     });
 
     document.getElementById("stch-onboarding-close").addEventListener("click", closeOnboarding);
-    document.getElementById("stch-onboarding-open").addEventListener("click", showOnboarding);
+    document.getElementById("stch-onboarding-open")?.addEventListener("click", showOnboarding);
+    document.getElementById("stch-settings-clear-cache")?.addEventListener("click", clearCachedOrders);
+    document.getElementById("stch-settings-reset")?.addEventListener("click", restoreDefaultSettings);
     document.getElementById("stch-scan-btn").addEventListener("click", startScan);
     document.getElementById("stch-stop-btn").addEventListener("click", requestStop);
     document.getElementById("stch-skip-btn").addEventListener("click", skipCurrentBadge);
@@ -715,21 +840,50 @@ import { pruneOrderCache } from "../services/order-cache.js";
     craftMaxPagesInput.addEventListener("input", syncCraftMaxPages);
     craftMaxPagesInput.addEventListener("change", syncCraftMaxPages);
 
-    // Auto blacklist threshold
-    const syncAutoBlacklistThreshold = () => {
-      state.cfg.autoBlackThreshold = parseFloat(document.getElementById("stch-auto-bl-threshold").value) || 0;
+    // Keep the blacklist tab and settings copy on the same persisted values.
+    const autoBlacklistEnabledIds = [
+      "stch-auto-bl-enabled",
+      "stch-settings-auto-bl-enabled",
+    ];
+    const autoBlacklistThresholdIds = [
+      "stch-auto-bl-threshold",
+      "stch-settings-auto-bl-threshold",
+    ];
+    const renderAutoBlacklistControls = (exceptId = "") => {
+      autoBlacklistEnabledIds.forEach(id => {
+        if (id === exceptId) return;
+        const input = document.getElementById(id);
+        if (input) input.checked = !!state.cfg.autoBlackEnabled;
+      });
+      autoBlacklistThresholdIds.forEach(id => {
+        if (id === exceptId) return;
+        const input = document.getElementById(id);
+        if (input) input.value = String(state.cfg.autoBlackThreshold ?? 0);
+      });
+    };
+    autoBlacklistEnabledIds.forEach(id => {
+      document.getElementById(id)?.addEventListener("change", event => {
+        state.cfg.autoBlackEnabled = !!event.currentTarget.checked;
+        renderAutoBlacklistControls();
+        saveConfig(state.cfg);
+      });
+    });
+    const syncAutoBlacklistThreshold = (event, normalizeSource = false) => {
+      const parsed = parseFloat(event.currentTarget.value);
+      state.cfg.autoBlackThreshold = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+      renderAutoBlacklistControls(normalizeSource ? "" : event.currentTarget.id);
       saveConfig(state.cfg);
     };
-    document.getElementById("stch-auto-bl-threshold").addEventListener("input", syncAutoBlacklistThreshold);
-    document.getElementById("stch-auto-bl-threshold").addEventListener("change", syncAutoBlacklistThreshold);
-    document.getElementById("stch-auto-bl-enabled").addEventListener("change", () => {
-      state.cfg.autoBlackEnabled = document.getElementById("stch-auto-bl-enabled").checked;
-      saveConfig(state.cfg);
+    autoBlacklistThresholdIds.forEach(id => {
+      const input = document.getElementById(id);
+      input?.addEventListener("input", event => syncAutoBlacklistThreshold(event, false));
+      input?.addEventListener("change", event => syncAutoBlacklistThreshold(event, true));
     });
+    renderAutoBlacklistControls();
 
     applyScanModeTheme();
 
-    if (!isPointsShopPage() && !GM_getValue(ONBOARDING_SEEN_KEY, false)) {
+    if (!options.suppressOnboarding && !isPointsShopPage() && !GM_getValue(ONBOARDING_SEEN_KEY, false)) {
       showOnboarding();
     }
 
@@ -873,6 +1027,8 @@ import { pruneOrderCache } from "../services/order-cache.js";
     renderGrindResults();
     pruneOrderCache(true);
     renderOrderResults();
+    renderResults();
+    updateAllActionStates();
   }
 
   export function closeModal() {

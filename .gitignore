@@ -3,5 +3,4 @@
 *.log
 *.tmp
 node_modules/
-test/
-tests/
+test/fixtures/

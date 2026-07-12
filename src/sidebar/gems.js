@@ -59,21 +59,22 @@ import { parsePrice } from "../parsers/price.js";
     };
   }
 
-  export async function loadSidebarGemPrice() {
+  export async function loadSidebarGemPrice(queue = null) {
     const params = new URLSearchParams({
       appid: "753",
       currency: "23",
       market_hash_name: SIDEBAR_GEM_SACK_HASH,
     });
-    const data = await stchRequestJson(
-      `https://steamcommunity.com/market/priceoverview/?${params.toString()}`
-    );
+    const url = `https://steamcommunity.com/market/priceoverview/?${params.toString()}`;
+    const data = queue
+      ? (await queue.fetch(url))?.data
+      : await stchRequestJson(url);
     const lowestCents = parsePrice(data?.lowest_price);
     const medianCents = parsePrice(data?.median_price);
     const priceCents = lowestCents || medianCents;
     return {
       priceCents,
       source: lowestCents ? "在售最低" : medianCents ? "平均价格" : "暂无价格",
-      volume: parseInt(data?.volume, 10) || 0,
+      volume: parseInt(String(data?.volume || "").replace(/[^\d]/g, ""), 10) || 0,
     };
   }

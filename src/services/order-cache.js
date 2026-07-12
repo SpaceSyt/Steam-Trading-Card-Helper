@@ -63,6 +63,14 @@ import { getResultKey } from "./result-info.js";
     );
   }
 
+  export function clearOrderCache() {
+    state.orderResults = [];
+    state.selectedOrderResults = new Set();
+    state.pendingOrderQuantities = new Map();
+    state.highestBuyPrices = new Map();
+    saveOrderCache();
+  }
+
   export function pruneOrderCache(persist = false) {
     const before = state.orderResults.length;
     state.orderResults = state.orderResults

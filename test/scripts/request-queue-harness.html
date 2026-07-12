@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Request Queue Harness</title>
+</head>
+<body>
+  <pre id="result">running</pre>
+  <script type="module">
+    import { RequestQueue } from "../../src/request/queue.js";
+
+    const statusHistory = [];
+    let currentStatus = "";
+    window.fetch = async () => new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const state = {
+      cfg: {
+        requestInterval: 0,
+        batchSize: 1,
+        batchPause: 600,
+      },
+      stopRequested: false,
+    };
+    const setStatus = text => {
+      currentStatus = text || "";
+      statusHistory.push(currentStatus);
+    };
+    const queue = new RequestQueue(0, 1, 600, state, setStatus);
+
+    await queue.fetch("https://steamcommunity.com/market/priceoverview/?fixture=1");
+    queue.stop();
+    setStatus(null);
+    await new Promise(resolve => setTimeout(resolve, 850));
+
+    window.__requestQueueHarnessResult = {
+      passed: currentStatus === "",
+      currentStatus,
+      statusHistory,
+    };
+    document.getElementById("result").textContent = JSON.stringify(
+      window.__requestQueueHarnessResult,
+      null,
+      2
+    );
+  </script>
+</body>
+</html>
