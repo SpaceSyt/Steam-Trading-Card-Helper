@@ -3,8 +3,8 @@
 // @name:zh-CN   Steam 卡牌助手
 // @namespace    https://github.com/SpaceSyt/Steam-Trading-Card-Helper
 // @version      __VERSION__
-// @description  Scan card prices, estimate badge costs, streamline purchases, craft badges, and process surplus items
-// @description:zh-CN 扫描卡牌价格、估算徽章成本、辅助批量购买、自动合成徽章，并检测和处理多余卡牌/背景/表情
+// @description  Scan card prices and trends, estimate badge costs, streamline purchases, craft badges, and process surplus items
+// @description:zh-CN 扫描卡牌价格与走势、估算徽章成本、辅助批量购买、自动合成徽章，并检测和处理多余卡牌/背景/表情
 // @author       SpaceSyt
 // @homepageURL  https://github.com/SpaceSyt/Steam-Trading-Card-Helper
 // @supportURL   https://github.com/SpaceSyt/Steam-Trading-Card-Helper/issues

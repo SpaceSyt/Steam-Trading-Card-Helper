@@ -11,6 +11,7 @@ import { getSteamId } from "../utils/steam.js";
 import { loadSidebarGemPrice } from "../sidebar/gems.js";
 
 import { priceCard } from "../parsers/price.js";
+import { persistMarketObservations } from "../services/market-observations.js";
 
 import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, isTradingCardDescription, isFoilCardDescription, getCardGameName, getCommunityItemType, getCommunityItemCategory, getDescriptionImageUrl, getDescriptionColor, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, normalizeInventoryText, addInventoryCard, getDescriptionKey, isPointsShopCommunityItemDescription } from "../parsers/inventory.js";
 
@@ -18,7 +19,7 @@ import { getGemValueSellerNetCents, getGemBreakEvenBuyerPrice, getGemSackSellerN
 
 import { summarizeAssetIds } from "../parsers/inventory.js";
 
-import { updateAllActionStates, updateGrindActionState } from "../ui/action-state.js";
+import { isSharedActionBusy, updateAllActionStates, updateGrindActionState } from "../ui/action-state.js";
 
 import { grindStatus } from "../status-controllers.js";
 
@@ -547,18 +548,7 @@ export { updateGrindActionState };
   }
 
   export async function startGrindScan() {
-    if (
-      state.grindScanning
-      || state.scanning
-      || state.bulkActionRunning
-      || state.orderActionRunning
-      || state.craftScanning
-      || state.craftActionRunning
-      || state.surplusActionRunning
-      || state.surplusScanning
-    ) {
-      return;
-    }
+    if (isSharedActionBusy()) return;
 
     if (location.hostname !== "steamcommunity.com") {
       grindLog("请在 Steam 社区徽章页或库存页使用多余物品处理", "warn");
@@ -591,6 +581,7 @@ export { updateGrindActionState };
       grindLog
     );
     state.grindQueue = queue;
+    const marketRecords = [];
 
     try {
       grindLog("【阶段 1/3】读取宝石袋市场价格");
@@ -650,7 +641,8 @@ export { updateGrindActionState };
         setGrindStatus(`查询价格: ${item.itemName || item.marketHashName}`);
 
         if (item.marketHashName && item.marketableCount > 0) {
-          const price = await priceCard(item.marketHashName, queue);
+          const price = await priceCard(item.marketHashName, queue, { persistMarketCache: false });
+          if (price?.record) marketRecords.push(price.record);
           if (price && !price.noPriceData) {
             item.priceCents = price.lowestSellCents;
             item.medianCents = price.medianCents;
@@ -700,6 +692,7 @@ export { updateGrindActionState };
       }
     } finally {
       queue.stop();
+      persistMarketObservations(marketRecords);
       state.grindQueue = null;
       state.grindScanning = false;
       state.grindStopRequested = false;

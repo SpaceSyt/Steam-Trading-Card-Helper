@@ -12,7 +12,7 @@ import { getBadgeTargetLevel, getBadgeModeLabel, getGameCardsUrl } from "../util
 
 import { createTextSpan, createCheckboxHit } from "../utils/dom.js";
 
-import { updateAllActionStates, updateCraftActionState } from "../ui/action-state.js";
+import { isSharedActionBusy, updateAllActionStates, updateCraftActionState } from "../ui/action-state.js";
 
 import { craftStatus } from "../status-controllers.js";
 
@@ -258,18 +258,7 @@ export { updateCraftActionState };
   }
 
   export async function startCraftScan() {
-    if (
-      state.craftScanning
-      || state.craftActionRunning
-      || state.scanning
-      || state.bulkActionRunning
-      || state.orderActionRunning
-      || state.surplusActionRunning
-      || state.surplusScanning
-      || state.grindScanning
-    ) {
-      return;
-    }
+    if (isSharedActionBusy()) return;
 
     const profileUrl = getProfileUrl();
     if (!profileUrl) {
@@ -560,18 +549,7 @@ export { updateCraftActionState };
   }
 
   export async function submitCraftPlan() {
-    if (
-      state.craftScanning
-      || state.craftActionRunning
-      || state.scanning
-      || state.bulkActionRunning
-      || state.orderActionRunning
-      || state.surplusActionRunning
-      || state.surplusScanning
-      || state.grindScanning
-    ) {
-      return;
-    }
+    if (isSharedActionBusy()) return;
 
     const plan = getCraftPlan();
     if (plan.length === 0) return;

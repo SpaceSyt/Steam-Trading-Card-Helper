@@ -43,6 +43,7 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     const otherBusy = state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
+      || state.historyRefreshing
       || state.surplusActionRunning
       || state.surplusScanning
       || state.grindScanning;
@@ -81,6 +82,7 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     const otherBusy = state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
+      || state.historyRefreshing
       || state.craftScanning
       || state.craftActionRunning
       || state.surplusActionRunning
@@ -109,6 +111,7 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     const otherBusy = state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
+      || state.historyRefreshing
       || state.craftScanning
       || state.craftActionRunning
       || state.surplusActionRunning
@@ -132,6 +135,7 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     return state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
+      || state.historyRefreshing
       || state.craftScanning
       || state.craftActionRunning
       || state.surplusActionRunning
@@ -190,4 +194,8 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     ["stch-settings-clear-cache", "stch-settings-reset"].forEach(id => {
       document.getElementById(id)?.classList.toggle("disabled", settingsBusy);
     });
+    const historyRefresh = document.getElementById("stch-history-refresh");
+    const historyRefreshDisabled = settingsBusy && !state.historyRefreshing;
+    historyRefresh?.classList.toggle("disabled", historyRefreshDisabled);
+    if (historyRefresh) historyRefresh.disabled = historyRefreshDisabled;
   }

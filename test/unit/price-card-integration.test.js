@@ -13,6 +13,11 @@ import {
   loadMarketCache,
 } from "../../src/services/market-cache.js";
 import {
+  MARKET_HISTORY_STORAGE_KEY,
+  loadMarketHistory,
+  selectMarketHistoryRecords,
+} from "../../src/services/market-history.js";
+import {
   MARKET_DATA_SCHEMA_VERSION,
   MARKET_DATA_SOURCES,
 } from "../../src/services/market-data.js";
@@ -110,14 +115,19 @@ test("priceCard follows the active CNY/USD context and keeps their cached record
   });
   const cnyObservedAt = 1_720_000_000_000;
   const usdObservedAt = 1_720_000_001_000;
+  const persistenceResults = [];
 
   initializeActiveCurrency(23);
   Date.now = () => cnyObservedAt;
-  const cnyResult = await priceCard(MARKET_HASH_NAME, queue);
+  const cnyResult = await priceCard(MARKET_HASH_NAME, queue, {
+    onPersist: result => persistenceResults.push(result),
+  });
 
   initializeActiveCurrency(1);
   Date.now = () => usdObservedAt;
-  const usdResult = await priceCard(MARKET_HASH_NAME, queue);
+  const usdResult = await priceCard(MARKET_HASH_NAME, queue, {
+    onPersist: result => persistenceResults.push(result),
+  });
 
   assert.equal(queue.calls.length, 2);
   for (const [call, currencyId] of queue.calls.map((call, index) => [call, [23, 1][index]])) {
@@ -167,14 +177,28 @@ test("priceCard follows the active CNY/USD context and keeps their cached record
     observedAt: usdObservedAt,
   });
 
-  assert.equal(gmWrites.length, 2);
-  assert.ok(gmWrites.every(write => write.key === MARKET_CACHE_STORAGE_KEY));
+  assert.equal(gmWrites.length, 4);
+  assert.equal(gmWrites.filter(write => write.key === MARKET_CACHE_STORAGE_KEY).length, 2);
+  assert.equal(gmWrites.filter(write => write.key === MARKET_HISTORY_STORAGE_KEY).length, 2);
+  assert.equal(persistenceResults.length, 2);
+  assert.ok(persistenceResults.every(result => result.history?.saved === true));
   const loaded = loadMarketCache({ getValue: gmGetValue });
   assert.equal(loaded.ok, true);
   assert.equal(loaded.envelope.records.length, 2);
   assert.deepEqual(findMarketCache(loaded.envelope, cnyRecord), cnyRecord);
   assert.deepEqual(findMarketCache(loaded.envelope, usdRecord), usdRecord);
   assert.equal(findMarketCache(loaded.envelope, { ...cnyRecord, currencyId: 1 }).lowestSellMinor, 3);
+
+  const history = loadMarketHistory({ getValue: gmGetValue });
+  assert.equal(history.ok, true);
+  assert.deepEqual(
+    selectMarketHistoryRecords(history.envelope, cnyRecord, { ttlMs: Infinity }),
+    [cnyRecord]
+  );
+  assert.deepEqual(
+    selectMarketHistoryRecords(history.envelope, usdRecord, { ttlMs: Infinity }),
+    [usdRecord]
+  );
 });
 
 test("priceCard preserves a successful response with no price data", async () => {
@@ -207,6 +231,39 @@ test("priceCard preserves a successful response with no price data", async () =>
   const loaded = loadMarketCache();
   assert.equal(loaded.ok, true);
   assert.deepEqual(findMarketCache(loaded.envelope, record), record);
+  assert.equal(gmStore.has(MARKET_HISTORY_STORAGE_KEY), false);
+});
+
+test("priceCard reports a history persistence failure without overwriting corrupt data", async () => {
+  const corruptHistory = "{not-json";
+  gmStore.set(MARKET_HISTORY_STORAGE_KEY, corruptHistory);
+  const queue = new FakeRequestQueue({
+    23: {
+      success: true,
+      lowest_price: "\u00a5 0.32",
+      median_price: "\u00a5 0.35",
+      volume: "12",
+    },
+  });
+  initializeActiveCurrency(23);
+  let persistence = null;
+  const originalWarn = console.warn;
+  console.warn = () => {};
+
+  let result;
+  try {
+    result = await priceCard(MARKET_HASH_NAME, queue, {
+      onPersist: value => { persistence = value; },
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.equal(result.lowestSellCents, 32);
+  assert.equal(persistence.cache.saved, true);
+  assert.equal(persistence.history.ok, false);
+  assert.equal(persistence.history.saved, false);
+  assert.equal(gmStore.get(MARKET_HISTORY_STORAGE_KEY), corruptHistory);
 });
 
 test("priceCard can defer persistence for a batch caller without changing its result", async () => {
@@ -228,6 +285,7 @@ test("priceCard can defer persistence for a batch caller without changing its re
   assert.equal(result.record.observedAt, observedAt);
   assert.equal(gmWrites.length, 0);
   assert.equal(gmStore.has(MARKET_CACHE_STORAGE_KEY), false);
+  assert.equal(gmStore.has(MARKET_HISTORY_STORAGE_KEY), false);
 });
 
 test("an HKD page context sends currency 29 instead of the configured CNY fallback", async () => {

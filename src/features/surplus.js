@@ -13,6 +13,7 @@ import { loadCommunityInventoryCards } from "../services/inventory.js";
 import { loadSidebarGemPrice } from "../sidebar/gems.js";
 
 import { priceCard } from "../parsers/price.js";
+import { persistMarketObservations } from "../services/market-observations.js";
 
 import { getGemValueSellerNetCents, getSellerReceiveForBuyerPrice } from "../utils/market-fees.js";
 
@@ -20,7 +21,7 @@ import { formatMoney } from "../utils/format.js";
 
 import { findInventoryCardForBadgeCard, selectSurplusAssets, summarizeAssetIds } from "../parsers/inventory.js";
 
-import { updateAllActionStates, updateSurplusActionState } from "../ui/action-state.js";
+import { isSharedActionBusy, updateAllActionStates, updateSurplusActionState } from "../ui/action-state.js";
 
 import { surplusStatus } from "../status-controllers.js";
 
@@ -322,18 +323,7 @@ export { updateSurplusActionState };
   }
 
   export async function startSurplusScan() {
-    if (
-      state.surplusScanning
-      || state.scanning
-      || state.bulkActionRunning
-      || state.orderActionRunning
-      || state.craftScanning
-      || state.craftActionRunning
-      || state.surplusActionRunning
-      || state.grindScanning
-    ) {
-      return;
-    }
+    if (isSharedActionBusy()) return;
 
     if (location.hostname !== "steamcommunity.com") {
       surplusLog("请在 Steam 社区徽章页或库存页使用多余物品处理", "warn");
@@ -367,6 +357,7 @@ export { updateSurplusActionState };
       surplusLog
     );
     state.surplusQueue = queue;
+    const marketRecords = [];
 
     try {
       surplusLog("【阶段 1/3】正在读取 Steam 社区库存");
@@ -471,7 +462,8 @@ export { updateSurplusActionState };
             if (priceCache.has(result.marketHashName)) {
               price = priceCache.get(result.marketHashName);
             } else {
-              price = await priceCard(result.marketHashName, queue);
+              price = await priceCard(result.marketHashName, queue, { persistMarketCache: false });
+              if (price?.record) marketRecords.push(price.record);
               priceCache.set(result.marketHashName, price);
             }
           }
@@ -509,6 +501,7 @@ export { updateSurplusActionState };
       }
     } finally {
       queue.stop();
+      persistMarketObservations(marketRecords);
       state.surplusQueue = null;
       state.surplusScanning = false;
       state.surplusStopRequested = false;

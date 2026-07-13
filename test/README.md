@@ -3,7 +3,7 @@
 - `scripts/`: userscripts, browser harnesses, and the local static server.
 - `fixtures/`: saved Steam pages and generated fixture payloads. This directory is intentionally ignored because fixtures may contain account-specific page data.
 - `fixtures-public/`: committed synthetic, sanitized inputs for currency, market-data, and cache migration tests.
-- `unit/`: Node.js automated tests for shared infrastructure.
+- `unit/`: Node.js automated tests for shared infrastructure, including bounded market-history storage and statistics.
 
 Run the automated suite from the repository root:
 
@@ -21,7 +21,9 @@ Then open `http://127.0.0.1:8765/test/scripts/craft-harness.html`.
 
 Add `?order=1` to the craft harness URL to seed a two-card synthetic order-cache result. Its completion total is ¥0.70 at the default adjustment and ¥0.80 after applying +¥0.05 per missing card.
 
-Add `?wallet=usd` to expose a synthetic USD wallet context and USD price strings. This verifies wallet-first currency detection and `$` UI formatting without a Steam request.
+Add `?wallet=usd` to expose a synthetic USD wallet context and USD price strings, or `?wallet=cny` to pin the harness to CNY. This verifies wallet-first currency detection, currency-isolated caches, and money formatting without a Steam request.
+
+Add `?wallet=cny&history=1` to seed two saved market items and local price-history samples. Open the Price Trends tab to verify tab order, the exact manual-input placeholder, one compact sparkline row per item, current metrics, market listing links, hover/focus deletion, and re-adding an item without duplicating it.
 
 The rate-limit harness is available at `http://127.0.0.1:8765/test/scripts/rate-limit-harness.html`. It intercepts every request locally and returns two 200 responses followed by one 429 response, so it is safe for UI and tuning regression tests.
 

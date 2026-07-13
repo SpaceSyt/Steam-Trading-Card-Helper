@@ -37,6 +37,10 @@ import { loadConfig } from "./config.js";
     orderSortKey: "cached",
     orderSortAsc: false,
     orderActionRunning: false,
+    historySource: "scan",
+    historyMarketHashName: "",
+    historyRange: "7d",
+    historyRefreshing: false,
     blLookupAppid: "",
     blLookupName: "",
   };

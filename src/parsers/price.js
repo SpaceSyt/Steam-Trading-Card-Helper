@@ -10,7 +10,7 @@ import {
   normalizePriceOverview,
   toLegacyPriceResult,
 } from "../services/market-data.js";
-import { upsertStoredMarketCache } from "../services/market-cache.js";
+import { persistMarketObservations } from "../services/market-observations.js";
 
 function getPriceCurrencyContext(options = {}) {
   if (options.currencyContext) return resolveCurrencyContext(options.currencyContext);
@@ -52,12 +52,8 @@ export async function priceCard(marketHashName, queue, options = {}) {
     });
     const legacy = toLegacyPriceResult(record);
     if (record && options.persistMarketCache !== false) {
-      const stored = upsertStoredMarketCache(record);
-      if (!stored.ok && stored.diagnostics?.some(item => (
-        item.code !== "gm-get-unavailable" && item.code !== "gm-set-unavailable"
-      ))) {
-        console.warn("[STCH] Market cache update skipped:", stored.diagnostics);
-      }
+      const persistence = persistMarketObservations(record);
+      if (typeof options.onPersist === "function") options.onPersist(persistence);
     }
 
     if (!legacy || legacy.noPriceData) {

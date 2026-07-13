@@ -10,7 +10,11 @@ import { getBadgeTargetLevel } from "../utils/badge.js";
 
 import { getMultibuyQuantity } from "./multibuy.js";
 
-import { parseMarketOrderbookFromListingHtml, parseMarketHashNameFromHref } from "../parsers/market-listing.js";
+import {
+  parseMarketListingSnapshotFromHtml,
+  parseMarketOrderbookFromListingHtml,
+  parseMarketHashNameFromHref,
+} from "../parsers/market-listing.js";
 
 import { upsertOrderResult, getCachedOrderResult, readRawOrderCache, isOrderCacheFresh, saveOrderCache } from "../services/order-cache.js";
 
@@ -33,7 +37,7 @@ import {
   normalizeItemOrdersHistogram,
   normalizeListingOrderbook,
 } from "../services/market-data.js";
-import { upsertStoredMarketCache } from "../services/market-cache.js";
+import { persistMarketObservations } from "../services/market-observations.js";
 
 const { log, setStatus } = scanStatus;
 
@@ -46,16 +50,6 @@ const { setStatus: setOrderStatus } = orderStatus;
 
   function getCurrencyMarketKey(marketHashName, currencyId = getOrderCurrencyContext().currencyId) {
     return JSON.stringify([String(currencyId), String(marketHashName || "")]);
-  }
-
-  function storeMarketRecord(record) {
-    if (!record) return;
-    const result = upsertStoredMarketCache(record);
-    if (!result.ok && result.diagnostics?.some(item => (
-      item.code !== "gm-get-unavailable" && item.code !== "gm-set-unavailable"
-    ))) {
-      console.warn("[STCH] Market cache update skipped:", result.diagnostics);
-    }
   }
 
   export async function addManualOrderAppid() {
@@ -195,7 +189,7 @@ const { setStatus: setOrderStatus } = orderStatus;
     return "在售最低";
   }
 
-  export async function fetchHighestBuyPrice(marketHashName, queue = null) {
+  export async function fetchHighestBuyPrice(marketHashName, queue = null, options = {}) {
     const currencyContext = getOrderCurrencyContext();
     const cacheKey = getCurrencyMarketKey(marketHashName, currencyContext.currencyId);
     const cached = state.highestBuyPrices.get(cacheKey);
@@ -204,6 +198,15 @@ const { setStatus: setOrderStatus } = orderStatus;
       && cached.priceCents > 0
       && Date.now() - cached.fetchedAt < 30000
     ) {
+      if (typeof options.onCache === "function") options.onCache(cached);
+      if (typeof options.onMetadata === "function") {
+        options.onMetadata({
+          displayName: cached.displayName || "",
+          imageUrl: cached.imageUrl || "",
+          sellOrderCount: cached.sellOrderCount ?? null,
+          observedAt: cached.fetchedAt,
+        });
+      }
       return cached.priceCents;
     }
 
@@ -214,6 +217,14 @@ const { setStatus: setOrderStatus } = orderStatus;
       state
     );
     const requestQueue = queue || ownedQueue;
+    const observeRecord = record => {
+      if (!record) return;
+      if (typeof options.onRecord === "function") options.onRecord(record);
+      if (options.persistMarketCache !== false) {
+        const persistence = persistMarketObservations(record);
+        if (typeof options.onPersist === "function") options.onPersist(persistence);
+      }
+    };
     try {
       const listingUrl =
         `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}?l=english`;
@@ -221,10 +232,20 @@ const { setStatus: setOrderStatus } = orderStatus;
         requestPolicy: "default",
       });
       const listingHtml = listingResponse?.text || "";
-      const newOrderbook = parseMarketOrderbookFromListingHtml(
+      const listingSnapshot = parseMarketListingSnapshotFromHtml(
         listingHtml,
         marketHashName
       );
+      const metadataObservedAt = Date.now();
+      if (listingSnapshot && typeof options.onMetadata === "function") {
+        options.onMetadata({
+          displayName: listingSnapshot.displayName || "",
+          imageUrl: listingSnapshot.imageUrl || "",
+          sellOrderCount: listingSnapshot.sellOrderCount,
+          observedAt: metadataObservedAt,
+        });
+      }
+      const newOrderbook = parseMarketOrderbookFromListingHtml(listingHtml, marketHashName);
       if (newOrderbook) {
         if (
           newOrderbook.currency != null
@@ -238,7 +259,7 @@ const { setStatus: setOrderStatus } = orderStatus;
           throw new Error("当前没有可用的最高求购价格");
         }
         const observedAt = Date.now();
-        storeMarketRecord(normalizeListingOrderbook(newOrderbook, {
+        observeRecord(normalizeListingOrderbook(newOrderbook, {
           appid: "753",
           marketHashName,
           currencyId: currencyContext.currencyId,
@@ -249,6 +270,9 @@ const { setStatus: setOrderStatus } = orderStatus;
           currencyId: currencyContext.currencyId,
           priceCents: newOrderbook.highestBuyCents,
           fetchedAt: observedAt,
+          displayName: listingSnapshot?.displayName || "",
+          imageUrl: listingSnapshot?.imageUrl || "",
+          sellOrderCount: listingSnapshot?.sellOrderCount ?? null,
         });
         return newOrderbook.highestBuyCents;
       }
@@ -289,11 +313,32 @@ const { setStatus: setOrderStatus } = orderStatus;
         throw new Error("当前没有可用的最高求购价格");
       }
 
-      storeMarketRecord(histogramRecord);
+      const histogramSellOrderCount = Number(
+        String(histogram?.sell_order_count ?? "").replace(/[\s,.'’]/g, "")
+      );
+      if (typeof options.onMetadata === "function") {
+        options.onMetadata({
+          displayName: listingSnapshot?.displayName || "",
+          imageUrl: listingSnapshot?.imageUrl || "",
+          sellOrderCount: Number.isSafeInteger(histogramSellOrderCount)
+            && histogramSellOrderCount >= 0
+            ? histogramSellOrderCount
+            : listingSnapshot?.sellOrderCount ?? null,
+          observedAt: histogramRecord.observedAt,
+        });
+      }
+
+      observeRecord(histogramRecord);
       state.highestBuyPrices.set(cacheKey, {
         currencyId: currencyContext.currencyId,
         priceCents: highestBuyCents,
         fetchedAt: histogramRecord.observedAt,
+        displayName: listingSnapshot?.displayName || "",
+        imageUrl: listingSnapshot?.imageUrl || "",
+        sellOrderCount: Number.isSafeInteger(histogramSellOrderCount)
+          && histogramSellOrderCount >= 0
+          ? histogramSellOrderCount
+          : listingSnapshot?.sellOrderCount ?? null,
       });
       return highestBuyCents;
     } finally {
@@ -327,6 +372,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       clamped: 0,
     };
     const candidates = [];
+    const marketRecords = [];
 
     for (const info of selected) {
       for (const card of info.cards) {
@@ -381,7 +427,10 @@ const { setStatus: setOrderStatus } = orderStatus;
       } else if (priceSource === "highest") {
         statusFn(`读取求购最高 ${index + 1}/${candidates.length}: ${card.name}`);
         try {
-          basePriceCents = await fetchHighestBuyPrice(card.marketHashName, ui.queue || null);
+          basePriceCents = await fetchHighestBuyPrice(card.marketHashName, ui.queue || null, {
+            persistMarketCache: false,
+            onRecord: record => marketRecords.push(record),
+          });
         } catch (error) {
           logFn(
             `  ${info.gameName} · ${card.name}: ${error?.message || error}，已跳过`,
@@ -411,6 +460,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       });
     }
 
+    persistMarketObservations(marketRecords);
     return { plan, skipped, priceSource, adjustmentCents, minimumCents };
   }
 

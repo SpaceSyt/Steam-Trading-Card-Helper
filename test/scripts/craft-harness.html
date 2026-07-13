@@ -14,10 +14,11 @@
     window.g_sessionID = "fixture-session";
     window.jQuery = () => ({});
     const fixtureParams = new URLSearchParams(location.search);
-    const fixtureUsd = fixtureParams.get("wallet") === "usd";
-    if (fixtureUsd) {
+    const fixtureWallet = fixtureParams.get("wallet");
+    const fixtureUsd = fixtureWallet === "usd";
+    if (fixtureUsd || fixtureWallet === "cny") {
       window.g_rgWalletInfo = {
-        wallet_currency: 1,
+        wallet_currency: fixtureUsd ? 1 : 23,
         wallet_market_minimum: 1,
         wallet_fee_percent: "0.05",
         wallet_fee_minimum: 1,
@@ -50,6 +51,39 @@
         minVolume: 10,
         cachedAt: Date.now(),
       }]));
+    }
+    if (fixtureParams.get("history") === "1") {
+      const now = Date.now();
+      const image = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' fill='%2327445d'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%2366c0f4'/%3E%3C/svg%3E";
+      window.__gmStore.set("stch_market_watchlist", JSON.stringify({
+        schemaVersion: 1,
+        items: [
+          { appid: "753", marketHashName: "753-Sack of Gems", currencyId: 23, displayName: "Sack of Gems", imageUrl: image, addedAt: now - 5000, sellOrderCount: 28684, metadataObservedAt: now - 1000 },
+          { appid: "753", marketHashName: "329050-Agnus", currencyId: 23, displayName: "Devil May Cry 4 · Agnus", imageUrl: image, addedAt: now - 4000, sellOrderCount: 1200, metadataObservedAt: now - 2000 },
+        ],
+      }));
+      const record = (marketHashName, observedAt, lowestSellMinor, volume) => ({
+        schemaVersion: 1,
+        appid: "753",
+        marketHashName,
+        currencyId: 23,
+        currencyCode: "CNY",
+        lowestSellMinor,
+        medianMinor: lowestSellMinor + 2,
+        highestBuyMinor: null,
+        volume,
+        observedAt,
+        source: "priceoverview",
+      });
+      window.__gmStore.set("stch_market_history", JSON.stringify({
+        schemaVersion: 1,
+        records: [
+          record("753-Sack of Gems", now - 7200000, 438, 6400),
+          record("753-Sack of Gems", now - 3600000, 440, 6845),
+          record("329050-Agnus", now - 7200000, 28, 55),
+          record("329050-Agnus", now - 3600000, 26, 61),
+        ],
+      }));
     }
     window.GM_getValue = (key, fallback) => window.__gmStore.has(key)
       ? window.__gmStore.get(key)

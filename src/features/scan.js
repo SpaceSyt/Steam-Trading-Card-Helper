@@ -20,7 +20,7 @@ import { getBadgeModeLabel, getGameCardsUrl, getBadgeTargetLevel } from "../util
 
 import { getCachedOrderResult, getOrderCacheAgeDays } from "../services/order-cache.js";
 
-import { upsertManyStoredMarketCache } from "../services/market-cache.js";
+import { persistMarketObservations } from "../services/market-observations.js";
 
 import { addToBlacklist } from "./blacklist.js";
 
@@ -31,16 +31,6 @@ import { updateAllActionStates, updateSurplusActionState, updateGrindActionState
 import { scanStatus } from "../status-controllers.js";
 
 const { log, setStatus, setProgress, hideProgress } = scanStatus;
-
-function persistMarketRecords(records) {
-  if (records.length === 0) return;
-  const stored = upsertManyStoredMarketCache(records);
-  if (!stored.ok && stored.diagnostics?.some(item => (
-    item.code !== "gm-get-unavailable" && item.code !== "gm-set-unavailable"
-  ))) {
-    console.warn("[STCH] Market cache batch update skipped:", stored.diagnostics);
-  }
-}
 
   export function skipCurrentBadge() {
     state.skipCurrent = true;
@@ -145,6 +135,7 @@ function persistMarketRecords(records) {
       return;
     }
 
+    const marketRecords = [];
     try {
       const scanModeLabel = getBadgeModeLabel(cfg.foilScanMode);
       log(`【阶段 1/3】正在扫描徽章页 (${scanModeLabel}模式，找候选游戏)...`);
@@ -211,7 +202,6 @@ function persistMarketRecords(records) {
         setProgress(processed, badges.length,
           `阶段2: 获取卡牌详情 ${processed}/${badges.length} · ${b.gameName || b.appid}`);
 
-        const marketRecords = [];
         try {
           const url = getGameCardsUrl(profileUrl, b.appid, b, { language: "english" });
           let res;
@@ -474,8 +464,6 @@ function persistMarketRecords(records) {
         } catch (e) {
           log(`[${b.appid}] ${b.gameName || ""}: 出错 ${e?.error || e?.status || JSON.stringify(e)}`, "err");
           skipped++;
-        } finally {
-          persistMarketRecords(marketRecords);
         }
       }
 
@@ -496,6 +484,7 @@ function persistMarketRecords(records) {
       log(`扫描中断: ${e?.message || JSON.stringify(e)}`, "err");
     } finally {
       queue.stop();
+      persistMarketObservations(marketRecords);
       if (_stopTimeout) {
         clearTimeout(_stopTimeout);
         _stopTimeout = null;

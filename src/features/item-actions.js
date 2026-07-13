@@ -3,6 +3,7 @@ import { state } from "../state.js";
 import { RequestQueue } from "../request/queue.js";
 
 import { priceCard } from "../parsers/price.js";
+import { persistMarketObservations } from "../services/market-observations.js";
 
 import { getBuyerPriceForSellerReceive, getSellerReceiveForBuyerPrice } from "../utils/market-fees.js";
 
@@ -165,16 +166,20 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     );
   }
 
-  async function getSellBasePrice(group, priceSource, queue, ui, index, total, cache) {
+  async function getSellBasePrice(group, priceSource, queue, ui, index, total, cache, marketRecords) {
     if (cache.has(group.marketHashName)) return cache.get(group.marketHashName);
 
     let basePriceCents = null;
     if (priceSource === "highest") {
       ui.setStatus(`读取求购最高 ${index + 1}/${total}: ${group.itemName}`);
-      basePriceCents = await fetchHighestBuyPrice(group.marketHashName, queue);
+      basePriceCents = await fetchHighestBuyPrice(group.marketHashName, queue, {
+        persistMarketCache: false,
+        onRecord: record => marketRecords.push(record),
+      });
     } else {
       ui.setStatus(`读取出售参考价 ${index + 1}/${total}: ${group.itemName}`);
-      const price = await priceCard(group.marketHashName, queue);
+      const price = await priceCard(group.marketHashName, queue, { persistMarketCache: false });
+      if (price?.record) marketRecords.push(price.record);
       if (priceSource === "lowest") {
         basePriceCents = price?.priceSource === "lowest" ? price.lowestSellCents : null;
       } else {
@@ -195,6 +200,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     const { priceSource, adjustmentCents } = getSellPriceControls();
     const minimumBuyerCents = getMarketMinimumPriceCents();
     const priceCache = new Map();
+    const marketRecords = [];
     const plan = [];
     const skipped = {
       missingHash: 0,
@@ -226,7 +232,8 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
           ui,
           index,
           candidates.length,
-          priceCache
+          priceCache,
+          marketRecords
         );
       } catch (error) {
         skipped.failedPrice++;
@@ -258,6 +265,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
       });
     }
 
+    persistMarketObservations(marketRecords);
     return { plan, skipped, priceSource, adjustmentCents, minimumBuyerCents };
   }
 

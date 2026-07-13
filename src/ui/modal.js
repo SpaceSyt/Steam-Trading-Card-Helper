@@ -14,6 +14,8 @@ import { startScan, requestStop, skipCurrentBadge, applyScanModeTheme, updateRes
 
 import { recalculateSelectedResults, recalculateSelectedOrderResults } from "../features/recalculate.js";
 
+import { activatePriceHistoryTab, initPriceHistoryUi, resetPriceHistoryRuntime, stopPriceHistoryRefresh } from "../features/price-history.js";
+
 import { submitSelectedBuyOrders, submitSelectedOrderBuyOrders, addManualOrderAppid, deleteExpiredOrderResults } from "../features/orders.js";
 
 import { startCraftScan, requestCraftStop, setAllCraftCounts, submitCraftPlan, renderCraftResults, updateCraftActionState, updateCraftSummary } from "../features/craft.js";
@@ -57,6 +59,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
     state.selectedOrderResults = new Set();
     state.pendingOrderQuantities = new Map();
     state.highestBuyPrices = new Map();
+    resetPriceHistoryRuntime();
     state.surplusResults = [];
     state.selectedSurplusResults = new Set();
     state.surplusGemPrice = null;
@@ -188,6 +191,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         <div class="stch-tabs">
           <span class="stch-tab ${activeClass("scan")}" data-tab="scan">卡牌价格扫描</span>
           <span class="stch-tab" data-tab="orders">订购卡牌</span>
+          <span class="stch-tab ${activeClass("history")}" data-tab="history">价格走势</span>
           <span class="stch-tab" data-tab="craft">徽章合成</span>
           <span class="stch-tab" data-tab="blacklist">游戏/AppID黑名单</span>
           <span class="stch-tab" data-tab="surplus">多余物品处理</span>
@@ -270,6 +274,36 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
           <div class="stch-game-list" id="stch-list"></div>
           <div class="stch-log-resizer" data-log="stch-log" data-content="stch-list" title="上下拖动调整日志区域"></div>
           <div id="stch-log"></div>
+        </div>
+        <div class="stch-tab-content ${activeClass("history")}" id="stch-tab-history">
+          <div class="stch-toolbar stch-history-toolbar">
+            <label class="stch-primary-label">来源
+              <select id="stch-history-source" class="stch-input stch-history-source">
+                <option value="scan">扫描结果</option>
+                <option value="order">订购缓存</option>
+                <option value="manual">手动输入</option>
+              </select>
+            </label>
+            <label id="stch-history-card-label" class="stch-primary-label">卡牌
+              <select id="stch-history-card" class="stch-input stch-history-card"></select>
+            </label>
+            <label id="stch-history-manual-label" class="stch-primary-label stch-history-hidden">market_hash_name
+              <input id="stch-history-manual" class="stch-input stch-history-manual" type="text" placeholder="753-Sack of Gems">
+            </label>
+            <button type="button" class="stch-btn alt" id="stch-history-add">添加</button>
+            <div class="stch-history-toolbar-spacer"></div>
+            <span class="stch-history-count" id="stch-history-count">已保存 0 项</span>
+            <button type="button" class="stch-btn alt" id="stch-history-refresh">刷新全部价格</button>
+          </div>
+          <div class="stch-toolbar stch-history-range" aria-label="价格走势时间范围">
+            <span class="stch-label">范围</span>
+            <button type="button" class="stch-btn alt" data-history-range="24h">24 小时</button>
+            <button type="button" class="stch-btn alt" data-history-range="7d">7 天</button>
+            <button type="button" class="stch-btn alt" data-history-range="30d">30 天</button>
+            <button type="button" class="stch-btn alt" data-history-range="all">全部</button>
+          </div>
+          <div class="stch-status-text" id="stch-history-status" style="display:none"></div>
+          <div class="stch-history-list" id="stch-history-list"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-orders">
           <div class="stch-toolbar">
@@ -501,7 +535,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.1.5 · 当前币种：${currencyStatus}</span>
+        <span class="stch-label">V2.2.0 · 当前币种：${currencyStatus}</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -727,6 +761,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
     renderOrderPricingControls();
 
     const activateTab = tabName => {
+      if (tabName !== "history") stopPriceHistoryRefresh({ silent: true });
       modal.querySelectorAll(".stch-tab").forEach(tab => {
         tab.classList.toggle("active", tab.dataset.tab === tabName);
       });
@@ -735,6 +770,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
       });
       if (tabName === "blacklist") renderBlacklist();
       if (tabName === "orders") renderOrderResults();
+      if (tabName === "history") activatePriceHistoryTab();
       if (tabName === "surplus") applySurplusItemMode();
     };
     const showOnboarding = () => {
@@ -927,6 +963,8 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         saveConfig(state.cfg);
       });
     });
+
+    initPriceHistoryUi();
     const syncAutoBlacklistThreshold = (event, normalizeSource = false) => {
       const parsed = parseFloat(event.currentTarget.value);
       state.cfg.autoBlackThreshold = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
@@ -1088,6 +1126,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
   }
 
   export function closeModal() {
+    stopPriceHistoryRefresh({ silent: true });
     const backdrop = document.getElementById("stch-backdrop");
     if (backdrop) backdrop.style.display = "none";
     if (modalEl) modalEl.style.display = "none";

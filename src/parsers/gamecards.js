@@ -1,5 +1,18 @@
 import { getBadgeTargetLevel, isUnlimitedLevelBadge } from "../utils/badge.js";
 
+function parseCardImageUrl(cardElement) {
+  const image = cardElement?.querySelector("img.gamecard, .game_card_ctn img");
+  const source = String(image?.getAttribute("src") || "").trim();
+  if (/^https?:\/\//i.test(source)) return source;
+  if (source.startsWith("//")) return `https:${source}`;
+
+  const onclick = String(
+    cardElement?.querySelector(".game_card_ctn")?.getAttribute("onclick") || ""
+  );
+  const match = onclick.match(/https?:\\?\/\\?\/[^"')\s]+/i);
+  return match ? match[0].replace(/\\\//g, "/") : "";
+}
+
   export function parseGameCardsHtml(html, appid, isFoil) {
     const doc = new DOMParser().parseFromString(html, "text/html");
 
@@ -61,7 +74,13 @@ import { getBadgeTargetLevel, isUnlimitedLevelBadge } from "../utils/badge.js";
       if (marketMatch) {
         try { marketHashName = decodeURIComponent(marketMatch[1]); } catch (_) { marketHashName = marketMatch[1]; }
       }
-      cardList.push({ name, owned, marketHashName, idx });
+      cardList.push({
+        name,
+        owned,
+        marketHashName,
+        imageUrl: parseCardImageUrl(el),
+        idx,
+      });
     });
 
     // Primary: match market hash names from multibuy URL (has ALL cards, IN ORDER)

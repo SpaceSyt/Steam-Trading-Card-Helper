@@ -8,17 +8,7 @@ import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
 import { priceCard, estimateMissingLevel5Cost } from "../parsers/price.js";
 
-import { upsertManyStoredMarketCache } from "./market-cache.js";
-
-function persistMarketRecords(records) {
-  if (records.length === 0) return;
-  const stored = upsertManyStoredMarketCache(records);
-  if (!stored.ok && stored.diagnostics?.some(item => (
-    item.code !== "gm-get-unavailable" && item.code !== "gm-set-unavailable"
-  ))) {
-    console.warn("[STCH] Market cache batch update skipped:", stored.diagnostics);
-  }
-}
+import { persistMarketObservations } from "./market-observations.js";
 
   export function getResultKey(info) {
     return `${info.appid}_${info.isFoil ? 1 : 0}`;
@@ -116,7 +106,7 @@ function persistMarketRecords(records) {
           : 0;
       }
     } finally {
-      persistMarketRecords(marketRecords);
+      persistMarketObservations(marketRecords);
     }
 
     if (info.cardPrices.length === 0) {
