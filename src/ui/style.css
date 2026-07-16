@@ -852,6 +852,16 @@
     .stch-settings-hint::before { content: "* "; }
     .stch-settings-hint-block { margin-top: 4px; }
     .stch-primary-label { color: #fff !important; font-weight: bold; }
+    .stch-auto-pricing-toggle {
+      color: #d6b45a;
+      font-weight: bold;
+    }
+    .stch-auto-pricing-toggle input { accent-color: #d6b45a; }
+    .stch-primary-label.stch-auto-pricing-active,
+    .stch-auto-pricing-active .stch-input,
+    .stch-auto-pricing-active .stch-help {
+      color: #e7c767 !important;
+    }
     .stch-foil-mode-label {
       color: #d9a4e8;
       font-weight: bold;
@@ -1364,7 +1374,7 @@
     }
     .stch-order-item {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 55px 70px;
+      grid-template-columns: minmax(0, 1fr) 55px minmax(105px, auto) 70px;
       gap: 10px;
       padding: 7px 10px;
       border-bottom: 1px solid rgba(69,85,107,0.4);
@@ -1375,6 +1385,7 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .stch-order-price-basis { color: #8f98a0; }
     .stch-processing-dialog-item.sell {
       grid-template-columns: minmax(0, 1fr) 58px 95px 95px;
     }

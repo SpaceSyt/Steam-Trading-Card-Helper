@@ -249,7 +249,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           }
 
           if (!state.cfg.includeDrops && info.dropsRemaining > 0) {
-            log(`[${b.appid}] ${info.gameName}: 还有 ${info.dropsRemaining} 张掉落，跳过 (可勾选"包含有掉落"来扫描)`, "info");
+            log(`[${b.appid}] ${info.gameName}: 还有 ${info.dropsRemaining} 张掉落，跳过 (可勾选“包含掉落”来扫描)`, "info");
             skipped++;
             continue;
           }

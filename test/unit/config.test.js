@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import {
   CONFIG_SCHEMA_VERSION,
   DEFAULT_CONFIG,
+  getActiveOrderPricingProfile,
   normalizeConfig,
 } from "../../src/config.js";
 
@@ -26,6 +27,28 @@ test("v2.0 config migration preserves every blacklist field", () => {
   assert.equal(migrated.blacklistSources, legacy.blacklistSources);
   assert.equal(migrated.blacklistDates, legacy.blacklistDates);
   assert.equal(migrated.blacklistFixed, legacy.blacklistFixed);
+});
+
+test("automatic pricing keeps an independent strategy and adjustment profile", () => {
+  const cfg = normalizeConfig({
+    orderPriceSource: "median",
+    priceAdjustment: -0.02,
+    automaticPricingEnabled: true,
+    automaticPriceStrategy: "aggressive",
+    automaticPriceAdjustment: 0.03,
+  });
+
+  assert.deepEqual(getActiveOrderPricingProfile(cfg), {
+    automatic: true,
+    priceSource: "aggressive",
+    adjustment: 0.03,
+  });
+  cfg.automaticPricingEnabled = false;
+  assert.deepEqual(getActiveOrderPricingProfile(cfg), {
+    automatic: false,
+    priceSource: "median",
+    adjustment: -0.02,
+  });
 });
 
 test("config normalization removes obsolete keys and rejects invalid currency ids", () => {

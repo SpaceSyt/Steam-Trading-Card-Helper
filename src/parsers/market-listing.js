@@ -1,3 +1,5 @@
+import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
+
   export function parseMarketHashNameFromHref(href) {
     const match = String(href || "").match(/\/market\/listings\/753\/(.+?)(?:\?|#|$)/);
     if (!match) return "";
@@ -102,6 +104,39 @@
     const snapshot = parseMarketListingSnapshotFromHtml(listingHtml, marketHashName);
     if (!snapshot || snapshot.highestBuyCents === null) return null;
     return snapshot;
+  }
+
+  export function parseMarketOrderDepthFromListingHtml(listingHtml, marketHashName) {
+    const queries = getRenderQueries(listingHtml);
+    const orderbookQuery = findTargetQuery(
+      queries,
+      marketHashName,
+      "orderbook",
+      data => data && Array.isArray(data.rgCompactBuyOrders)
+    );
+    const orderbook = orderbookQuery?.state?.data;
+    if (!orderbook) return null;
+    const highestBuyMinor = parseCount(orderbook.amtMaxBuyOrder);
+    const currencyId = parseCount(orderbook.eCurrency);
+    if (!highestBuyMinor || !currencyId) return null;
+    const buyLevels = parseCompactBuyOrderLevels(orderbook.rgCompactBuyOrders, {
+      expectedBestPriceMinor: highestBuyMinor,
+    });
+    if (!buyLevels) return null;
+    const buyOrderCount = parseCount(orderbook.cBuyOrders);
+    if (
+      buyOrderCount !== null
+      && buyLevels.reduce((sum, level) => sum + level.quantity, 0) !== buyOrderCount
+    ) return null;
+    const lowestSellValue = parseCount(orderbook.amtMinSellOrder);
+    return {
+      currencyId,
+      highestBuyMinor,
+      lowestSellMinor: lowestSellValue && lowestSellValue > 0 ? lowestSellValue : null,
+      buyOrderCount,
+      sellOrderCount: parseCount(orderbook.cSellOrders),
+      buyLevels,
+    };
   }
 
   export function getMarketHashNameFromLink(link) {

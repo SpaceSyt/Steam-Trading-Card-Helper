@@ -52,6 +52,37 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
       + `${context.verified ? "" : " · 格式/费用规则未验证"}`;
   }
 
+  const MANUAL_ORDER_PRICE_OPTIONS = [
+    ["lowest", "在售最低"],
+    ["median", "平均价格"],
+    ["highest", "求购最高"],
+  ];
+  const AUTOMATIC_ORDER_PRICE_OPTIONS = [
+    ["conservative", "保守"],
+    ["balanced", "平衡"],
+    ["aggressive", "抢单"],
+  ];
+  const MANUAL_ORDER_PRICE_HELP = [
+    "在售最低：当前最低卖单价格，通常可立即成交",
+    "平均价格：Steam 返回的 median_price，用作市场参考价",
+    "求购最高：当前最高买单价格，通常需要等待卖家成交",
+    "仅用于自动提交长期订购单；手动购买仍使用在售最低",
+  ].join("\n");
+  const AUTOMATIC_ORDER_PRICE_HELP = [
+    "保守：有墙取订单墙底部；无墙取最高买价 - 0.01",
+    "平衡：有墙取订单墙顶部；无墙取最高买价",
+    "抢单：取最高买价 + 0.01",
+    "买价调整会在策略价格之后生效；最终不会达到或超过最低卖价",
+    "订单簿解析失败时会跳过该物品，不会按未知价格提交",
+  ].join("\n");
+
+  function getOrderPriceOptionsHtml(automatic, selected) {
+    const options = automatic ? AUTOMATIC_ORDER_PRICE_OPTIONS : MANUAL_ORDER_PRICE_OPTIONS;
+    return options.map(([value, label]) => (
+      `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`
+    )).join("");
+  }
+
   function resetCurrencyBoundState() {
     state.results = [];
     state.selectedResults = new Set();
@@ -59,6 +90,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
     state.selectedOrderResults = new Set();
     state.pendingOrderQuantities = new Map();
     state.highestBuyPrices = new Map();
+    state.marketOrderDepths = new Map();
     resetPriceHistoryRuntime();
     state.surplusResults = [];
     state.selectedSurplusResults = new Set();
@@ -173,6 +205,21 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
     const currencyContext = getActiveCurrencyContext();
     const currencySymbol = currencyContext?.symbol || "¤";
     const currencyStatus = getCurrencyDisplayStatus(currencyContext);
+    const automaticPricingEnabled = state.cfg.automaticPricingEnabled === true;
+    const activePriceSource = automaticPricingEnabled
+      ? state.cfg.automaticPriceStrategy
+      : state.cfg.orderPriceSource;
+    const activePriceAdjustment = automaticPricingEnabled
+      ? state.cfg.automaticPriceAdjustment
+      : state.cfg.priceAdjustment;
+    const initialPriceOptions = getOrderPriceOptionsHtml(
+      automaticPricingEnabled,
+      activePriceSource
+    );
+    const initialPriceHelp = (
+      automaticPricingEnabled ? AUTOMATIC_ORDER_PRICE_HELP : MANUAL_ORDER_PRICE_HELP
+    ).replaceAll("\n", "&#10;");
+    const automaticPricingClass = automaticPricingEnabled ? "stch-auto-pricing-active" : "";
     const backdrop = document.createElement("div");
     backdrop.id = "stch-backdrop";
     backdrop.style.display = "block";
@@ -211,7 +258,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
             </div>
             <div class="stch-onboarding-step">
               <b>3. 理解购买价格</b>
-              在售最低通常更快成交，平均价格用于参考，求购最高通常需要等待卖家成交。买价调整可正可负。
+              手动价格可选在售最低、平均价格或求购最高；自动定价可按订单墙选择保守、平衡或抢单。买价调整可正可负。
             </div>
             <div class="stch-onboarding-step">
               <b>4. 批量合成徽章</b>
@@ -235,7 +282,8 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
             <label>最大徽章页数 <input id="stch-max-pages" class="stch-input" type="number" min="1" max="20" value="${state.cfg.maxBadgePages}"></label>
             <label>
               <input id="stch-include-drops" type="checkbox" ${state.cfg.includeDrops ? "checked" : ""}>
-              包含有掉落卡牌的游戏
+              包含掉落
+              <span class="stch-help" title="默认跳过仍有卡牌掉落的游戏，避免购买之后又获得重复卡牌&#10;勾选后也会扫描并显示这些游戏">?</span>
             </label>
             <label class="stch-foil-mode-label ${state.cfg.foilScanMode ? "active" : ""}" id="stch-foil-mode-label">
               <input id="stch-foil-scan-mode" type="checkbox" ${state.cfg.foilScanMode ? "checked" : ""}>
@@ -243,15 +291,17 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
             </label>
           </div>
           <div class="stch-toolbar">
-            <label class="stch-primary-label">购买价格
-              <span class="stch-help" title="在售最低：当前最低卖单价格，通常可立即成交&#10;平均价格：Steam 返回的 median_price，用作市场参考价&#10;求购最高：当前最高买单价格，通常需要等待卖家成交&#10;仅用于自动提交长期订购单；手动购买仍使用在售最低">?</span>
+            <label id="stch-order-price-label" class="stch-primary-label ${automaticPricingClass}">购买价格
+              <span class="stch-help stch-order-price-help" title="${initialPriceHelp}">?</span>
               <select id="stch-order-price-source" class="stch-input" style="width:118px">
-                <option value="lowest" ${state.cfg.orderPriceSource === "lowest" ? "selected" : ""}>在售最低</option>
-                <option value="median" ${state.cfg.orderPriceSource === "median" ? "selected" : ""}>平均价格</option>
-                <option value="highest" ${state.cfg.orderPriceSource === "highest" ? "selected" : ""}>求购最高</option>
+                ${initialPriceOptions}
               </select>
             </label>
-            <label class="stch-primary-label">买价调整 ${currencySymbol} <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
+            <label id="stch-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}">买价调整 ${currencySymbol} <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
+            <label class="stch-auto-pricing-toggle ${automaticPricingClass}">
+              <input id="stch-auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}>
+              自动定价模式
+            </label>
           </div>
           <div class="stch-scan-actions">
             <div class="stch-btn" id="stch-scan-btn">开始扫描</div>
@@ -318,15 +368,17 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
             <div class="stch-btn alt stch-btn-danger disabled stch-order-tools" id="stch-order-delete-btn">删除过期</div>
           </div>
           <div class="stch-toolbar">
-            <label class="stch-primary-label">购买价格
-              <span class="stch-help" title="在售最低：当前最低卖单价格，通常可立即成交&#10;平均价格：Steam 返回的 median_price，用作市场参考价&#10;求购最高：当前最高买单价格，通常需要等待卖家成交">?</span>
+            <label id="stch-order-page-price-label" class="stch-primary-label ${automaticPricingClass}">购买价格
+              <span class="stch-help stch-order-price-help" title="${initialPriceHelp}">?</span>
               <select id="stch-order-page-price-source" class="stch-input" style="width:118px">
-                <option value="lowest" ${state.cfg.orderPriceSource === "lowest" ? "selected" : ""}>在售最低</option>
-                <option value="median" ${state.cfg.orderPriceSource === "median" ? "selected" : ""}>平均价格</option>
-                <option value="highest" ${state.cfg.orderPriceSource === "highest" ? "selected" : ""}>求购最高</option>
+                ${initialPriceOptions}
               </select>
             </label>
-            <label class="stch-primary-label">买价调整 ${currencySymbol} <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.priceAdjustment}" style="width:68px"></label>
+            <label id="stch-order-page-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}">买价调整 ${currencySymbol} <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
+            <label class="stch-auto-pricing-toggle ${automaticPricingClass}">
+              <input id="stch-order-page-auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}>
+              自动定价模式
+            </label>
           </div>
           <div class="stch-summary" id="stch-order-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-order-summary"></span>
@@ -535,7 +587,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.2.0 · 当前币种：${currencyStatus}</span>
+        <span class="stch-label">V2.3.0 · 当前币种：${currencyStatus}</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -625,12 +677,6 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         state.cfg.buyMode = buyModeEl?.dataset.normalValue || buyModeEl?.value || state.cfg.buyMode;
         if (buyModeEl) delete buyModeEl.dataset.normalValue;
       }
-      state.cfg.orderPriceSource = document.getElementById("stch-order-price-source")?.value
-        || state.cfg.orderPriceSource;
-      state.cfg.priceAdjustment = readNumberInput(
-        "stch-price-adjustment",
-        state.cfg.priceAdjustment ?? DEFAULT_CONFIG.priceAdjustment
-      );
       state.cfg.earlyPricePrediction = !!document.getElementById("stch-early-price-prediction")?.checked;
       state.cfg.earlyPredictionAutoBlacklist = !!document.getElementById("stch-settings-early-prediction-auto-blacklist")?.checked;
       state.cfg.orderCacheDays = readNumberInput(
@@ -722,25 +768,59 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
       "stch-price-adjustment",
       "stch-order-page-price-adjustment",
     ];
+    const automaticPricingIds = [
+      "stch-auto-pricing",
+      "stch-order-page-auto-pricing",
+    ];
     const refreshPricingSummaries = () => {
       updateSummary();
       updateOrderSummary();
     };
     const renderOrderPricingControls = (exceptId = "") => {
+      const automatic = state.cfg.automaticPricingEnabled === true;
+      const source = automatic
+        ? state.cfg.automaticPriceStrategy || DEFAULT_CONFIG.automaticPriceStrategy
+        : state.cfg.orderPriceSource || DEFAULT_CONFIG.orderPriceSource;
+      const adjustment = automatic
+        ? state.cfg.automaticPriceAdjustment ?? DEFAULT_CONFIG.automaticPriceAdjustment
+        : state.cfg.priceAdjustment ?? DEFAULT_CONFIG.priceAdjustment;
       orderPriceSourceIds.forEach(id => {
-        if (id === exceptId) return;
         const input = document.getElementById(id);
-        if (input) input.value = state.cfg.orderPriceSource || DEFAULT_CONFIG.orderPriceSource;
+        if (!input) return;
+        input.innerHTML = getOrderPriceOptionsHtml(automatic, source);
+        input.value = source;
       });
       orderPriceAdjustmentIds.forEach(id => {
         if (id === exceptId) return;
         const input = document.getElementById(id);
-        if (input) input.value = String(state.cfg.priceAdjustment ?? DEFAULT_CONFIG.priceAdjustment);
+        if (input) input.value = String(adjustment);
+      });
+      automaticPricingIds.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.checked = automatic;
+      });
+      [
+        "stch-order-price-label",
+        "stch-price-adjustment-label",
+        "stch-order-page-price-label",
+        "stch-order-page-price-adjustment-label",
+      ].forEach(id => {
+        document.getElementById(id)?.classList.toggle("stch-auto-pricing-active", automatic);
+      });
+      modal.querySelectorAll(".stch-auto-pricing-toggle").forEach(label => {
+        label.classList.toggle("stch-auto-pricing-active", automatic);
+      });
+      modal.querySelectorAll(".stch-order-price-help").forEach(help => {
+        help.title = automatic ? AUTOMATIC_ORDER_PRICE_HELP : MANUAL_ORDER_PRICE_HELP;
       });
     };
     orderPriceSourceIds.forEach(id => {
       document.getElementById(id)?.addEventListener("change", event => {
-        state.cfg.orderPriceSource = event.currentTarget.value;
+        if (state.cfg.automaticPricingEnabled) {
+          state.cfg.automaticPriceStrategy = event.currentTarget.value;
+        } else {
+          state.cfg.orderPriceSource = event.currentTarget.value;
+        }
         renderOrderPricingControls();
         saveConfig(state.cfg);
         refreshPricingSummaries();
@@ -748,7 +828,12 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
     });
     const syncOrderPriceAdjustment = (event, normalizeSource = false) => {
       const parsed = parseFloat(event.currentTarget.value);
-      state.cfg.priceAdjustment = Number.isFinite(parsed) ? parsed : 0;
+      const value = Number.isFinite(parsed) ? parsed : 0;
+      if (state.cfg.automaticPricingEnabled) {
+        state.cfg.automaticPriceAdjustment = value;
+      } else {
+        state.cfg.priceAdjustment = value;
+      }
       renderOrderPricingControls(normalizeSource ? "" : event.currentTarget.id);
       saveConfig(state.cfg);
       refreshPricingSummaries();
@@ -757,6 +842,14 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
       const input = document.getElementById(id);
       input?.addEventListener("input", event => syncOrderPriceAdjustment(event, false));
       input?.addEventListener("change", event => syncOrderPriceAdjustment(event, true));
+    });
+    automaticPricingIds.forEach(id => {
+      document.getElementById(id)?.addEventListener("change", event => {
+        state.cfg.automaticPricingEnabled = event.currentTarget.checked;
+        renderOrderPricingControls();
+        saveConfig(state.cfg);
+        refreshPricingSummaries();
+      });
     });
     renderOrderPricingControls();
 

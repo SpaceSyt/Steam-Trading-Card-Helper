@@ -14,6 +14,7 @@ import { loadConfig } from "./config.js";
     bulkActionRunning: false,
     pendingOrderQuantities: new Map(),
     highestBuyPrices: new Map(),
+    marketOrderDepths: new Map(),
     craftResults: [],
     craftScanning: false,
     craftActionRunning: false,

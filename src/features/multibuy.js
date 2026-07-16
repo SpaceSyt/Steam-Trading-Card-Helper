@@ -162,10 +162,9 @@ const { log } = scanStatus;
       params.set("steamdb_return_to", `${profileUrl}/gamecards/${info.appid}/${getBadgeUrlSuffix(info)}`);
     }
 
-    const adjustmentInput = document.getElementById("stch-price-adjustment");
-    const adjustmentValue = adjustmentInput
-      ? parseFloat(adjustmentInput.value)
-      : state.cfg.priceAdjustment;
+    // Multibuy remains on the manual profile even while long-order automatic
+    // pricing is enabled in the modal.
+    const adjustmentValue = state.cfg.priceAdjustment;
     const bufferCents = Math.round(
       (Number.isFinite(adjustmentValue) ? adjustmentValue : 0) * 100
     );

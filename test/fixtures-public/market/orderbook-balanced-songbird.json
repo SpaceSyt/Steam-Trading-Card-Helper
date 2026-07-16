@@ -1,0 +1,26 @@
+{
+  "_fixture": "sanitized-user-supplied-balanced-orderbook",
+  "queryKey": ["market", "orderbook", 753, "8870-Songbird"],
+  "state": {
+    "data": {
+      "amtMaxBuyOrder": 27,
+      "amtMinSellOrder": 37,
+      "eCurrency": 23,
+      "cBuyOrders": 1359,
+      "cSellOrders": 1117,
+      "rgCompactBuyOrders": [
+        27, 63,
+        26, 157,
+        25, 65,
+        24, 137,
+        23, 206,
+        22, 678,
+        21, 53
+      ]
+    }
+  },
+  "expected": {
+    "classification": "balanced",
+    "wallPricesMinor": []
+  }
+}

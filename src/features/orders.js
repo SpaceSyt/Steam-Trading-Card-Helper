@@ -12,9 +12,12 @@ import { getMultibuyQuantity } from "./multibuy.js";
 
 import {
   parseMarketListingSnapshotFromHtml,
+  parseMarketOrderDepthFromListingHtml,
   parseMarketOrderbookFromListingHtml,
   parseMarketHashNameFromHref,
 } from "../parsers/market-listing.js";
+import { getActiveOrderPricingProfile } from "../config.js";
+import { calculateAutomaticBuyPrice } from "../services/order-wall.js";
 
 import { upsertOrderResult, getCachedOrderResult, readRawOrderCache, isOrderCacheFresh, saveOrderCache } from "../services/order-cache.js";
 
@@ -184,6 +187,9 @@ const { setStatus: setOrderStatus } = orderStatus;
   }
 
   export function getOrderPriceSourceLabel(priceSource) {
+    if (priceSource === "conservative") return "保守";
+    if (priceSource === "balanced") return "平衡";
+    if (priceSource === "aggressive") return "抢单";
     if (priceSource === "median") return "平均价格";
     if (priceSource === "highest") return "求购最高";
     return "在售最低";
@@ -346,20 +352,69 @@ const { setStatus: setOrderStatus } = orderStatus;
     }
   }
 
+  export async function fetchMarketOrderDepth(marketHashName, queue = null, options = {}) {
+    const currencyContext = getOrderCurrencyContext();
+    const cacheKey = getCurrencyMarketKey(marketHashName, currencyContext.currencyId);
+    const cached = state.marketOrderDepths.get(cacheKey);
+    if (cached?.depth && Date.now() - cached.fetchedAt < 30000) {
+      return cached.depth;
+    }
+
+    const ownedQueue = queue ? null : new RequestQueue(
+      state.cfg.requestInterval,
+      state.cfg.batchSize,
+      state.cfg.batchPause,
+      state
+    );
+    const requestQueue = queue || ownedQueue;
+    try {
+      const listingUrl =
+        `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}?l=english`;
+      const response = await requestQueue.fetch(listingUrl, { requestPolicy: "default" });
+      const listingHtml = response?.text || "";
+      const depth = parseMarketOrderDepthFromListingHtml(listingHtml, marketHashName);
+      if (!depth) throw new Error("商品页缺少有效的完整买单深度");
+      if (depth.currencyId !== currencyContext.currencyId) {
+        throw new Error(
+          `商品页币种不一致 (${depth.currencyId}/${currencyContext.currencyId})`
+        );
+      }
+
+      const observedAt = Date.now();
+      const snapshot = parseMarketListingSnapshotFromHtml(listingHtml, marketHashName);
+      const record = normalizeListingOrderbook({
+        eCurrency: depth.currencyId,
+        amtMaxBuyOrder: depth.highestBuyMinor,
+        amtMinSellOrder: depth.lowestSellMinor,
+      }, {
+        appid: "753",
+        marketHashName,
+        currencyId: currencyContext.currencyId,
+        currencyCode: currencyContext.code,
+        observedAt,
+      });
+      if (record && typeof options.onRecord === "function") options.onRecord(record);
+      state.highestBuyPrices.set(cacheKey, {
+        currencyId: currencyContext.currencyId,
+        priceCents: depth.highestBuyMinor,
+        fetchedAt: observedAt,
+        displayName: snapshot?.displayName || "",
+        imageUrl: snapshot?.imageUrl || "",
+        sellOrderCount: depth.sellOrderCount ?? snapshot?.sellOrderCount ?? null,
+      });
+      state.marketOrderDepths.set(cacheKey, { depth, fetchedAt: observedAt });
+      return depth;
+    } finally {
+      ownedQueue?.stop();
+    }
+  }
+
   export async function buildBuyOrderPlan(selected, activeOrders, ui = {}) {
     const statusFn = ui.setStatus || setStatus;
     const logFn = ui.log || log;
-    const configuredPriceSource =
-      document.getElementById("stch-order-price-source")?.value
-      || state.cfg.orderPriceSource
-      || "lowest";
-    const priceSource = ["lowest", "median", "highest"].includes(configuredPriceSource)
-      ? configuredPriceSource
-      : "lowest";
-    const adjustmentInput = document.getElementById("stch-price-adjustment");
-    const adjustmentValue = adjustmentInput
-      ? parseFloat(adjustmentInput.value)
-      : state.cfg.priceAdjustment;
+    const pricingProfile = getActiveOrderPricingProfile(state.cfg);
+    const priceSource = pricingProfile.priceSource;
+    const adjustmentValue = pricingProfile.adjustment;
     const adjustmentCents = Math.round(
       (Number.isFinite(adjustmentValue) ? adjustmentValue : 0) * 100
     );
@@ -370,6 +425,8 @@ const { setStatus: setOrderStatus } = orderStatus;
       missingPrice: 0,
       missingHash: 0,
       clamped: 0,
+      minimumClamped: 0,
+      sellGuardClamped: 0,
     };
     const candidates = [];
     const marketRecords = [];
@@ -411,7 +468,28 @@ const { setStatus: setOrderStatus } = orderStatus;
     for (let index = 0; index < candidates.length; index++) {
       const { info, card, quantity, reservedQuantity, targetQuantity } = candidates[index];
       let basePriceCents = null;
-      if (
+      let unitPriceCents = null;
+      let automaticQuote = null;
+      if (pricingProfile.automatic) {
+        statusFn(`自动定价 ${index + 1}/${candidates.length}: ${card.name}`);
+        try {
+          const depth = await fetchMarketOrderDepth(card.marketHashName, ui.queue || null, {
+            onRecord: record => marketRecords.push(record),
+          });
+          automaticQuote = calculateAutomaticBuyPrice(depth, {
+            strategy: priceSource,
+            adjustmentMinor: adjustmentCents,
+            minimumPriceMinor: minimumCents,
+          });
+          basePriceCents = automaticQuote?.strategyBasePriceMinor ?? null;
+          unitPriceCents = automaticQuote?.finalPriceMinor ?? null;
+        } catch (error) {
+          logFn(
+            `  ${info.gameName} · ${card.name}: ${error?.message || error}，已跳过`,
+            "warn"
+          );
+        }
+      } else if (
         priceSource === "lowest"
         && card.priceSource === "lowest"
         && Number.isFinite(card.lowestCents)
@@ -443,9 +521,23 @@ const { setStatus: setOrderStatus } = orderStatus;
         continue;
       }
 
-      const adjustedPrice = basePriceCents + adjustmentCents;
-      const unitPriceCents = Math.max(minimumCents, adjustedPrice);
-      if (unitPriceCents !== adjustedPrice) skipped.clamped++;
+      if (unitPriceCents == null) {
+        const adjustedPrice = basePriceCents + adjustmentCents;
+        unitPriceCents = Math.max(minimumCents, adjustedPrice);
+        if (unitPriceCents !== adjustedPrice) {
+          skipped.clamped++;
+          skipped.minimumClamped++;
+        }
+      } else {
+        if (automaticQuote?.wasMinimumClamped) {
+          skipped.clamped++;
+          skipped.minimumClamped++;
+        }
+        if (automaticQuote?.wasSellGuardClamped) {
+          skipped.clamped++;
+          skipped.sellGuardClamped++;
+        }
+      }
       plan.push({
         appid: info.appid,
         gameName: info.gameName,
@@ -456,17 +548,33 @@ const { setStatus: setOrderStatus } = orderStatus;
         targetQuantity,
         basePriceCents,
         unitPriceCents,
+        automaticPricing: pricingProfile.automatic,
+        wallClassification: automaticQuote?.classification || null,
         totalPriceCents: unitPriceCents * quantity,
       });
     }
 
     persistMarketObservations(marketRecords);
-    return { plan, skipped, priceSource, adjustmentCents, minimumCents };
+    return {
+      plan,
+      skipped,
+      priceSource,
+      adjustmentCents,
+      minimumCents,
+      automaticPricing: pricingProfile.automatic,
+    };
   }
 
   export function showBuyOrderConfirmation(planData, selectedGameCount) {
     return new Promise(resolve => {
-      const { plan, skipped, priceSource, adjustmentCents, minimumCents } = planData;
+      const {
+        plan,
+        skipped,
+        priceSource,
+        adjustmentCents,
+        minimumCents,
+        automaticPricing,
+      } = planData;
       const backdrop = document.createElement("div");
       backdrop.id = "stch-order-dialog-backdrop";
       const totalQuantity = plan.reduce((sum, item) => sum + item.quantity, 0);
@@ -482,7 +590,7 @@ const { setStatus: setOrderStatus } = orderStatus;
           <div class="stch-order-summary">
             游戏 <b>${plannedGameCount}</b>/${selectedGameCount} 个 · 卡牌种类 <b>${plan.length}</b> ·
             数量 <b>${totalQuantity}</b> 张 · 新增最高占用 <b>${formatMoney(totalCents)}</b><br>
-            价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> ·
+            价格基准 <b>${automaticPricing ? "自动定价 · " : ""}${getOrderPriceSourceLabel(priceSource)}</b> ·
             买价调整 <b>${adjustmentText}</b>
           </div>
           <div class="stch-order-list"></div>
@@ -501,6 +609,12 @@ const { setStatus: setOrderStatus } = orderStatus;
         row.title = `${item.gameName} · ${item.marketHashName}`;
         row.appendChild(createTextSpan("", `${item.gameName} · ${item.cardName}`));
         row.appendChild(createTextSpan("", `${item.quantity} 张`));
+        row.appendChild(createTextSpan(
+          "stch-order-price-basis",
+          item.automaticPricing
+            ? `${item.wallClassification === "near-wall" ? "有墙" : "无墙"} · 基准 ${formatMoney(item.basePriceCents)}`
+            : `基准 ${formatMoney(item.basePriceCents)}`
+        ));
         row.appendChild(createTextSpan("", formatMoney(item.unitPriceCents)));
         list.appendChild(row);
       });
@@ -509,9 +623,12 @@ const { setStatus: setOrderStatus } = orderStatus;
       if (skipped.covered) notes.push(`${skipped.covered} 种卡牌已被现有订购单覆盖`);
       if (skipped.missingPrice) notes.push(`${skipped.missingPrice} 种卡牌缺少所选价格，已跳过`);
       if (skipped.missingHash) notes.push(`${skipped.missingHash} 种卡牌缺少市场标识，已跳过`);
-      if (skipped.clamped) {
-        notes.push(`${skipped.clamped} 种卡牌低于 Steam 最低价，已调整为 ${formatMoney(minimumCents)}`);
-      }
+      if (skipped.minimumClamped) notes.push(
+        `${skipped.minimumClamped} 种卡牌低于 Steam 最低价，已调整为 ${formatMoney(minimumCents)}`
+      );
+      if (skipped.sellGuardClamped) notes.push(
+        `${skipped.sellGuardClamped} 种卡牌已限制在最低卖价以下`
+      );
       backdrop.querySelector(".stch-order-note").textContent =
         `${notes.join("；") || "未发现需跳过的卡牌"}。` +
         "订单将长期保留，直到成交或手动取消；提交即表示同意 Steam 订户协议。";

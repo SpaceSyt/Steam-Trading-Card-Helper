@@ -1,0 +1,39 @@
+{
+  "_fixture": "sanitized-user-supplied-orderbook-wall",
+  "queryKey": ["market", "orderbook", 753, "753-Sack of Gems"],
+  "state": {
+    "data": {
+      "amtMaxBuyOrder": 430,
+      "amtMinSellOrder": 438,
+      "eCurrency": 23,
+      "cBuyOrders": 332382,
+      "cSellOrders": 28860,
+      "rgCompactBuyOrders": [
+        430, 2,
+        429, 5,
+        428, 382,
+        427, 1297,
+        426, 3,
+        425, 30,
+        423, 5,
+        422, 209,
+        421, 859,
+        420, 1238,
+        419, 147,
+        418, 253,
+        417, 16,
+        416, 1,
+        415, 6,
+        414, 138,
+        411, 525,
+        410, 5,
+        409, 63,
+        408, 10
+      ]
+    }
+  },
+  "expected": {
+    "classification": "near-wall",
+    "wallPricesMinor": [428, 427]
+  }
+}

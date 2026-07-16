@@ -1,6 +1,6 @@
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 20;
+  export const CONFIG_SCHEMA_VERSION = 21;
 
   export const DEFAULT_CONFIG = {
     configVersion: CONFIG_SCHEMA_VERSION,
@@ -25,6 +25,9 @@
     buyMode: "complete5",
     orderPriceSource: "lowest",
     priceAdjustment: 0,
+    automaticPricingEnabled: false,
+    automaticPriceStrategy: "balanced",
+    automaticPriceAdjustment: 0,
     earlyPricePrediction: true,
     earlyPredictionAutoBlacklist: false,
     craftInterval: 500,
@@ -59,8 +62,41 @@
     merged.currencyId = Number.isInteger(currencyId) && currencyId > 0
       ? currencyId
       : defaults.currencyId;
+    merged.automaticPricingEnabled = merged.automaticPricingEnabled === true;
+    merged.automaticPriceStrategy = ["conservative", "balanced", "aggressive"]
+      .includes(merged.automaticPriceStrategy)
+      ? merged.automaticPriceStrategy
+      : defaults.automaticPriceStrategy;
+    for (const key of ["priceAdjustment", "automaticPriceAdjustment"]) {
+      const value = Number(merged[key]);
+      merged[key] = Number.isFinite(value) ? value : defaults[key];
+    }
     merged.configVersion = CONFIG_SCHEMA_VERSION;
     return merged;
+  }
+
+  export function getActiveOrderPricingProfile(cfg = DEFAULT_CONFIG) {
+    if (cfg?.automaticPricingEnabled) {
+      return {
+        automatic: true,
+        priceSource: ["conservative", "balanced", "aggressive"]
+          .includes(cfg.automaticPriceStrategy)
+          ? cfg.automaticPriceStrategy
+          : DEFAULT_CONFIG.automaticPriceStrategy,
+        adjustment: Number.isFinite(Number(cfg.automaticPriceAdjustment))
+          ? Number(cfg.automaticPriceAdjustment)
+          : DEFAULT_CONFIG.automaticPriceAdjustment,
+      };
+    }
+    return {
+      automatic: false,
+      priceSource: ["lowest", "median", "highest"].includes(cfg?.orderPriceSource)
+        ? cfg.orderPriceSource
+        : DEFAULT_CONFIG.orderPriceSource,
+      adjustment: Number.isFinite(Number(cfg?.priceAdjustment))
+        ? Number(cfg.priceAdjustment)
+        : DEFAULT_CONFIG.priceAdjustment,
+    };
   }
 
   export function loadConfig() {
