@@ -22,6 +22,7 @@ import { summarizeAssetIds } from "../parsers/inventory.js";
 import { isSharedActionBusy, updateAllActionStates, updateGrindActionState } from "../ui/action-state.js";
 
 import { grindStatus } from "../status-controllers.js";
+import { enableTileDragSelection } from "../ui/checkbox-drag.js";
 
 const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress, hideProgress: hideGrindProgress } = grindStatus;
 
@@ -438,6 +439,18 @@ export { updateGrindActionState };
   export function renderGrindResults() {
     const list = document.getElementById("stch-grind-list");
     if (!list) return;
+    enableTileDragSelection(list, {
+      isSelected: tile => state.selectedGrindResults?.has(tile.dataset.key),
+      setSelected: (tile, selected) => {
+        if (!state.selectedGrindResults) state.selectedGrindResults = new Set();
+        if (selected) state.selectedGrindResults.add(tile.dataset.key);
+        else state.selectedGrindResults.delete(tile.dataset.key);
+      },
+      onSelectionChange: () => {
+        updateGrindSummary();
+        updateGrindActionState();
+      },
+    });
     list.innerHTML = "";
     list.classList.add("stch-inventory-grid");
 
@@ -488,6 +501,7 @@ export { updateGrindActionState };
         `市场 ${marketText}${marketTitle ? `；${marketTitle}` : ""}`,
         `分解临界 ${breakEvenText}`,
         item.recommendationReason ? `建议：${item.recommendationLabel || "—"}，${item.recommendationReason}` : "",
+        "按住并拖动可连续选择或取消",
         assetSummary.title ? `资产ID:\n${assetSummary.title}` : "",
       ].filter(Boolean).join("\n");
       if (item.nameColor) tile.style.borderColor = item.nameColor;
@@ -528,18 +542,6 @@ export { updateGrindActionState };
       name.textContent = item.itemName || item.marketHashName || "未知物品";
       tile.appendChild(name);
 
-      tile.addEventListener("click", () => {
-        if (!state.selectedGrindResults) state.selectedGrindResults = new Set();
-        if (state.selectedGrindResults.has(key)) {
-          state.selectedGrindResults.delete(key);
-          tile.classList.remove("selected");
-        } else {
-          state.selectedGrindResults.add(key);
-          tile.classList.add("selected");
-        }
-        updateGrindSummary();
-        updateGrindActionState();
-      });
       list.appendChild(tile);
     }
 

@@ -52,17 +52,26 @@ test("automatic pricing keeps an independent strategy and adjustment profile", (
   });
 });
 
-test("new ordering and sidebar settings use safe defaults and preserve explicit opt-outs", () => {
+test("new ordering, sidebar, advanced, and blacklist settings normalize safely", () => {
   const defaults = normalizeConfig({});
   assert.equal(defaults.noBuyOrderMinimumFallback, true);
   assert.equal(defaults.sidebarDisabled, false);
+  assert.equal(defaults.showAdvancedSettings, false);
+  assert.equal(defaults.blacklistExpiryDays, 7);
 
   const optedOut = normalizeConfig({
     noBuyOrderMinimumFallback: false,
     sidebarDisabled: true,
+    showAdvancedSettings: true,
+    blacklistExpiryDays: 3.9,
   });
   assert.equal(optedOut.noBuyOrderMinimumFallback, false);
   assert.equal(optedOut.sidebarDisabled, true);
+  assert.equal(optedOut.showAdvancedSettings, true);
+  assert.equal(optedOut.blacklistExpiryDays, 3);
+
+  assert.equal(normalizeConfig({ blacklistExpiryDays: 0 }).blacklistExpiryDays, 1);
+  assert.equal(normalizeConfig({ blacklistExpiryDays: "invalid" }).blacklistExpiryDays, 7);
 });
 
 test("config normalization removes obsolete keys and rejects invalid currency ids", () => {

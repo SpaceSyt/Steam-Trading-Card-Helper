@@ -438,11 +438,12 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             <span class="stch-bl-result" id="stch-bl-result"></span>
           </div>
           <div class="stch-bl-form">
+            <label class="stch-primary-label">价格上限 ${currencySymbol} <input id="stch-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
+            <label>数据 <input id="stch-blacklist-expiry-days" class="stch-input" type="number" min="1" step="1" value="${state.cfg.blacklistExpiryDays}" style="width:55px"> 天后过期</label>
             <label>
               <input id="stch-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
               启用自动游戏黑名单
             </label>
-            <label class="stch-primary-label">价格上限 ${currencySymbol} <input id="stch-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
             <span style="color:#8f98a0;font-size:12px;">扫描时超过此价格的游戏会自动加入游戏/AppID黑名单</span>
           </div>
           <div class="stch-bl-list" id="stch-bl-list"></div>
@@ -524,7 +525,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             <div id="stch-grind-log"></div>
           </div>
         </div>
-        <div class="stch-tab-content ${activeClass("settings")}" id="stch-tab-settings">
+        <div class="stch-tab-content ${activeClass("settings")} ${state.cfg.showAdvancedSettings ? "stch-show-advanced" : ""}" id="stch-tab-settings">
           <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">全局设定</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
@@ -537,13 +538,13 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             </label>
             <span class="stch-settings-hint">当前使用：${currencyStatus}</span>
           </div>
-          <div class="stch-toolbar">
+          <div class="stch-toolbar stch-advanced-setting">
             <label>priceoverview请求间隔 <input id="stch-req-interval" class="stch-input" type="number" min="100" step="10" value="${state.cfg.requestInterval}" style="width:70px"> ms</label>
             <label>每 <input id="stch-batch-size" class="stch-input" type="number" min="5" step="1" value="${state.cfg.batchSize}" style="width:55px"> 次priceoverview请求后暂停</label>
             <label><input id="stch-batch-pause" class="stch-input" type="number" min="500" step="500" value="${state.cfg.batchPause}" style="width:75px"> ms</label>
           </div>
           <div class="stch-toolbar">
-            <label title="显示扫描过程中没有产生结果的常规信息">
+            <label class="stch-advanced-setting" title="显示扫描过程中没有产生结果的常规信息">
               <input id="stch-show-no-result-logs" type="checkbox" ${state.cfg.showNoResultLogs ? "checked" : ""}>
               显示无结果日志
             </label>
@@ -552,34 +553,31 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
               关闭侧边栏
             </label>
           </div>
-          <div class="stch-settings-hint stch-settings-hint-block">价格 API 默认使用 330ms 间隔，每 20 次请求主动冷却 53s；如遇 429 可适当调高。</div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">卡牌价格扫描</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
+            <label>订购卡牌缓存 <input id="stch-order-cache-days" class="stch-input" type="number" min="0" step="1" value="${state.cfg.orderCacheDays}" style="width:55px"> 天</label>
             <label><input id="stch-early-price-prediction" type="checkbox" ${state.cfg.earlyPricePrediction ? "checked" : ""}> 价格预测提早跳过</label>
             <label title="仅在 Steam 明确返回没有买单时使用当前币种的市场最低价；请求或解析失败仍会跳过">
               <input id="stch-no-buy-minimum-fallback" type="checkbox" ${state.cfg.noBuyOrderMinimumFallback ? "checked" : ""}>
               无买单时使用市场最低价
             </label>
-          </div>
-          <div class="stch-toolbar">
-            <label>订购卡牌缓存 <input id="stch-order-cache-days" class="stch-input" type="number" min="0" step="1" value="${state.cfg.orderCacheDays}" style="width:55px"> 天</label>
             <label><input id="stch-skip-cached-orders" type="checkbox" ${state.cfg.skipCachedOrderResults ? "checked" : ""}> 扫描时跳过缓存内结果</label>
           </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">游戏/AppID 黑名单</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
+            <label class="stch-primary-label">价格上限 ${currencySymbol} <input id="stch-settings-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
+            <label>数据 <input id="stch-settings-blacklist-expiry-days" class="stch-input" type="number" min="1" step="1" value="${state.cfg.blacklistExpiryDays}" style="width:55px"> 天后过期</label>
             <label>
               <input id="stch-settings-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
               启用自动游戏黑名单
             </label>
-            <label class="stch-primary-label">价格上限 ${currencySymbol} <input id="stch-settings-auto-bl-threshold" class="stch-input" type="number" min="0" step="0.5" value="${state.cfg.autoBlackThreshold}" style="width:70px"></label>
             <label><input id="stch-settings-early-prediction-auto-blacklist" type="checkbox" ${state.cfg.earlyPredictionAutoBlacklist ? "checked" : ""}> 预测跳过时加入自动黑名单</label>
-            <span class="stch-settings-hint">预测价格也必须超过自动黑名单价格上限才会加入</span>
           </div>
-          <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">徽章合成</div>
-          <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
-          <div class="stch-toolbar">
+          <div class="stch-advanced-setting" style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">徽章合成</div>
+          <div class="stch-advanced-setting" style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+          <div class="stch-toolbar stch-advanced-setting">
             <label>每次合成请求间隔 <input id="stch-craft-interval" class="stch-input" type="number" min="200" step="100" value="${state.cfg.craftInterval}" style="width:70px"> ms</label>
           </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">多余物品处理</div>
@@ -592,6 +590,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             </label>
           </div>
           <div class="stch-settings-page-actions">
+            <label class="stch-advanced-toggle"><input id="stch-show-advanced-settings" type="checkbox" ${state.cfg.showAdvancedSettings ? "checked" : ""}> 显示高级</label>
             <span class="stch-footer-status" id="stch-settings-action-status"></span>
             <div class="stch-btn alt" id="stch-onboarding-open">重新查看使用说明</div>
             <div class="stch-btn alt" id="stch-settings-clear-cache" title="清除订购卡牌缓存">清除缓存</div>
@@ -600,7 +599,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.3.5 · 当前币种：${currencyStatus}</span>
+        <span class="stch-label">V2.3.6 · 当前币种：${currencyStatus}</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -683,6 +682,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         { integer: true, min: 0 }
       );
       state.cfg.showNoResultLogs = !!document.getElementById("stch-show-no-result-logs")?.checked;
+      state.cfg.showAdvancedSettings = !!document.getElementById("stch-show-advanced-settings")?.checked;
       state.cfg.sidebarDisabled = !!document.getElementById("stch-sidebar-disabled")?.checked;
       const buyModeEl = document.getElementById("stch-buy-mode");
       if (state.cfg.foilScanMode) {
@@ -741,6 +741,12 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       if (changedId === "stch-sidebar-disabled") {
         setSidebarEnabled(!state.cfg.sidebarDisabled);
       }
+      if (changedId === "stch-show-advanced-settings") {
+        document.getElementById("stch-tab-settings")?.classList.toggle(
+          "stch-show-advanced",
+          state.cfg.showAdvancedSettings
+        );
+      }
       if (["stch-surplus-only-maxed", "stch-surplus-only-tradable", "stch-surplus-compare-gems"].includes(changedId)) {
         renderSurplusResults();
         renderGrindResults();
@@ -763,7 +769,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     const cfgIds = ["stch-threshold", "stch-req-interval",
       "stch-max-pages", "stch-include-drops",
       "stch-foil-scan-mode",
-      "stch-batch-size", "stch-batch-pause", "stch-show-no-result-logs", "stch-sidebar-disabled", "stch-buy-mode",
+      "stch-batch-size", "stch-batch-pause", "stch-show-no-result-logs", "stch-show-advanced-settings", "stch-sidebar-disabled", "stch-buy-mode",
       "stch-early-price-prediction", "stch-no-buy-minimum-fallback", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
       "stch-skip-cached-orders", "stch-craft-interval",
       "stch-craft-mode", "stch-surplus-item-mode",
@@ -1056,6 +1062,10 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       "stch-auto-bl-threshold",
       "stch-settings-auto-bl-threshold",
     ];
+    const blacklistExpiryDaysIds = [
+      "stch-blacklist-expiry-days",
+      "stch-settings-blacklist-expiry-days",
+    ];
     const renderAutoBlacklistControls = (exceptId = "") => {
       autoBlacklistEnabledIds.forEach(id => {
         if (id === exceptId) return;
@@ -1067,6 +1077,15 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         const input = document.getElementById(id);
         if (input) input.value = String(state.cfg.autoBlackThreshold ?? 0);
       });
+      blacklistExpiryDaysIds.forEach(id => {
+        if (id === exceptId) return;
+        const input = document.getElementById(id);
+        if (input) input.value = String(state.cfg.blacklistExpiryDays);
+      });
+      const cleanupButton = document.getElementById("stch-bl-cleanup");
+      if (cleanupButton) {
+        cleanupButton.title = `清理超过 ${state.cfg.blacklistExpiryDays} 天的普通黑名单；固定黑名单不会清理`;
+      }
     };
     autoBlacklistEnabledIds.forEach(id => {
       document.getElementById(id)?.addEventListener("change", event => {
@@ -1087,6 +1106,19 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       const input = document.getElementById(id);
       input?.addEventListener("input", event => syncAutoBlacklistThreshold(event, false));
       input?.addEventListener("change", event => syncAutoBlacklistThreshold(event, true));
+    });
+    const syncBlacklistExpiryDays = (event, normalizeSource = false) => {
+      const parsed = parseInt(event.currentTarget.value, 10);
+      state.cfg.blacklistExpiryDays = Number.isFinite(parsed)
+        ? Math.max(1, parsed)
+        : DEFAULT_CONFIG.blacklistExpiryDays;
+      renderAutoBlacklistControls(normalizeSource ? "" : event.currentTarget.id);
+      saveConfig(state.cfg);
+    };
+    blacklistExpiryDaysIds.forEach(id => {
+      const input = document.getElementById(id);
+      input?.addEventListener("input", event => syncBlacklistExpiryDays(event, false));
+      input?.addEventListener("change", event => syncBlacklistExpiryDays(event, true));
     });
     renderAutoBlacklistControls();
 
@@ -1210,12 +1242,16 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       try { f = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { f = {}; }
       try { p = JSON.parse(state.cfg.blacklistPriceData || "{}"); } catch (_) { p = {}; }
       const now = Date.now();
-      const expired = bl.filter(a => !f[a] && d[a] && (now - d[a] > 7 * 86400000));
+      const expiryDays = Math.max(
+        1,
+        Number(state.cfg.blacklistExpiryDays) || DEFAULT_CONFIG.blacklistExpiryDays
+      );
+      const expired = bl.filter(a => !f[a] && d[a] && (now - d[a] > expiryDays * 86400000));
       if (expired.length === 0) {
         document.getElementById("stch-bl-result").textContent = "没有可清理的过期项";
         return;
       }
-      if (!confirm(`将清理 ${expired.length} 项过期（>7天）游戏黑名单，确定？`)) return;
+      if (!confirm(`将清理 ${expired.length} 项过期（>${expiryDays}天）游戏黑名单，确定？`)) return;
       const keep = bl.filter(a => !expired.includes(a));
       expired.forEach(a => {
         delete n[a]; delete s[a]; delete d[a]; delete f[a]; delete p[a];

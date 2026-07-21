@@ -24,6 +24,7 @@ import { findInventoryCardForBadgeCard, selectSurplusAssets, summarizeAssetIds }
 import { isSharedActionBusy, updateAllActionStates, updateSurplusActionState } from "../ui/action-state.js";
 
 import { surplusStatus } from "../status-controllers.js";
+import { enableTileDragSelection } from "../ui/checkbox-drag.js";
 
 const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusProgress, hideProgress: hideSurplusProgress } = surplusStatus;
 
@@ -216,6 +217,18 @@ export { updateSurplusActionState };
   export function renderSurplusResults() {
     const list = document.getElementById("stch-surplus-list");
     if (!list) return;
+    enableTileDragSelection(list, {
+      isSelected: tile => state.selectedSurplusResults?.has(tile.dataset.key),
+      setSelected: (tile, selected) => {
+        if (!state.selectedSurplusResults) state.selectedSurplusResults = new Set();
+        if (selected) state.selectedSurplusResults.add(tile.dataset.key);
+        else state.selectedSurplusResults.delete(tile.dataset.key);
+      },
+      onSelectionChange: () => {
+        updateSurplusSummary();
+        updateSurplusActionState();
+      },
+    });
     list.innerHTML = "";
     list.classList.add("stch-inventory-grid");
 
@@ -268,6 +281,7 @@ export { updateSurplusActionState };
         state.cfg.surplusCompareGems && result.gemBetter
           ? "宝石价值高于出售税后到手价"
           : "",
+        "按住并拖动可连续选择或取消",
         result.assetTitle ? `资产ID:\n${result.assetTitle}` : "",
       ].filter(Boolean).join("\n");
       if (result.nameColor) tile.style.borderColor = result.nameColor;
@@ -303,18 +317,6 @@ export { updateSurplusActionState };
       name.textContent = result.cardName || result.marketHashName || "未知卡牌";
       tile.appendChild(name);
 
-      tile.addEventListener("click", () => {
-        if (!state.selectedSurplusResults) state.selectedSurplusResults = new Set();
-        if (state.selectedSurplusResults.has(key)) {
-          state.selectedSurplusResults.delete(key);
-          tile.classList.remove("selected");
-        } else {
-          state.selectedSurplusResults.add(key);
-          tile.classList.add("selected");
-        }
-        updateSurplusSummary();
-        updateSurplusActionState();
-      });
       list.appendChild(tile);
     }
 

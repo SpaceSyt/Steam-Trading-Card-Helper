@@ -1,6 +1,6 @@
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 22;
+  export const CONFIG_SCHEMA_VERSION = 23;
 
   export const DEFAULT_CONFIG = {
     configVersion: CONFIG_SCHEMA_VERSION,
@@ -10,6 +10,7 @@
     batchSize: 20,
     batchPause: 53000,
     showNoResultLogs: false,
+    showAdvancedSettings: false,
     sidebarDisabled: false,
     includeDrops: false,
     foilScanMode: false,
@@ -22,6 +23,7 @@
     blacklistDates: "{}",
     blacklistFixed: "{}",
     blacklistPriceData: "{}",
+    blacklistExpiryDays: 7,
     autoBlackThreshold: 10,
     autoBlackEnabled: false,
     buyMode: "complete5",
@@ -66,8 +68,13 @@
       ? currencyId
       : defaults.currencyId;
     merged.automaticPricingEnabled = merged.automaticPricingEnabled === true;
+    merged.showAdvancedSettings = merged.showAdvancedSettings === true;
     merged.sidebarDisabled = merged.sidebarDisabled === true;
     merged.noBuyOrderMinimumFallback = merged.noBuyOrderMinimumFallback !== false;
+    const blacklistExpiryDays = Number(merged.blacklistExpiryDays);
+    merged.blacklistExpiryDays = Number.isFinite(blacklistExpiryDays)
+      ? Math.max(1, Math.floor(blacklistExpiryDays))
+      : defaults.blacklistExpiryDays;
     merged.automaticPriceStrategy = ["conservative", "balanced", "aggressive"]
       .includes(merged.automaticPriceStrategy)
       ? merged.automaticPriceStrategy
