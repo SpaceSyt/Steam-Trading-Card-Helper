@@ -68,25 +68,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     ["balanced", "平衡"],
     ["aggressive", "抢单"],
   ];
-  const MANUAL_ORDER_PRICE_HELP = [
-    "在售最低：当前最低卖单价格，通常可立即成交",
-    "平均价格：Steam 返回的 median_price，用作市场参考价",
-    "求购最高：当前最高买单价格，通常需要等待卖家成交",
-    "确认无买单时可按市场最低价提交（可在设置关闭）；其他查价失败仍会跳过",
-    "仅用于自动提交长期订购单；手动购买仍使用在售最低",
-    "总价预估只使用已扫描或已有缓存数据实时重算，不会额外查价",
-  ].join("\n");
-  const AUTOMATIC_ORDER_PRICE_HELP = [
-    "会先排除同时具有异常价格断层和弱局部支撑的顶部孤立高价",
-    "订单墙按有效价格区间内墙前订单的相对数量判断，不要求固定订单数或墙后回落",
-    "保守：有墙取订单墙底部；无墙取有效最高买价 - 0.01",
-    "平衡：有墙取订单墙顶部；无墙取有效最高买价",
-    "抢单：取有效最高买价 + 0.01",
-    "买价调整会在策略价格之后生效；最终不会达到或超过最低卖价",
-    "确认无买单时可按市场最低价提交（可在设置关闭）；其他订单簿解析失败仍会跳过",
-    "总价预估只使用已扫描或已有缓存数据实时重算，不会额外查价",
-  ].join("\n");
-
   function getOrderPriceOptionsHtml(automatic, selected) {
     const options = automatic ? AUTOMATIC_ORDER_PRICE_OPTIONS : MANUAL_ORDER_PRICE_OPTIONS;
     return options.map(([value, label]) => (
@@ -228,9 +209,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       automaticPricingEnabled,
       activePriceSource
     );
-    const initialPriceHelp = (
-      automaticPricingEnabled ? AUTOMATIC_ORDER_PRICE_HELP : MANUAL_ORDER_PRICE_HELP
-    ).replaceAll("\n", "&#10;");
     const automaticPricingClass = automaticPricingEnabled ? "stch-auto-pricing-active" : "";
     const backdrop = document.createElement("div");
     backdrop.id = "stch-backdrop";
@@ -300,7 +278,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             <label>
               <input id="stch-include-drops" type="checkbox" ${state.cfg.includeDrops ? "checked" : ""}>
               包含掉落
-              <span class="stch-help" title="默认跳过仍有卡牌掉落的游戏，避免购买之后又获得重复卡牌&#10;勾选后也会扫描并显示这些游戏">?</span>
             </label>
             <label class="stch-foil-mode-label ${state.cfg.foilScanMode ? "active" : ""}" id="stch-foil-mode-label">
               <input id="stch-foil-scan-mode" type="checkbox" ${state.cfg.foilScanMode ? "checked" : ""}>
@@ -309,7 +286,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
           </div>
           <div class="stch-toolbar">
             <label id="stch-order-price-label" class="stch-primary-label ${automaticPricingClass}">购买价格
-              <span class="stch-help stch-order-price-help" title="${initialPriceHelp}">?</span>
               <select id="stch-order-price-source" class="stch-input" style="width:118px">
                 ${initialPriceOptions}
               </select>
@@ -323,7 +299,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
           <div class="stch-scan-actions">
             <div class="stch-btn" id="stch-scan-btn">开始扫描</div>
             <div class="stch-btn alt disabled" id="stch-stop-btn">停止</div>
-            <div class="stch-btn alt disabled" id="stch-skip-btn" title="跳过当前徽章">跳过当前</div>
+            <div class="stch-btn alt disabled" id="stch-skip-btn">跳过当前</div>
             <div class="stch-bulk-actions">
               <div class="stch-btn alt disabled" id="stch-recalculate-btn">重新计算</div>
               <div class="stch-btn disabled" id="stch-submit-orders-btn">提交订购单</div>
@@ -339,7 +315,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
           </div>
           <div class="stch-status-text" id="stch-status"></div>
           <div class="stch-game-list" id="stch-list"></div>
-          <div class="stch-log-resizer" data-log="stch-log" data-content="stch-list" title="上下拖动调整日志区域"></div>
+          <div class="stch-log-resizer" data-log="stch-log" data-content="stch-list"></div>
           <div id="stch-log"></div>
         </div>
         <div class="stch-tab-content ${activeClass("history")}" id="stch-tab-history">
@@ -377,7 +353,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             <label class="stch-primary-label">手动 AppID <input id="stch-order-appid" class="stch-input" type="text" style="width:100px" placeholder="4761370"></label>
             <label class="stch-foil-mode-label" id="stch-order-manual-foil-label">
               <input id="stch-order-manual-foil" type="checkbox">
-              闪卡
+              闪卡模式
             </label>
             <div class="stch-btn alt" id="stch-order-add-btn">读取并加入</div>
             <div class="stch-btn alt disabled" id="stch-order-recalculate-btn">重新计算</div>
@@ -386,7 +362,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
           </div>
           <div class="stch-toolbar">
             <label id="stch-order-page-price-label" class="stch-primary-label ${automaticPricingClass}">购买价格
-              <span class="stch-help stch-order-price-help" title="${initialPriceHelp}">?</span>
               <select id="stch-order-page-price-source" class="stch-input" style="width:118px">
                 ${initialPriceOptions}
               </select>
@@ -432,7 +407,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
               </select>
             </label>
             <label>最大徽章页数 <input id="stch-craft-max-pages" class="stch-input" type="number" min="1" max="20" value="${state.cfg.maxBadgePages}"></label>
-            <span style="color:#8f98a0;font-size:12px;">扫描“进行中”页面里已经收集齐全、可立即合成的徽章</span>
           </div>
           <div class="stch-scan-actions">
             <div class="stch-btn" id="stch-craft-scan-btn">扫描可合成徽章</div>
@@ -453,7 +427,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
           </div>
           <div class="stch-status-text" id="stch-craft-status"></div>
           <div class="stch-game-list stch-craft-list" id="stch-craft-list"></div>
-          <div class="stch-log-resizer" data-log="stch-craft-log" data-content="stch-craft-list" title="上下拖动调整日志区域"></div>
+          <div class="stch-log-resizer" data-log="stch-craft-log" data-content="stch-craft-list"></div>
           <div id="stch-craft-log"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-blacklist">
@@ -507,7 +481,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
               只显示建议分解
             </label>
             <label class="stch-primary-label">出售价格
-              <span class="stch-help" title="在售最低：当前最低卖单价格&#10;平均价格：Steam 返回的 median_price&#10;求购最高：当前最高买单价格&#10;提交出售时会换算为 Steam 接口需要的卖家到手价">?</span>
               <select id="stch-surplus-sell-price-source" class="stch-input" style="width:118px">
                 <option value="lowest" ${state.cfg.surplusSellPriceSource === "lowest" ? "selected" : ""}>在售最低</option>
                 <option value="median" ${state.cfg.surplusSellPriceSource === "median" ? "selected" : ""}>平均价格</option>
@@ -525,8 +498,8 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             <span class="stch-selected-count stch-processing-selected-count" id="stch-surplus-selected-count">选择 0 项</span>
             <div class="stch-btn alt disabled" id="stch-surplus-select-all-btn">全选</div>
             <div class="stch-surplus-action-buttons">
-              <div class="stch-btn alt disabled" id="stch-surplus-sell-btn" title="按所选价格源提交 Steam 市场出售请求">出售</div>
-              <div class="stch-btn stch-btn-danger disabled" id="stch-surplus-gem-btn" title="读取 Steam 当前宝石值后提交转化宝石请求">转化宝石</div>
+              <div class="stch-btn alt disabled" id="stch-surplus-sell-btn">出售</div>
+              <div class="stch-btn stch-btn-danger disabled" id="stch-surplus-gem-btn">转化宝石</div>
             </div>
           </div>
           <div class="stch-surplus-mode-panel" id="stch-surplus-card-panel">
@@ -539,7 +512,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             </div>
             <div class="stch-status-text" id="stch-surplus-status"></div>
             <div class="stch-game-list stch-surplus-list" id="stch-surplus-list"></div>
-            <div class="stch-log-resizer" data-log="stch-surplus-log" data-content="stch-surplus-list" title="上下拖动调整日志区域"></div>
+            <div class="stch-log-resizer" data-log="stch-surplus-log" data-content="stch-surplus-list"></div>
             <div id="stch-surplus-log"></div>
           </div>
           <div class="stch-surplus-mode-panel" id="stch-surplus-grind-panel">
@@ -552,7 +525,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             </div>
             <div class="stch-status-text" id="stch-grind-status"></div>
             <div class="stch-game-list stch-grind-list" id="stch-grind-list"></div>
-            <div class="stch-log-resizer" data-log="stch-grind-log" data-content="stch-grind-list" title="上下拖动调整日志区域"></div>
+            <div class="stch-log-resizer" data-log="stch-grind-log" data-content="stch-grind-list"></div>
             <div id="stch-grind-log"></div>
           </div>
         </div>
@@ -575,11 +548,11 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             <label><input id="stch-batch-pause" class="stch-input" type="number" min="500" step="500" value="${state.cfg.batchPause}" style="width:75px"> ms</label>
           </div>
           <div class="stch-toolbar">
-            <label class="stch-advanced-setting" title="显示扫描过程中没有产生结果的常规信息">
+            <label class="stch-advanced-setting">
               <input id="stch-show-no-result-logs" type="checkbox" ${state.cfg.showNoResultLogs ? "checked" : ""}>
               显示无结果日志
             </label>
-            <label title="关闭页面右侧的账号和宝石信息侧边栏">
+            <label>
               <input id="stch-sidebar-disabled" type="checkbox" ${state.cfg.sidebarDisabled ? "checked" : ""}>
               关闭侧边栏
             </label>
@@ -624,7 +597,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             <label class="stch-advanced-toggle"><input id="stch-show-advanced-settings" type="checkbox" ${state.cfg.showAdvancedSettings ? "checked" : ""}> 显示高级</label>
             <span class="stch-footer-status" id="stch-settings-action-status"></span>
             <div class="stch-btn alt" id="stch-onboarding-open">重新查看使用说明</div>
-            <div class="stch-btn alt" id="stch-settings-clear-cache" title="清除订购卡牌缓存">清除缓存</div>
+            <div class="stch-btn alt" id="stch-settings-clear-cache">清除缓存</div>
             <div class="stch-btn stch-btn-danger" id="stch-settings-reset">恢复默认设定</div>
           </div>
         </div>
@@ -864,9 +837,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       });
       modal.querySelectorAll(".stch-auto-pricing-toggle").forEach(label => {
         label.classList.toggle("stch-auto-pricing-active", automatic);
-      });
-      modal.querySelectorAll(".stch-order-price-help").forEach(help => {
-        help.title = automatic ? AUTOMATIC_ORDER_PRICE_HELP : MANUAL_ORDER_PRICE_HELP;
       });
     };
     orderPriceSourceIds.forEach(id => {

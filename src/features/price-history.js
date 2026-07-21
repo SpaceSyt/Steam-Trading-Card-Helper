@@ -357,7 +357,6 @@ function createItemRow(item, records) {
   remove.type = "button";
   remove.className = "stch-history-remove";
   remove.textContent = "删除";
-  remove.title = "从总览移除（保留本地价格历史）";
   remove.setAttribute("aria-label", `删除 ${item.displayName || item.marketHashName}`);
   remove.addEventListener("click", event => {
     event.preventDefault();

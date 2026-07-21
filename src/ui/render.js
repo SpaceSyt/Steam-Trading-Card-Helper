@@ -83,7 +83,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
       <span class="stch-cards stch-sortable" data-sort="cards">卡牌<span class="stch-sort-arrow">${sortArrow("cards", source)}</span></span>
       <span class="stch-cost stch-sortable" data-sort="cost">单套补全<span class="stch-sort-arrow">${sortArrow("cost", source)}</span></span>
       <span class="stch-full stch-sortable" data-sort="full">单套最低<span class="stch-sort-arrow">${sortArrow("full", source)}</span></span>
-      <span class="stch-lv5 stch-sortable" data-sort="lv5">满级估算 <span class="stch-sort-arrow">${sortArrow("lv5", source)}</span><span style="cursor:help;color:#8f98a0;font-size:11px;" title="绿色:近期成交>1，参考性较强&#10;灰色:近期成交=1，参考性不强&#10;红色:近期成交=0，参考性较弱&#10;黄色:Steam返回信息不全，采用 median_price 或公式估算，结果可能偏低">?</span></span>
+      <span class="stch-lv5 stch-sortable" data-sort="lv5">满级估算 <span class="stch-sort-arrow">${sortArrow("lv5", source)}</span><span style="cursor:help;color:#8f98a0;font-size:11px;" title="绿色:近期成交>1，参考性较强&#10;黄色:近期成交=1，参考性不强&#10;红色:近期成交=0，参考性较弱&#10;灰色:信息不全，采用估计">?</span></span>
       <span class="stch-drops stch-sortable" data-sort="drops">掉落<span class="stch-sort-arrow">${sortArrow("drops", source)}</span></span>
       ${cacheHeader}
       <span class="stch-buy">手动购买</span>
@@ -232,25 +232,9 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     const targetLevel = getBadgeTargetLevel(info);
     const ownedCards = info.cards.reduce((sum, c) => sum + Math.min(c.owned, 1), 0);
     const minVol = info.minVolume || 0;
-    const lv5Color = info.hasEstimated ? "color:#c9a02c" : minVol > 1 ? "color:#4caf50" : minVol === 1 ? "color:#888" : "";
-    const estimateNotes = [];
-    if (info.hasFormulaEstimate) {
-      estimateNotes.push(
-        `Steam返回信息不全：${info.formulaEstimatedCards}张卡牌无价格，` +
-        `使用已知卡牌几何均价 ${formatMoney(info.formulaEstimateUnitCents)} 估算`
-      );
-    }
-    if (info.hasMedianFallback) {
-      estimateNotes.push("部分卡牌无最低出售价格，使用 median_price 估算");
-    }
-    const unestimatedCards =
-      Math.max(0, (info.noPriceDataCount || 0) - (info.formulaEstimatedCards || 0)) +
-      (info.failedPriceCount || 0);
-    if (unestimatedCards > 0) {
-      estimateNotes.push(`${unestimatedCards}张卡牌未计入估算`);
-    }
-    const lv5Title = estimateNotes.length > 0
-      ? `${estimateNotes.join("\n")}，结果可能偏低`
+    const lv5Color = info.hasEstimated ? "color:#888" : minVol > 1 ? "color:#4caf50" : minVol === 1 ? "color:#c9a02c" : "";
+    const lv5Title = info.hasEstimated
+      ? "信息不全，采用估计"
       : minVol > 1
         ? "近期成交>1，参考性较强"
         : minVol === 1
@@ -285,7 +269,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     checkbox.type = "checkbox";
     checkbox.className = "stch-result-cb";
     checkbox.checked = sourceState.selected.has(getResultKey(info));
-    checkbox.title = "选择此游戏进行重新计算或提交订购单；按住并上下拖动可连续选择或取消";
+    checkbox.setAttribute("aria-label", `选择 ${info.gameName || info.appid}`);
     buyCell.appendChild(buyLink);
     row.appendChild(buyCell);
     const checkboxCell = document.createElement("span");

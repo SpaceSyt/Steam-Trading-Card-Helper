@@ -221,7 +221,7 @@ import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
         checkbox.type = "checkbox";
         checkbox.className = "stch-bl-cb";
         checkbox.dataset.appid = appid;
-        checkbox.title = "按住并上下拖动可连续选择或取消";
+        checkbox.setAttribute("aria-label", `选择 ${name || appid}`);
         checkboxCell.appendChild(checkbox);
         row.appendChild(checkboxCell);
         target.appendChild(row);

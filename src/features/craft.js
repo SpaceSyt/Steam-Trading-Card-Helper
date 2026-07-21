@@ -184,7 +184,7 @@ export { updateCraftActionState };
       checkbox.className = "stch-result-cb";
       checkbox.type = "checkbox";
       checkbox.checked = !!result.selected;
-      checkbox.title = "按住并上下拖动可连续选择或取消";
+      checkbox.setAttribute("aria-label", `选择 ${result.gameName || result.appid}`);
       checkbox.disabled = state.craftScanning
         || state.craftActionRunning
         || state.surplusActionRunning

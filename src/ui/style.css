@@ -350,11 +350,15 @@
     }
     .stch-row-header {
       color: #8f98a0;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: bold;
       border-bottom: 2px solid #45556b;
       padding-bottom: 6px;
       margin-bottom: 2px;
+    }
+    #stch-modal .stch-row-header > * {
+      font-size: 11px;
+      font-family: inherit;
     }
     .stch-game-row:hover { background: rgba(103,193,245,0.08); }
     .stch-game-row .stch-appid {
@@ -848,11 +852,6 @@
       margin-right: 0;
       justify-content: flex-end;
     }
-    .stch-help {
-      cursor: help;
-      color: #8f98a0;
-      font-size: 12px;
-    }
     .stch-sortable {
       cursor: pointer;
       user-select: none;
@@ -888,9 +887,6 @@
     .stch-auto-pricing-toggle input { accent-color: #d6b45a; }
     .stch-primary-label.stch-auto-pricing-active,
     .stch-auto-pricing-active .stch-input,
-    .stch-auto-pricing-active .stch-help {
-      color: #e7c767 !important;
-    }
     .stch-foil-mode-label {
       color: #d9a4e8;
       font-weight: bold;
