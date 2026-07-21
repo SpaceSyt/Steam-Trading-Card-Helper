@@ -18,6 +18,12 @@ import { activatePriceHistoryTab, initPriceHistoryUi, resetPriceHistoryRuntime, 
 
 import { submitSelectedBuyOrders, submitSelectedOrderBuyOrders, addManualOrderAppid, deleteExpiredOrderResults } from "../features/orders.js";
 
+import {
+  activateActiveBuyOrdersTab,
+  initActiveBuyOrdersUi,
+  resetActiveBuyOrdersRuntime,
+} from "../features/active-orders.js";
+
 import { startCraftScan, requestCraftStop, setAllCraftCounts, submitCraftPlan, renderCraftResults, updateCraftActionState, updateCraftSummary } from "../features/craft.js";
 
 import { startSurplusScan, requestSurplusStop, renderSurplusResults, updateSurplusActionState, setAllVisibleSurplusSelection } from "../features/surplus.js";
@@ -96,6 +102,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     state.pendingOrderQuantities = new Map();
     state.highestBuyPrices = new Map();
     state.marketOrderDepths = new Map();
+    resetActiveBuyOrdersRuntime();
     resetPriceHistoryRuntime();
     state.surplusResults = [];
     state.selectedSurplusResults = new Set();
@@ -243,6 +250,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         <div class="stch-tabs">
           <span class="stch-tab ${activeClass("scan")}" data-tab="scan">卡牌价格扫描</span>
           <span class="stch-tab" data-tab="orders">订购卡牌</span>
+          <span class="stch-tab ${activeClass("active-orders")}" data-tab="active-orders">已下订购单</span>
           <span class="stch-tab ${activeClass("history")}" data-tab="history">价格走势</span>
           <span class="stch-tab" data-tab="craft">徽章合成</span>
           <span class="stch-tab" data-tab="blacklist">游戏/AppID黑名单</span>
@@ -266,7 +274,11 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
               手动价格可选在售最低、平均价格或求购最高；自动定价可按订单墙选择保守、平衡或抢单。买价调整可正可负。
             </div>
             <div class="stch-onboarding-step">
-              <b>4. 批量合成徽章</b>
+              <b>4. 管理已下订购单</b>
+              “已下订购单”页显示当前剩余量；Steam 不提供原始数量、已成交量或创建时间。最低售价只在选择后手动查询并保留 10 分钟，智能价差只使用本次会话已有订单簿缓存。
+            </div>
+            <div class="stch-onboarding-step">
+              <b>5. 批量合成徽章</b>
               在“徽章合成”页扫描已经收集齐全的卡组，可逐级升级或一次提交当前可合成最大次数。
             </div>
             <div class="stch-onboarding-note">
@@ -391,6 +403,25 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
           </div>
           <div class="stch-status-text" id="stch-order-status" style="display:none"></div>
           <div class="stch-game-list stch-order-page-list" id="stch-order-list"></div>
+        </div>
+        <div class="stch-tab-content ${activeClass("active-orders")}" id="stch-tab-active-orders">
+          <div class="stch-toolbar stch-active-orders-toolbar">
+            <label class="stch-primary-label">游戏
+              <select id="stch-active-orders-game" class="stch-input">
+                <option value="all">全部游戏</option>
+              </select>
+            </label>
+            <button type="button" class="stch-btn alt" id="stch-active-orders-refresh">刷新</button>
+            <button type="button" class="stch-btn alt disabled" id="stch-active-orders-query-prices">查询选中价格</button>
+            <button type="button" class="stch-btn alt stch-btn-danger disabled" id="stch-active-orders-cancel-selected">撤销选中</button>
+          </div>
+          <div class="stch-summary stch-active-orders-summary-row">
+            <span class="stch-summary-text" id="stch-active-orders-summary">尚未读取订购单</span>
+            <span class="stch-selected-count" id="stch-active-orders-selected-count">已选 0 项</span>
+          </div>
+          <div class="stch-status-text" id="stch-active-orders-status" style="display:none"></div>
+          <div class="stch-active-orders-list" id="stch-active-orders-list"></div>
+          <div class="stch-active-orders-log" id="stch-active-orders-log" style="display:none"></div>
         </div>
         <div class="stch-tab-content" id="stch-tab-craft">
           <div class="stch-toolbar">
@@ -599,7 +630,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.3.6 · 当前币种：${currencyStatus}</span>
+        <span class="stch-label">V2.4.1 · 当前币种：${currencyStatus}</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -887,6 +918,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       });
       if (tabName === "blacklist") renderBlacklist();
       if (tabName === "orders") renderOrderResults();
+      if (tabName === "active-orders") activateActiveBuyOrdersTab();
       if (tabName === "history") activatePriceHistoryTab();
       if (tabName === "surplus") applySurplusItemMode();
     };
@@ -1010,6 +1042,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     document.getElementById("stch-order-recalculate-btn").addEventListener("click", recalculateSelectedOrderResults);
     document.getElementById("stch-order-submit-orders-btn").addEventListener("click", submitSelectedOrderBuyOrders);
     document.getElementById("stch-order-delete-btn").addEventListener("click", deleteExpiredOrderResults);
+    initActiveBuyOrdersUi();
     document.getElementById("stch-craft-scan-btn").addEventListener("click", startCraftScan);
     document.getElementById("stch-craft-stop-btn").addEventListener("click", requestCraftStop);
     document.getElementById("stch-craft-one-btn").addEventListener("click", () => setAllCraftCounts("one"));

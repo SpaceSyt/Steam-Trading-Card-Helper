@@ -1,6 +1,6 @@
 {
   "name": "steam-trading-card-helper",
-  "version": "2.3.6",
+  "version": "2.4.1",
   "type": "module",
   "description": "Scan card prices, estimate badge costs, streamline purchases, craft badges, and process surplus items",
   "license": "MIT",

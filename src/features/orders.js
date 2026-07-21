@@ -14,7 +14,6 @@ import {
   parseMarketListingSnapshotFromHtml,
   parseMarketOrderDepthFromListingHtml,
   parseMarketOrderbookFromListingHtml,
-  parseMarketHashNameFromHref,
 } from "../parsers/market-listing.js";
 import { getActiveOrderPricingProfile } from "../config.js";
 import { calculateAutomaticBuyPrice } from "../services/order-wall.js";
@@ -41,6 +40,7 @@ import {
   normalizeListingOrderbook,
 } from "../services/market-data.js";
 import { persistMarketObservations } from "../services/market-observations.js";
+import { parseActiveBuyOrdersResponse } from "../services/active-buy-orders.js";
 
 const { log, setStatus } = scanStatus;
 
@@ -58,12 +58,12 @@ export function isNoBuyOrdersError(error) {
 
 const { setStatus: setOrderStatus } = orderStatus;
 
-  function getOrderCurrencyContext() {
+  export function getOrderCurrencyContext() {
     return getActiveCurrencyContext()
       || getCurrencyContextById(state.cfg.currencyId || 23);
   }
 
-  function getCurrencyMarketKey(marketHashName, currencyId = getOrderCurrencyContext().currencyId) {
+  export function getCurrencyMarketKey(marketHashName, currencyId = getOrderCurrencyContext().currencyId) {
     return JSON.stringify([String(currencyId), String(marketHashName || "")]);
   }
 
@@ -138,7 +138,7 @@ const { setStatus: setOrderStatus } = orderStatus;
     setOrderStatus(`已删除 ${expiredCount} 项过期缓存`, false);
   }
 
-  export async function loadActiveBuyOrders(queue = null) {
+  export async function fetchActiveBuyOrderSnapshot(queue = null) {
     const ownedQueue = queue ? null : new RequestQueue(
       state.cfg.requestInterval,
       state.cfg.batchSize,
@@ -156,33 +156,22 @@ const { setStatus: setOrderStatus } = orderStatus;
     } finally {
       ownedQueue?.stop();
     }
-    if (data?.success !== true && data?.success !== 1) {
-      throw new Error("Steam 未返回现有订购单");
+    return parseActiveBuyOrdersResponse(data, {
+      minorDigits: getOrderCurrencyContext().minorDigits,
+    });
+  }
+
+  export async function loadActiveBuyOrders(queue = null) {
+    const snapshot = await fetchActiveBuyOrderSnapshot(queue);
+    if (snapshot.diagnostics.length > 0) {
+      throw new Error(`无法完整解析现有 Steam 订购单（${snapshot.diagnostics.length} 项）`);
     }
-
-    const doc = new DOMParser().parseFromString(data.results_html || "", "text/html");
     const orders = new Map();
-    doc.querySelectorAll('[id^="mybuyorder_"]').forEach(row => {
-      const link = row.querySelector('a[href*="/market/listings/"]');
-      const href = link?.getAttribute("href") || "";
-      if (!href.includes("/market/listings/753/")) return;
-      const marketHashName = parseMarketHashNameFromHref(link?.getAttribute("href"));
-      if (!marketHashName) {
-        throw new Error("无法解析现有 Steam 卡牌订购单");
-      }
-
-      const quantityCell = row.querySelector(
-        ".market_listing_buyorder_qty .market_listing_price"
-      );
-      const quantity = parseInt(quantityCell?.textContent || "", 10) || 0;
-      if (quantity <= 0) {
-        throw new Error(`无法解析现有订购单数量: ${marketHashName}`);
-      }
-      const orderId = row.id.replace("mybuyorder_", "");
-      const current = orders.get(marketHashName) || { quantity: 0, orderIds: [] };
-      current.quantity += quantity;
-      if (orderId) current.orderIds.push(orderId);
-      orders.set(marketHashName, current);
+    snapshot.orders.filter(order => order.appid === "753").forEach(order => {
+      const current = orders.get(order.marketHashName) || { quantity: 0, orderIds: [] };
+      current.quantity += order.remainingQuantity;
+      current.orderIds.push(order.orderId);
+      orders.set(order.marketHashName, current);
     });
     return orders;
   }

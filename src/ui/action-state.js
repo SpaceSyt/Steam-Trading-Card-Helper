@@ -43,6 +43,8 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     const otherBusy = state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
+      || state.activeOrdersLoading
+      || state.activeOrdersCancelling
       || state.historyRefreshing
       || state.surplusActionRunning
       || state.surplusScanning
@@ -82,6 +84,8 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     const otherBusy = state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
+      || state.activeOrdersLoading
+      || state.activeOrdersCancelling
       || state.historyRefreshing
       || state.craftScanning
       || state.craftActionRunning
@@ -111,6 +115,8 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     const otherBusy = state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
+      || state.activeOrdersLoading
+      || state.activeOrdersCancelling
       || state.historyRefreshing
       || state.craftScanning
       || state.craftActionRunning
@@ -135,6 +141,8 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     return state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
+      || state.activeOrdersLoading
+      || state.activeOrdersCancelling
       || state.historyRefreshing
       || state.craftScanning
       || state.craftActionRunning
@@ -185,11 +193,31 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     }
   }
 
+  export function updateActiveOrdersActionState() {
+    const busy = isSharedActionBusy();
+    const selectedGroups = state.activeBuyOrderGroups.filter(group => (
+      state.selectedActiveBuyOrderGroups.has(group.key)
+    ));
+    const count = document.getElementById("stch-active-orders-selected-count");
+    if (count) count.textContent = `已选 ${selectedGroups.length} 项`;
+
+    const refresh = document.getElementById("stch-active-orders-refresh");
+    refresh?.classList.toggle("disabled", busy);
+    if (refresh) refresh.disabled = busy;
+    const cancel = document.getElementById("stch-active-orders-cancel-selected");
+    cancel?.classList.toggle("disabled", busy || selectedGroups.length === 0);
+    if (cancel) cancel.disabled = busy || selectedGroups.length === 0;
+    const query = document.getElementById("stch-active-orders-query-prices");
+    query?.classList.toggle("disabled", busy || selectedGroups.length === 0);
+    if (query) query.disabled = busy || selectedGroups.length === 0;
+  }
+
   export function updateAllActionStates() {
     updateBulkActionState();
     updateCraftActionState();
     updateSurplusActionState();
     updateGrindActionState();
+    updateActiveOrdersActionState();
     const settingsBusy = isSharedActionBusy();
     ["stch-settings-clear-cache", "stch-settings-reset"].forEach(id => {
       document.getElementById(id)?.classList.toggle("disabled", settingsBusy);

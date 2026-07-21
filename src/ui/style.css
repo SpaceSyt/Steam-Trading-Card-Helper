@@ -946,6 +946,152 @@
     .stch-tab-content { display: none; position: relative; }
     .stch-tab-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
+    .stch-active-orders-toolbar { flex-wrap: nowrap; }
+    #stch-active-orders-game { width: 260px; }
+    .stch-active-orders-summary-row { justify-content: space-between; min-width: 0; }
+    .stch-active-orders-summary-row .stch-summary-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stch-active-orders-summary-row .stch-selected-count { flex: 0 0 auto; white-space: nowrap; }
+    #stch-active-orders-status.ok { color: #75b022; }
+    #stch-active-orders-status.warn { color: #ffc902; }
+    #stch-active-orders-status.err { color: #d85c5c; }
+    .stch-active-orders-list {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      border: 1px solid #2a3f5a;
+      border-radius: 3px;
+      background: rgba(0,0,0,0.2);
+    }
+    .stch-active-orders-empty {
+      padding: 24px;
+      color: #8f98a0;
+      text-align: center;
+    }
+    .stch-active-orders-log {
+      flex: 0 0 auto;
+      max-height: 96px;
+      overflow-y: auto;
+      margin-top: 8px;
+      padding: 7px 9px;
+      border-radius: 3px;
+      background: #0e1621;
+      color: #8f98a0;
+      font: 11px/1.45 "Courier New", monospace;
+    }
+    .stch-active-orders-log .ok { color: #75b022; }
+    .stch-active-orders-log .err { color: #d85c5c; }
+    .stch-active-order-header,
+    .stch-active-order-row {
+      display: grid;
+      grid-template-columns: minmax(230px, 1fr) 80px 82px 48px 82px minmax(118px, 145px) 36px;
+      gap: 8px;
+      align-items: center;
+      box-sizing: border-box;
+    }
+    .stch-active-order-header {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      min-height: 29px;
+      padding: 5px 8px;
+      background: #172435;
+      color: #8f98a0;
+      border-bottom: 1px solid #45556b;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .stch-active-order-header span:not(:first-child) { text-align: center; }
+    .stch-active-order-select-all-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .stch-active-order-select-all { cursor: pointer; accent-color: #75b022; }
+    .stch-active-order-game-separator {
+      position: sticky;
+      top: 29px;
+      z-index: 2;
+      padding: 4px 10px;
+      background: #202f43;
+      color: #8db7d7;
+      border-bottom: 1px solid #31445b;
+      font-size: 11px;
+    }
+    .stch-active-order-row {
+      min-height: 52px;
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(69,85,107,0.4);
+      transition: background 100ms ease, box-shadow 100ms ease;
+    }
+    .stch-active-order-row:hover { background: rgba(103,193,245,0.08); }
+    .stch-active-order-row.selected {
+      background: rgba(117,176,34,0.22);
+      box-shadow: inset 4px 0 #8ed629, inset 0 0 0 1px rgba(142,214,41,0.45);
+    }
+    .stch-active-order-select {
+      align-self: stretch;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .stch-active-order-cb { cursor: pointer; accent-color: #75b022; }
+    .stch-active-order-item {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: #c7d5e0;
+      text-decoration: none;
+    }
+    .stch-active-order-item:hover .stch-active-order-name { color: #fff; }
+    .stch-active-order-image {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+      flex: 0 0 40px;
+      background: #0e1621;
+    }
+    .stch-active-order-names { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .stch-active-order-name,
+    .stch-active-order-game {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .stch-active-order-name { color: #66c0f4; font-size: 13px; }
+    .stch-active-order-game { color: #8f98a0; font-size: 11px; }
+    .stch-active-order-metric { min-width: 0; text-align: center; }
+    .stch-active-order-value { color: #fff; font-size: 13px; white-space: nowrap; }
+    .stch-active-order-smart { font-size: 11px; line-height: 1.35; text-align: center; }
+    .stch-active-order-smart.matched { color: #75b022; }
+    .stch-active-order-smart.unavailable { color: #697887; }
+    .stch-active-order-smart.high { color: #d85c5c; }
+    .stch-active-order-smart.low { color: #ffc902; }
+    .stch-active-order-lowest { text-align: center; }
+    .stch-active-order-lowest.loading { color: #8db7d7; }
+    .stch-active-order-lowest.missing,
+    .stch-active-order-lowest.failed { color: #8f98a0; }
+
+    @media (max-width: 760px) {
+      .stch-active-orders-toolbar { flex-wrap: wrap; }
+      #stch-active-orders-game { width: 220px; max-width: 70vw; }
+      .stch-active-order-header,
+      .stch-active-order-row {
+        grid-template-columns: minmax(180px, 1fr) 72px 72px 44px 72px 32px;
+      }
+      .stch-active-order-header span:nth-child(6),
+      .stch-active-order-smart { display: none; }
+    }
+    @media (max-width: 580px) {
+      .stch-active-order-header,
+      .stch-active-order-row {
+        grid-template-columns: minmax(145px, 1fr) 60px 60px 38px 60px 28px;
+        gap: 6px;
+      }
+    }
+
     .stch-history-toolbar { flex-wrap: wrap; }
     .stch-history-source { width: 132px; }
     .stch-history-card {
