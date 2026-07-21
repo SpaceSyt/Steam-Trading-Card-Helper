@@ -849,6 +849,11 @@
       color: #697887;
       font-size: 12px;
     }
+    .stch-checkbox-dragging,
+    .stch-checkbox-dragging * {
+      user-select: none !important;
+      cursor: default !important;
+    }
     .stch-settings-hint::before { content: "* "; }
     .stch-settings-hint-block { margin-top: 4px; }
     .stch-primary-label { color: #fff !important; font-weight: bold; }
@@ -1222,6 +1227,9 @@
     .stch-bl-row .stch-bl-id { width: 70px; color: #66c0f4; font-family: monospace; }
     .stch-bl-row .stch-bl-name { flex: 1; color: #e2e2e2; }
     .stch-bl-row .stch-bl-source { width: 50px; color: #8f98a0; font-size: 12px; text-align: center; }
+    .stch-bl-row .stch-bl-price { width: 94px; color: #8f98a0; font-size: 12px; text-align: right; }
+    .stch-bl-row .stch-bl-price.exact { color: #75b022; }
+    .stch-bl-row .stch-bl-price.estimated { color: #ffc902; }
     .stch-bl-row .stch-bl-fixed-col { width: 40px; color: #75b022; font-size: 12px; text-align: center; }
     .stch-bl-row .stch-bl-days { width: 45px; color: #8f98a0; font-size: 12px; text-align: center; }
     .stch-bl-row .stch-bl-cb-hd { width: 24px; flex-shrink: 0; text-align: center; }

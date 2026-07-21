@@ -365,7 +365,13 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
                   "info"
                 );
                 if (shouldAutoBlacklistPrediction) {
-                  addToBlacklist(b.appid, info.gameName || b.gameName || "", 1);
+                  addToBlacklist(b.appid, info.gameName || b.gameName || "", 1, 0, {
+                    priceMinor: prediction.predictedCents,
+                    currencyId: info.cardPrices[0]?.currencyId || state.cfg.currencyId,
+                    accuracy: "estimated",
+                    reason: "prediction",
+                    observedAt: Date.now(),
+                  });
                   blacklistedAppids.add(String(b.appid));
                   log(
                     `  → 价格预测自动加入游戏黑名单: ` +
@@ -438,7 +444,13 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           info.minVolume = minVolume === Infinity ? 0 : minVolume;
           const autoBlCents = Math.round((state.cfg.autoBlackThreshold || 0) * 100);
           if (state.cfg.autoBlackEnabled && autoBlCents > 0 && fullSetCostCents > autoBlCents) {
-            addToBlacklist(b.appid, info.gameName || b.gameName || "", 1);
+            addToBlacklist(b.appid, info.gameName || b.gameName || "", 1, 0, {
+              priceMinor: fullSetCostCents,
+              currencyId: info.cardPrices[0]?.currencyId || state.cfg.currencyId,
+              accuracy: info.hasEstimated ? "estimated" : "exact",
+              reason: info.hasEstimated ? "fallback" : "complete",
+              observedAt: Date.now(),
+            });
             blacklistedAppids.add(String(b.appid));
             log(`  → 自动加入游戏黑名单: 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(autoBlCents)}`, "info");
             skipped++;

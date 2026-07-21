@@ -34,7 +34,7 @@ import { isSharedActionBusy, updateAllActionStates, updateBulkActionState } from
 
 import { clearOrderCache, loadOrderCache, pruneOrderCache, readRawOrderCache } from "../services/order-cache.js";
 
-import { refreshSidebarData } from "../sidebar/sidebar.js";
+import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
 
   let modalEl = null;
 
@@ -66,14 +66,19 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
     "在售最低：当前最低卖单价格，通常可立即成交",
     "平均价格：Steam 返回的 median_price，用作市场参考价",
     "求购最高：当前最高买单价格，通常需要等待卖家成交",
+    "确认无买单时可按市场最低价提交（可在设置关闭）；其他查价失败仍会跳过",
     "仅用于自动提交长期订购单；手动购买仍使用在售最低",
+    "总价预估只使用已扫描或已有缓存数据实时重算，不会额外查价",
   ].join("\n");
   const AUTOMATIC_ORDER_PRICE_HELP = [
-    "保守：有墙取订单墙底部；无墙取最高买价 - 0.01",
-    "平衡：有墙取订单墙顶部；无墙取最高买价",
-    "抢单：取最高买价 + 0.01",
+    "会先排除同时具有异常价格断层和弱局部支撑的顶部孤立高价",
+    "订单墙按有效价格区间内墙前订单的相对数量判断，不要求固定订单数或墙后回落",
+    "保守：有墙取订单墙底部；无墙取有效最高买价 - 0.01",
+    "平衡：有墙取订单墙顶部；无墙取有效最高买价",
+    "抢单：取有效最高买价 + 0.01",
     "买价调整会在策略价格之后生效；最终不会达到或超过最低卖价",
-    "订单簿解析失败时会跳过该物品，不会按未知价格提交",
+    "确认无买单时可按市场最低价提交（可在设置关闭）；其他订单簿解析失败仍会跳过",
+    "总价预估只使用已扫描或已有缓存数据实时重算，不会额外查价",
   ].join("\n");
 
   function getOrderPriceOptionsHtml(automatic, selected) {
@@ -542,12 +547,20 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
               <input id="stch-show-no-result-logs" type="checkbox" ${state.cfg.showNoResultLogs ? "checked" : ""}>
               显示无结果日志
             </label>
+            <label title="关闭页面右侧的账号和宝石信息侧边栏">
+              <input id="stch-sidebar-disabled" type="checkbox" ${state.cfg.sidebarDisabled ? "checked" : ""}>
+              关闭侧边栏
+            </label>
           </div>
           <div class="stch-settings-hint stch-settings-hint-block">价格 API 默认使用 330ms 间隔，每 20 次请求主动冷却 53s；如遇 429 可适当调高。</div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">卡牌价格扫描</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
             <label><input id="stch-early-price-prediction" type="checkbox" ${state.cfg.earlyPricePrediction ? "checked" : ""}> 价格预测提早跳过</label>
+            <label title="仅在 Steam 明确返回没有买单时使用当前币种的市场最低价；请求或解析失败仍会跳过">
+              <input id="stch-no-buy-minimum-fallback" type="checkbox" ${state.cfg.noBuyOrderMinimumFallback ? "checked" : ""}>
+              无买单时使用市场最低价
+            </label>
           </div>
           <div class="stch-toolbar">
             <label>订购卡牌缓存 <input id="stch-order-cache-days" class="stch-input" type="number" min="0" step="1" value="${state.cfg.orderCacheDays}" style="width:55px"> 天</label>
@@ -587,7 +600,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.3.0 · 当前币种：${currencyStatus}</span>
+        <span class="stch-label">V2.3.5 · 当前币种：${currencyStatus}</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -670,6 +683,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         { integer: true, min: 0 }
       );
       state.cfg.showNoResultLogs = !!document.getElementById("stch-show-no-result-logs")?.checked;
+      state.cfg.sidebarDisabled = !!document.getElementById("stch-sidebar-disabled")?.checked;
       const buyModeEl = document.getElementById("stch-buy-mode");
       if (state.cfg.foilScanMode) {
         state.cfg.buyMode = buyModeEl?.dataset.normalValue || state.cfg.buyMode || DEFAULT_CONFIG.buyMode;
@@ -678,6 +692,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         if (buyModeEl) delete buyModeEl.dataset.normalValue;
       }
       state.cfg.earlyPricePrediction = !!document.getElementById("stch-early-price-prediction")?.checked;
+      state.cfg.noBuyOrderMinimumFallback = !!document.getElementById("stch-no-buy-minimum-fallback")?.checked;
       state.cfg.earlyPredictionAutoBlacklist = !!document.getElementById("stch-settings-early-prediction-auto-blacklist")?.checked;
       state.cfg.orderCacheDays = readNumberInput(
         "stch-order-cache-days",
@@ -723,6 +738,9 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         renderOrderResults();
       }
       if (changedId === "stch-craft-mode") renderCraftResults();
+      if (changedId === "stch-sidebar-disabled") {
+        setSidebarEnabled(!state.cfg.sidebarDisabled);
+      }
       if (["stch-surplus-only-maxed", "stch-surplus-only-tradable", "stch-surplus-compare-gems"].includes(changedId)) {
         renderSurplusResults();
         renderGrindResults();
@@ -745,8 +763,8 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
     const cfgIds = ["stch-threshold", "stch-req-interval",
       "stch-max-pages", "stch-include-drops",
       "stch-foil-scan-mode",
-      "stch-batch-size", "stch-batch-pause", "stch-show-no-result-logs", "stch-buy-mode",
-      "stch-early-price-prediction", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
+      "stch-batch-size", "stch-batch-pause", "stch-show-no-result-logs", "stch-sidebar-disabled", "stch-buy-mode",
+      "stch-early-price-prediction", "stch-no-buy-minimum-fallback", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
       "stch-skip-cached-orders", "stch-craft-interval",
       "stch-craft-mode", "stch-surplus-item-mode",
       "stch-surplus-only-maxed", "stch-surplus-only-tradable", "stch-surplus-compare-gems", "stch-surplus-sell-price-source",
@@ -949,6 +967,7 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
         "blacklistSources",
         "blacklistDates",
         "blacklistFixed",
+        "blacklistPriceData",
       ];
       const preserved = Object.fromEntries(
         preservedKeys.map(key => [key, state.cfg[key] ?? DEFAULT_CONFIG[key]])
@@ -1127,22 +1146,24 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
       if (listFixed) allCbs.push(...listFixed.querySelectorAll(".stch-bl-cb:checked"));
       if (allCbs.length === 0) return;
       const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
-      let n, s, d, f;
+      let n, s, d, f, p;
       try { n = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) { n = {}; }
       try { s = JSON.parse(state.cfg.blacklistSources || "{}"); } catch (_) { s = {}; }
       try { d = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) { d = {}; }
       try { f = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { f = {}; }
+      try { p = JSON.parse(state.cfg.blacklistPriceData || "{}"); } catch (_) { p = {}; }
       allCbs.forEach(cb => {
         const appid = cb.dataset.appid;
         const idx = bl.indexOf(appid);
         if (idx >= 0) bl.splice(idx, 1);
-        delete n[appid]; delete s[appid]; delete d[appid]; delete f[appid];
+        delete n[appid]; delete s[appid]; delete d[appid]; delete f[appid]; delete p[appid];
       });
       state.cfg.blacklist = bl.join(",");
       state.cfg.blacklistNames = JSON.stringify(n);
       state.cfg.blacklistSources = JSON.stringify(s);
       state.cfg.blacklistDates = JSON.stringify(d);
       state.cfg.blacklistFixed = JSON.stringify(f);
+      state.cfg.blacklistPriceData = JSON.stringify(p);
       saveConfig(state.cfg);
       updateBlRow();
       renderBlacklist();
@@ -1182,11 +1203,12 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
 
     document.getElementById("stch-bl-cleanup").addEventListener("click", () => {
       const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
-      let n, s, d, f;
+      let n, s, d, f, p;
       try { n = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) { n = {}; }
       try { s = JSON.parse(state.cfg.blacklistSources || "{}"); } catch (_) { s = {}; }
       try { d = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) { d = {}; }
       try { f = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { f = {}; }
+      try { p = JSON.parse(state.cfg.blacklistPriceData || "{}"); } catch (_) { p = {}; }
       const now = Date.now();
       const expired = bl.filter(a => !f[a] && d[a] && (now - d[a] > 7 * 86400000));
       if (expired.length === 0) {
@@ -1195,12 +1217,15 @@ import { refreshSidebarData } from "../sidebar/sidebar.js";
       }
       if (!confirm(`将清理 ${expired.length} 项过期（>7天）游戏黑名单，确定？`)) return;
       const keep = bl.filter(a => !expired.includes(a));
-      expired.forEach(a => { delete n[a]; delete s[a]; delete d[a]; delete f[a]; });
+      expired.forEach(a => {
+        delete n[a]; delete s[a]; delete d[a]; delete f[a]; delete p[a];
+      });
       state.cfg.blacklist = keep.join(",");
       state.cfg.blacklistNames = JSON.stringify(n);
       state.cfg.blacklistSources = JSON.stringify(s);
       state.cfg.blacklistDates = JSON.stringify(d);
       state.cfg.blacklistFixed = JSON.stringify(f);
+      state.cfg.blacklistPriceData = JSON.stringify(p);
       saveConfig(state.cfg);
       document.getElementById("stch-bl-result").textContent = `已清理 ${expired.length} 项`;
       renderBlacklist();

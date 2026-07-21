@@ -142,6 +142,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     if (mode === "card") {
       return selected.flatMap(result =>
         (result.assets || []).map(asset => ({
+          appid: String(result.appid || ""),
           gameName: result.gameName || "",
           itemName: result.cardName || result.marketHashName || "未知卡牌",
           assetid: String(asset.assetid || ""),
@@ -155,6 +156,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
 
     return selected.flatMap(item =>
       (item.assets || []).map(asset => ({
+        appid: String(item.appid || ""),
         gameName: item.gameName || "",
         itemName: item.itemName || item.marketHashName || "未知物品",
         assetid: String(asset.assetid || ""),
@@ -284,7 +286,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     ui.setStatus(`读取宝石值 ${index + 1}/${total}: ${asset.itemName}`);
     const params = new URLSearchParams({
       sessionid: sessionId,
-      appid: "753",
+      appid: asset.appid,
       assetid: asset.assetid,
       contextid: asset.contextid || "6",
     });
@@ -302,6 +304,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     const plan = [];
     const skipped = {
       missingAsset: 0,
+      missingAppid: 0,
       partialStack: 0,
       noGooValue: 0,
     };
@@ -310,6 +313,10 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
       const asset = candidates[index];
       if (!asset.assetid) {
         skipped.missingAsset++;
+        continue;
+      }
+      if (!/^\d+$/.test(asset.appid)) {
+        skipped.missingAppid++;
         continue;
       }
       if (asset.selectedAmount < asset.assetAmount) {
@@ -376,7 +383,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     if (!sessionId) throw new Error("未找到 Steam sessionid");
     const body = new URLSearchParams({
       sessionid: sessionId,
-      appid: "753",
+      appid: asset.appid,
       assetid: asset.assetid,
       contextid: asset.contextid || "6",
       goo_value_expected: String(asset.gooValueExpected),
@@ -478,6 +485,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     const totalGems = plan.reduce((sum, item) => sum + item.gooValueExpected, 0);
     const notes = [];
     if (skipped.missingAsset) notes.push(`${skipped.missingAsset} 项缺少资产 ID`);
+    if (skipped.missingAppid) notes.push(`${skipped.missingAppid} 项缺少来源游戏 AppID`);
     if (skipped.partialStack) notes.push(`${skipped.partialStack} 项是部分堆叠资产，Steam 原生接口不支持只销毁一部分，已跳过`);
     if (skipped.noGooValue) notes.push(`${skipped.noGooValue} 项未读取到可分解宝石值`);
 

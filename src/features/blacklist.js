@@ -5,19 +5,40 @@ import { saveConfig } from "../config.js";
 import { getProfileUrl } from "../utils/steam.js";
 
 import { createTextSpan } from "../utils/dom.js";
+import { formatMoney } from "../utils/format.js";
+import {
+  normalizeBlacklistPriceEntry,
+  parseBlacklistPriceData,
+  setBlacklistPriceEntry,
+} from "../services/blacklist-price.js";
+import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
 
-  export function addToBlacklist(appid, name, source, fixedVal = 0) {
+  export function addToBlacklist(appid, name, source, fixedVal = 0, priceEntry = null) {
+    appid = String(appid || "");
     const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
+    const normalizedPrice = normalizeBlacklistPriceEntry(priceEntry);
 
-    // Already in list: just update fixed flag if requested
+    // Existing rows can still be promoted to fixed or receive fresher scan data.
     if (bl.includes(appid)) {
+      let changed = false;
       if (fixedVal) {
         let fixed = {};
         try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
-        fixed[appid] = 1;
-        state.cfg.blacklistFixed = JSON.stringify(fixed);
-        saveConfig(state.cfg);
+        if (!fixed[appid]) {
+          fixed[appid] = 1;
+          state.cfg.blacklistFixed = JSON.stringify(fixed);
+          changed = true;
+        }
       }
+      if (normalizedPrice) {
+        state.cfg.blacklistPriceData = JSON.stringify(setBlacklistPriceEntry(
+          state.cfg.blacklistPriceData,
+          appid,
+          normalizedPrice
+        ));
+        changed = true;
+      }
+      if (changed) saveConfig(state.cfg);
       return;
     }
 
@@ -38,6 +59,14 @@ import { createTextSpan } from "../utils/dom.js";
     try { dates = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) {}
     dates[appid] = Date.now();
     state.cfg.blacklistDates = JSON.stringify(dates);
+
+    if (normalizedPrice) {
+      state.cfg.blacklistPriceData = JSON.stringify(setBlacklistPriceEntry(
+        state.cfg.blacklistPriceData,
+        appid,
+        normalizedPrice
+      ));
+    }
 
     if (fixedVal) {
       let fixed = {};
@@ -114,6 +143,11 @@ import { createTextSpan } from "../utils/dom.js";
     const listFixed = document.getElementById("stch-bl-list-fixed");
     const countEl = document.getElementById("stch-bl-count");
     if (!list) return;
+    enableCheckboxDragSelection(document.getElementById("stch-tab-blacklist"), {
+      checkboxSelector: ".stch-bl-cb",
+      activationSelector: ".stch-bl-cb, .stch-bl-cb-hd",
+      rowSelector: ".stch-bl-row",
+    });
     const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
     let names = {};
     try { names = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) {}
@@ -123,6 +157,7 @@ import { createTextSpan } from "../utils/dom.js";
     try { dates = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) {}
     let fixed = {};
     try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
+    const priceData = parseBlacklistPriceData(state.cfg.blacklistPriceData);
 
     const sourceLabels = { "0": "手动", "1": "自动" };
     const normal = bl.filter(a => !fixed[a]);
@@ -140,6 +175,9 @@ import { createTextSpan } from "../utils/dom.js";
       header.appendChild(createTextSpan("stch-bl-name", "游戏名"));
       header.appendChild(createTextSpan("stch-bl-fixed-col", ""));
       header.appendChild(createTextSpan("stch-bl-source", "来源"));
+      const priceHeader = createTextSpan("stch-bl-price", "单套价格");
+      priceHeader.title = "绿色：完整查价且无估算\n黄色：提前预测跳过或价格包含估算";
+      header.appendChild(priceHeader);
       header.appendChild(createTextSpan("stch-bl-days", "天数"));
       header.appendChild(createTextSpan("stch-bl-cb-hd", ""));
       return header;
@@ -162,6 +200,19 @@ import { createTextSpan } from "../utils/dom.js";
         row.appendChild(createTextSpan("stch-bl-name", names[appid] || "—"));
         row.appendChild(createTextSpan("stch-bl-fixed-col", fixed[appid] ? "固定" : ""));
         row.appendChild(createTextSpan("stch-bl-source", sourceLabels[sources[appid]] || "—"));
+        const priceEntry = priceData[appid];
+        const priceCell = createTextSpan(
+          `stch-bl-price ${priceEntry?.accuracy === "exact" ? "exact" : priceEntry ? "estimated" : ""}`,
+          priceEntry ? formatMoney(priceEntry.priceMinor, priceEntry.currencyId) : "—"
+        );
+        if (priceEntry) {
+          priceCell.title = priceEntry.accuracy === "exact"
+            ? "完整查价"
+            : priceEntry.reason === "prediction"
+              ? "提前预测后跳过"
+              : "价格包含中位价或缺价估算";
+        }
+        row.appendChild(priceCell);
         row.appendChild(createTextSpan("stch-bl-days", dates[appid] ? formatDays(dates[appid]) : "—"));
 
         const checkboxCell = document.createElement("span");
@@ -170,6 +221,7 @@ import { createTextSpan } from "../utils/dom.js";
         checkbox.type = "checkbox";
         checkbox.className = "stch-bl-cb";
         checkbox.dataset.appid = appid;
+        checkbox.title = "按住并上下拖动可连续选择或取消";
         checkboxCell.appendChild(checkbox);
         row.appendChild(checkboxCell);
         target.appendChild(row);

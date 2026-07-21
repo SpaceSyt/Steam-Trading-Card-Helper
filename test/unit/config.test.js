@@ -27,6 +27,7 @@ test("v2.0 config migration preserves every blacklist field", () => {
   assert.equal(migrated.blacklistSources, legacy.blacklistSources);
   assert.equal(migrated.blacklistDates, legacy.blacklistDates);
   assert.equal(migrated.blacklistFixed, legacy.blacklistFixed);
+  assert.equal(migrated.blacklistPriceData, "{}");
 });
 
 test("automatic pricing keeps an independent strategy and adjustment profile", () => {
@@ -49,6 +50,19 @@ test("automatic pricing keeps an independent strategy and adjustment profile", (
     priceSource: "median",
     adjustment: -0.02,
   });
+});
+
+test("new ordering and sidebar settings use safe defaults and preserve explicit opt-outs", () => {
+  const defaults = normalizeConfig({});
+  assert.equal(defaults.noBuyOrderMinimumFallback, true);
+  assert.equal(defaults.sidebarDisabled, false);
+
+  const optedOut = normalizeConfig({
+    noBuyOrderMinimumFallback: false,
+    sidebarDisabled: true,
+  });
+  assert.equal(optedOut.noBuyOrderMinimumFallback, false);
+  assert.equal(optedOut.sidebarDisabled, true);
 });
 
 test("config normalization removes obsolete keys and rejects invalid currency ids", () => {

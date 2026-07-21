@@ -1,9 +1,12 @@
 export const DEFAULT_ORDER_WALL_OPTIONS = Object.freeze({
-  maxDistanceMinor: 3,
-  minimumQuantity: 100,
-  quantityRatioThreshold: 6,
-  neighborRadius: 2,
-  minimumNeighborCount: 2,
+  isolationMinimumGapRatio: 0.03,
+  isolationGapMultiplier: 2,
+  isolationLookaheadLevels: 4,
+  isolationMaxTopShare: 0.25,
+  maxDistanceRatio: 0.04,
+  quantityRatioThreshold: 3,
+  precedingWindow: 3,
+  minimumPrecedingCount: 2,
   clusterGapMinor: 1,
 });
 
@@ -81,14 +84,88 @@ function median(values) {
     : sorted[middle];
 }
 
-function getNeighborBaseline(levels, index, radius, minimumNeighborCount) {
-  const quantities = [];
-  const from = Math.max(0, index - radius);
-  const to = Math.min(levels.length - 1, index + radius);
-  for (let neighbor = from; neighbor <= to; neighbor += 1) {
-    if (neighbor !== index) quantities.push(levels[neighbor].quantity);
+function getPrecedingBaseline(levels, index, windowSize, minimumCount) {
+  const from = Math.max(0, index - windowSize);
+  const quantities = levels.slice(from, index).map(level => level.quantity);
+  return quantities.length >= minimumCount ? median(quantities) : null;
+}
+
+/**
+ * Detect a single isolated best-price level before looking for quantity walls.
+ * Isolation needs both a relative price discontinuity and weak local support;
+ * a small absolute order count alone is never enough.
+ */
+export function detectIsolatedHighBuyOrder(input, options = {}) {
+  const settings = { ...DEFAULT_ORDER_WALL_OPTIONS, ...options };
+  const levels = normalizeBuyOrderLevels(input);
+  const originalBestPriceMinor = levels[0]?.priceMinor ?? null;
+  const emptyResult = {
+    classification: "normal",
+    originalBestPriceMinor,
+    effectiveBestPriceMinor: originalBestPriceMinor,
+    isolatedLevels: [],
+    levels,
+    effectiveLevels: levels,
+  };
+  if (levels.length < 3 || originalBestPriceMinor === null) return emptyResult;
+
+  const lookaheadLevels = Math.max(
+    2,
+    Math.floor(Number(settings.isolationLookaheadLevels) || 2)
+  );
+  const localLevels = levels.slice(0, lookaheadLevels + 1);
+  const lowerGaps = [];
+  for (let index = 1; index + 1 < localLevels.length; index++) {
+    lowerGaps.push(localLevels[index].priceMinor - localLevels[index + 1].priceMinor);
   }
-  return quantities.length >= minimumNeighborCount ? median(quantities) : null;
+  const typicalLowerGap = median(lowerGaps.filter(gap => gap > 0));
+  if (!Number.isFinite(typicalLowerGap) || typicalLowerGap <= 0) return emptyResult;
+
+  const top = levels[0];
+  const second = levels[1];
+  const topGapMinor = top.priceMinor - second.priceMinor;
+  const topGapRatio = topGapMinor / second.priceMinor;
+  const topGapVsTypical = topGapMinor / typicalLowerGap;
+  const localQuantity = localLevels.reduce((sum, level) => sum + level.quantity, 0);
+  const topQuantityShare = localQuantity > 0 ? top.quantity / localQuantity : 1;
+  const minimumGapRatio = Math.max(0, Number(settings.isolationMinimumGapRatio) || 0);
+  const gapMultiplier = Math.max(1, Number(settings.isolationGapMultiplier) || 1);
+  const maxTopShare = Math.min(
+    1,
+    Math.max(0, Number(settings.isolationMaxTopShare) || 0)
+  );
+  const isolated = topGapRatio >= minimumGapRatio
+    && topGapVsTypical >= gapMultiplier
+    && topQuantityShare <= maxTopShare;
+  if (!isolated) {
+    return {
+      ...emptyResult,
+      topGapMinor,
+      topGapRatio,
+      topGapVsTypical,
+      topQuantityShare,
+    };
+  }
+
+  const effectiveLevels = levels.slice(1);
+  return {
+    classification: "isolated-high",
+    originalBestPriceMinor,
+    effectiveBestPriceMinor: effectiveLevels[0]?.priceMinor ?? null,
+    isolatedLevels: [{
+      ...top,
+      gapToNextMinor: topGapMinor,
+      gapRatio: topGapRatio,
+      gapVsTypical: topGapVsTypical,
+      localQuantityShare: topQuantityShare,
+    }],
+    levels,
+    effectiveLevels,
+    topGapMinor,
+    topGapRatio,
+    topGapVsTypical,
+    topQuantityShare,
+  };
 }
 
 function buildClusters(walls, clusterGapMinor) {
@@ -123,46 +200,50 @@ function buildClusters(walls, clusterGapMinor) {
  */
 export function detectBuyOrderWalls(input, options = {}) {
   const settings = { ...DEFAULT_ORDER_WALL_OPTIONS, ...options };
-  const levels = normalizeBuyOrderLevels(input);
-  const bestPriceMinor = normalizePositiveInteger(options.bestPriceMinor)
-    ?? levels[0]?.priceMinor
+  const isolation = detectIsolatedHighBuyOrder(input, settings);
+  const levels = isolation.effectiveLevels;
+  const suppliedBestPriceMinor = normalizePositiveInteger(options.bestPriceMinor);
+  const originalBestPriceMinor = suppliedBestPriceMinor
+    ?? isolation.originalBestPriceMinor
     ?? null;
+  const bestPriceMinor = isolation.effectiveBestPriceMinor;
   if (levels.length === 0 || bestPriceMinor === null) {
     return {
       classification: "balanced",
       bestPriceMinor,
+      originalBestPriceMinor,
       levels,
       walls: [],
       clusters: [],
       nearestCluster: null,
+      isolation,
     };
   }
 
-  const maxDistanceMinor = Math.max(0, Number(settings.maxDistanceMinor) || 0);
-  const minimumQuantity = Math.max(1, Number(settings.minimumQuantity) || 1);
+  const maxDistanceRatio = Math.max(0, Number(settings.maxDistanceRatio) || 0);
+  const maxDistanceMinor = Math.max(1, Math.floor(bestPriceMinor * maxDistanceRatio));
   const ratioThreshold = Math.max(1, Number(settings.quantityRatioThreshold) || 1);
-  const neighborRadius = Math.max(1, Math.floor(Number(settings.neighborRadius) || 1));
-  const minimumNeighborCount = Math.max(
+  const precedingWindow = Math.max(1, Math.floor(Number(settings.precedingWindow) || 1));
+  const minimumPrecedingCount = Math.max(
     1,
-    Math.floor(Number(settings.minimumNeighborCount) || 1)
+    Math.floor(Number(settings.minimumPrecedingCount) || 1)
   );
   const clusterGapMinor = Math.max(0, Math.floor(Number(settings.clusterGapMinor) || 0));
 
-  const walls = [];
+  const wallCandidates = [];
   levels.forEach((level, index) => {
     const distanceFromBestMinor = bestPriceMinor - level.priceMinor;
     if (distanceFromBestMinor < 0 || distanceFromBestMinor > maxDistanceMinor) return;
-    if (level.quantity < minimumQuantity) return;
-    const baselineQuantity = getNeighborBaseline(
+    const baselineQuantity = getPrecedingBaseline(
       levels,
       index,
-      neighborRadius,
-      minimumNeighborCount
+      precedingWindow,
+      minimumPrecedingCount
     );
     if (!Number.isFinite(baselineQuantity) || baselineQuantity <= 0) return;
     const quantityRatio = level.quantity / baselineQuantity;
     if (quantityRatio < ratioThreshold) return;
-    walls.push({
+    wallCandidates.push({
       ...level,
       distanceFromBestMinor,
       baselineQuantity,
@@ -170,14 +251,21 @@ export function detectBuyOrderWalls(input, options = {}) {
     });
   });
 
-  const clusters = buildClusters(walls, clusterGapMinor);
+  const allClusters = buildClusters(wallCandidates, clusterGapMinor);
+  const nearestCluster = allClusters[0] || null;
+  const walls = nearestCluster?.walls || [];
+  const clusters = nearestCluster ? [nearestCluster] : [];
   return {
     classification: walls.length > 0 ? "near-wall" : "balanced",
     bestPriceMinor,
+    originalBestPriceMinor,
+    maxDistanceMinor,
     levels,
     walls,
     clusters,
-    nearestCluster: clusters[0] || null,
+    nearestCluster,
+    wallCandidates,
+    isolation,
   };
 }
 
@@ -206,17 +294,18 @@ export function calculateAutomaticBuyPrice(depth, options = {}) {
     { ...options.wallOptions, bestPriceMinor: highestBuyMinor }
   );
   const cluster = detection.nearestCluster;
+  const effectiveHighestBuyMinor = detection.bestPriceMinor ?? highestBuyMinor;
   let strategyBasePriceMinor;
   if (strategy === "aggressive") {
-    strategyBasePriceMinor = highestBuyMinor + 1;
+    strategyBasePriceMinor = effectiveHighestBuyMinor + 1;
   } else if (strategy === "conservative") {
     strategyBasePriceMinor = cluster
       ? cluster.bottomPriceMinor
-      : highestBuyMinor - 1;
+      : effectiveHighestBuyMinor - 1;
   } else {
     strategyBasePriceMinor = cluster
       ? cluster.topPriceMinor
-      : highestBuyMinor;
+      : effectiveHighestBuyMinor;
   }
 
   const adjustmentMinor = Number.isSafeInteger(Number(options.adjustmentMinor))
@@ -238,6 +327,7 @@ export function calculateAutomaticBuyPrice(depth, options = {}) {
     strategy,
     classification: detection.classification,
     highestBuyMinor,
+    effectiveHighestBuyMinor,
     strategyBasePriceMinor,
     adjustmentMinor,
     adjustedPriceMinor,

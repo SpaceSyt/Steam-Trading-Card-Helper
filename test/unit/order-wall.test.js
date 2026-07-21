@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   calculateAutomaticBuyPrice,
   detectBuyOrderWalls,
+  detectIsolatedHighBuyOrder,
   normalizeBuyOrderLevels,
   parseCompactBuyOrderLevels,
 } from "../../src/services/order-wall.js";
@@ -33,7 +34,7 @@ test("sanitized Gems depth identifies the labeled 4.28 and 4.27 near walls", asy
     [428, 427]
   );
   assert.equal(result.nearestCluster.totalQuantity, 1679);
-  assert.ok(result.walls.every(wall => wall.quantityRatio >= 6));
+  assert.ok(result.walls.every(wall => wall.quantityRatio >= 3));
 });
 
 test("sanitized Songbird depth stays balanced despite a large deep support level", async () => {
@@ -74,7 +75,7 @@ test("normalization accepts pairs and objects, merges duplicate prices, and sort
   ]);
 });
 
-test("distance and local ratio gates keep deep or merely uneven levels out", () => {
+test("relative price band and nearest-cluster selection keep deep support out", () => {
   const result = detectBuyOrderWalls([
     100, 10,
     99, 12,
@@ -86,6 +87,73 @@ test("distance and local ratio gates keep deep or merely uneven levels out", () 
 
   assert.deepEqual(result.walls.map(wall => wall.priceMinor), [98]);
   assert.ok(!result.walls.some(wall => wall.priceMinor === 95));
+});
+
+test("labeled current samples separate isolated highs from normal pre-wall orders", () => {
+  const gems = detectIsolatedHighBuyOrder([
+    507, 2, 506, 3, 503, 76, 502, 207, 498, 506,
+  ]);
+  assert.equal(gems.classification, "normal");
+
+  const scout = detectIsolatedHighBuyOrder([
+    583, 3, 559, 26, 558, 2, 547, 11, 544, 9, 533, 1,
+  ]);
+  assert.equal(scout.classification, "isolated-high");
+  assert.deepEqual(scout.isolatedLevels.map(level => level.priceMinor), [583]);
+  assert.equal(scout.effectiveBestPriceMinor, 559);
+
+  const kavin = detectIsolatedHighBuyOrder([
+    75, 5, 60, 2, 59, 2, 55, 1, 33, 30,
+  ]);
+  assert.equal(kavin.classification, "isolated-high");
+  assert.deepEqual(kavin.isolatedLevels.map(level => level.priceMinor), [75]);
+  assert.deepEqual(kavin.effectiveLevels.map(level => level.priceMinor), [60, 59, 55, 33]);
+
+  const anarchist = detectIsolatedHighBuyOrder([
+    203, 1, 202, 3, 198, 97, 197, 16, 195, 1233, 193, 10,
+  ]);
+  assert.equal(anarchist.classification, "normal");
+});
+
+test("wall detection uses only preceding orders and does not require a post-wall drop", () => {
+  const tailWall = detectBuyOrderWalls([
+    100, 2,
+    99, 3,
+    98, 12,
+  ]);
+  assert.deepEqual(tailWall.walls.map(wall => wall.priceMinor), [98]);
+
+  const currentGems = detectBuyOrderWalls([
+    507, 2, 506, 3, 503, 76, 502, 207, 498, 506, 497, 11, 496, 780,
+  ]);
+  assert.equal(currentGems.isolation.classification, "normal");
+  assert.deepEqual(currentGems.walls.map(wall => wall.priceMinor), [503, 502]);
+
+  const currentAnarchist = detectBuyOrderWalls([
+    203, 1, 202, 3, 198, 97, 197, 16, 195, 1233, 193, 10,
+  ]);
+  assert.equal(currentAnarchist.isolation.classification, "normal");
+  assert.deepEqual(currentAnarchist.walls.map(wall => wall.priceMinor), [198, 197]);
+});
+
+test("automatic strategies price from the effective best after removing one isolated high", () => {
+  const depth = {
+    highestBuyMinor: 75,
+    lowestSellMinor: 101,
+    buyLevels: normalizeBuyOrderLevels([
+      75, 5, 60, 2, 59, 2, 55, 1, 33, 30,
+    ]),
+  };
+
+  assert.equal(calculateAutomaticBuyPrice(depth, {
+    strategy: "conservative",
+  }).finalPriceMinor, 59);
+  assert.equal(calculateAutomaticBuyPrice(depth, {
+    strategy: "balanced",
+  }).finalPriceMinor, 60);
+  assert.equal(calculateAutomaticBuyPrice(depth, {
+    strategy: "aggressive",
+  }).finalPriceMinor, 61);
 });
 
 test("automatic wall pricing maps Gems to conservative 4.27, balanced 4.28, and aggressive 4.31", async () => {

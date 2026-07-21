@@ -1,6 +1,6 @@
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 21;
+  export const CONFIG_SCHEMA_VERSION = 22;
 
   export const DEFAULT_CONFIG = {
     configVersion: CONFIG_SCHEMA_VERSION,
@@ -10,6 +10,7 @@
     batchSize: 20,
     batchPause: 53000,
     showNoResultLogs: false,
+    sidebarDisabled: false,
     includeDrops: false,
     foilScanMode: false,
     orderCacheDays: 3,
@@ -20,6 +21,7 @@
     blacklistSources: "{}",
     blacklistDates: "{}",
     blacklistFixed: "{}",
+    blacklistPriceData: "{}",
     autoBlackThreshold: 10,
     autoBlackEnabled: false,
     buyMode: "complete5",
@@ -28,6 +30,7 @@
     automaticPricingEnabled: false,
     automaticPriceStrategy: "balanced",
     automaticPriceAdjustment: 0,
+    noBuyOrderMinimumFallback: true,
     earlyPricePrediction: true,
     earlyPredictionAutoBlacklist: false,
     craftInterval: 500,
@@ -63,6 +66,8 @@
       ? currencyId
       : defaults.currencyId;
     merged.automaticPricingEnabled = merged.automaticPricingEnabled === true;
+    merged.sidebarDisabled = merged.sidebarDisabled === true;
+    merged.noBuyOrderMinimumFallback = merged.noBuyOrderMinimumFallback !== false;
     merged.automaticPriceStrategy = ["conservative", "balanced", "aggressive"]
       .includes(merged.automaticPriceStrategy)
       ? merged.automaticPriceStrategy

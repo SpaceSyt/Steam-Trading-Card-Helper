@@ -182,6 +182,14 @@ import { loadSidebarGemInfo, loadSidebarGemPrice } from "./gems.js";
     if (pin) pin.textContent = pinned ? "收起" : "固定";
   }
 
+  export function setSidebarEnabled(enabled) {
+    if (!enabled) {
+      document.getElementById("stch-sidebar")?.remove();
+      return;
+    }
+    injectSidebar();
+  }
+
   export function injectSidebar() {
     if (document.getElementById("stch-sidebar")) return;
 

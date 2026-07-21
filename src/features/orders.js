@@ -44,6 +44,18 @@ import { persistMarketObservations } from "../services/market-observations.js";
 
 const { log, setStatus } = scanStatus;
 
+export const NO_BUY_ORDERS_ERROR_CODE = "STCH_NO_BUY_ORDERS";
+
+function createNoBuyOrdersError() {
+  const error = new Error("当前没有可用的最高求购价格");
+  error.code = NO_BUY_ORDERS_ERROR_CODE;
+  return error;
+}
+
+export function isNoBuyOrdersError(error) {
+  return error?.code === NO_BUY_ORDERS_ERROR_CODE;
+}
+
 const { setStatus: setOrderStatus } = orderStatus;
 
   function getOrderCurrencyContext() {
@@ -251,6 +263,22 @@ const { setStatus: setOrderStatus } = orderStatus;
           observedAt: metadataObservedAt,
         });
       }
+      if (
+        Number.isInteger(listingSnapshot?.currency)
+        && listingSnapshot.currency > 0
+        && listingSnapshot.currency !== currencyContext.currencyId
+      ) {
+        throw new Error(
+          `商品页币种不一致 (${listingSnapshot.currency}/${currencyContext.currencyId})`
+        );
+      }
+      if (
+        Number.isInteger(listingSnapshot?.currency)
+        && listingSnapshot.currency > 0
+        && !(Number.isFinite(listingSnapshot.highestBuyCents) && listingSnapshot.highestBuyCents > 0)
+      ) {
+        throw createNoBuyOrdersError();
+      }
       const newOrderbook = parseMarketOrderbookFromListingHtml(listingHtml, marketHashName);
       if (newOrderbook) {
         if (
@@ -262,7 +290,7 @@ const { setStatus: setOrderStatus } = orderStatus;
           );
         }
         if (newOrderbook.highestBuyCents <= 0) {
-          throw new Error("当前没有可用的最高求购价格");
+          throw createNoBuyOrdersError();
         }
         const observedAt = Date.now();
         observeRecord(normalizeListingOrderbook(newOrderbook, {
@@ -311,12 +339,11 @@ const { setStatus: setOrderStatus } = orderStatus;
         observedAt: Date.now(),
       });
       const highestBuyCents = histogramRecord?.highestBuyMinor;
-      if (
-        (histogram?.success !== true && histogram?.success !== 1)
-        || !Number.isFinite(highestBuyCents)
-        || highestBuyCents <= 0
-      ) {
-        throw new Error("当前没有可用的最高求购价格");
+      if (histogram?.success !== true && histogram?.success !== 1) {
+        throw new Error("Steam 订单簿请求失败");
+      }
+      if (!Number.isFinite(highestBuyCents) || highestBuyCents <= 0) {
+        throw createNoBuyOrdersError();
       }
 
       const histogramSellOrderCount = Number(
@@ -372,8 +399,27 @@ const { setStatus: setOrderStatus } = orderStatus;
         `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}?l=english`;
       const response = await requestQueue.fetch(listingUrl, { requestPolicy: "default" });
       const listingHtml = response?.text || "";
+      const snapshot = parseMarketListingSnapshotFromHtml(listingHtml, marketHashName);
       const depth = parseMarketOrderDepthFromListingHtml(listingHtml, marketHashName);
-      if (!depth) throw new Error("商品页缺少有效的完整买单深度");
+      if (!depth) {
+        if (
+          Number.isInteger(snapshot?.currency)
+          && snapshot.currency > 0
+          && snapshot.currency !== currencyContext.currencyId
+        ) {
+          throw new Error(
+            `商品页币种不一致 (${snapshot.currency}/${currencyContext.currencyId})`
+          );
+        }
+        if (
+          Number.isInteger(snapshot?.currency)
+          && snapshot.currency > 0
+          && !(Number.isFinite(snapshot.highestBuyCents) && snapshot.highestBuyCents > 0)
+        ) {
+          throw createNoBuyOrdersError();
+        }
+        throw new Error("商品页缺少有效的完整买单深度");
+      }
       if (depth.currencyId !== currencyContext.currencyId) {
         throw new Error(
           `商品页币种不一致 (${depth.currencyId}/${currencyContext.currencyId})`
@@ -381,7 +427,6 @@ const { setStatus: setOrderStatus } = orderStatus;
       }
 
       const observedAt = Date.now();
-      const snapshot = parseMarketListingSnapshotFromHtml(listingHtml, marketHashName);
       const record = normalizeListingOrderbook({
         eCurrency: depth.currencyId,
         amtMaxBuyOrder: depth.highestBuyMinor,
@@ -427,6 +472,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       clamped: 0,
       minimumClamped: 0,
       sellGuardClamped: 0,
+      noBuyMinimumFallback: 0,
     };
     const candidates = [];
     const marketRecords = [];
@@ -470,6 +516,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       let basePriceCents = null;
       let unitPriceCents = null;
       let automaticQuote = null;
+      let noBuyMinimumFallback = false;
       if (pricingProfile.automatic) {
         statusFn(`自动定价 ${index + 1}/${candidates.length}: ${card.name}`);
         try {
@@ -484,10 +531,20 @@ const { setStatus: setOrderStatus } = orderStatus;
           basePriceCents = automaticQuote?.strategyBasePriceMinor ?? null;
           unitPriceCents = automaticQuote?.finalPriceMinor ?? null;
         } catch (error) {
-          logFn(
-            `  ${info.gameName} · ${card.name}: ${error?.message || error}，已跳过`,
-            "warn"
-          );
+          if (state.cfg.noBuyOrderMinimumFallback && isNoBuyOrdersError(error)) {
+            basePriceCents = minimumCents;
+            noBuyMinimumFallback = true;
+            skipped.noBuyMinimumFallback++;
+            logFn(
+              `  ${info.gameName} · ${card.name}: 当前无买单，使用市场最低价 ${formatMoney(minimumCents)}`,
+              "info"
+            );
+          } else {
+            logFn(
+              `  ${info.gameName} · ${card.name}: ${error?.message || error}，已跳过`,
+              "warn"
+            );
+          }
         }
       } else if (
         priceSource === "lowest"
@@ -510,10 +567,20 @@ const { setStatus: setOrderStatus } = orderStatus;
             onRecord: record => marketRecords.push(record),
           });
         } catch (error) {
-          logFn(
-            `  ${info.gameName} · ${card.name}: ${error?.message || error}，已跳过`,
-            "warn"
-          );
+          if (state.cfg.noBuyOrderMinimumFallback && isNoBuyOrdersError(error)) {
+            basePriceCents = minimumCents;
+            noBuyMinimumFallback = true;
+            skipped.noBuyMinimumFallback++;
+            logFn(
+              `  ${info.gameName} · ${card.name}: 当前无买单，使用市场最低价 ${formatMoney(minimumCents)}`,
+              "info"
+            );
+          } else {
+            logFn(
+              `  ${info.gameName} · ${card.name}: ${error?.message || error}，已跳过`,
+              "warn"
+            );
+          }
         }
       }
       if (basePriceCents == null) {
@@ -549,7 +616,13 @@ const { setStatus: setOrderStatus } = orderStatus;
         basePriceCents,
         unitPriceCents,
         automaticPricing: pricingProfile.automatic,
-        wallClassification: automaticQuote?.classification || null,
+        wallClassification: noBuyMinimumFallback
+          ? "no-buy-orders"
+          : automaticQuote?.classification || null,
+        isolatedHighPrice: automaticQuote?.detection?.isolation?.classification === "isolated-high",
+        originalHighestBuyCents: automaticQuote?.highestBuyMinor ?? null,
+        effectiveHighestBuyCents: automaticQuote?.effectiveHighestBuyMinor ?? null,
+        noBuyMinimumFallback,
         totalPriceCents: unitPriceCents * quantity,
       });
     }
@@ -609,11 +682,14 @@ const { setStatus: setOrderStatus } = orderStatus;
         row.title = `${item.gameName} · ${item.marketHashName}`;
         row.appendChild(createTextSpan("", `${item.gameName} · ${item.cardName}`));
         row.appendChild(createTextSpan("", `${item.quantity} 张`));
+        const priceBasisLabel = item.noBuyMinimumFallback
+          ? "无买单"
+          : item.automaticPricing
+            ? `${item.isolatedHighPrice ? "孤立价已排除 · " : ""}${item.wallClassification === "near-wall" ? "有墙" : "无墙"}`
+            : "";
         row.appendChild(createTextSpan(
           "stch-order-price-basis",
-          item.automaticPricing
-            ? `${item.wallClassification === "near-wall" ? "有墙" : "无墙"} · 基准 ${formatMoney(item.basePriceCents)}`
-            : `基准 ${formatMoney(item.basePriceCents)}`
+          `${priceBasisLabel ? `${priceBasisLabel} · ` : ""}基准 ${formatMoney(item.basePriceCents)}`
         ));
         row.appendChild(createTextSpan("", formatMoney(item.unitPriceCents)));
         list.appendChild(row);
@@ -623,6 +699,16 @@ const { setStatus: setOrderStatus } = orderStatus;
       if (skipped.covered) notes.push(`${skipped.covered} 种卡牌已被现有订购单覆盖`);
       if (skipped.missingPrice) notes.push(`${skipped.missingPrice} 种卡牌缺少所选价格，已跳过`);
       if (skipped.missingHash) notes.push(`${skipped.missingHash} 种卡牌缺少市场标识，已跳过`);
+      if (skipped.noBuyMinimumFallback) notes.push(
+        `${skipped.noBuyMinimumFallback} 种卡牌当前无买单，已使用市场最低价 ${formatMoney(minimumCents)}`
+      );
+      const isolatedHighPriceCount = plan.reduce(
+        (count, item) => count + Number(item.isolatedHighPrice),
+        0
+      );
+      if (isolatedHighPriceCount) notes.push(
+        `${isolatedHighPriceCount} 种卡牌已排除顶部孤立高价`
+      );
       if (skipped.minimumClamped) notes.push(
         `${skipped.minimumClamped} 种卡牌低于 Steam 最低价，已调整为 ${formatMoney(minimumCents)}`
       );

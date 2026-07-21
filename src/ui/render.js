@@ -17,6 +17,19 @@ import { openMultibuy } from "../features/multibuy.js";
 import { updateBulkActionState, updateOrderActionState } from "./action-state.js";
 
 import { updateResultColumns } from "../features/scan.js";
+import { getActiveOrderPricingProfile } from "../config.js";
+import { calculateAutomaticBuyPrice } from "../services/order-wall.js";
+import { calculateResultPricingTotals } from "../services/pricing-estimate.js";
+import { enableCheckboxDragSelection } from "./checkbox-drag.js";
+
+  function enableResultDragSelection(list) {
+    enableCheckboxDragSelection(list, {
+      checkboxSelector: ".stch-result-cb",
+      activationSelector: ".stch-result-cb, .stch-check-hit, .stch-check",
+      rowSelector: ".stch-game-row",
+      excludeSelector: "[id$='select-all']",
+    });
+  }
 
   export function setSummary(html) {
     const el = document.getElementById("stch-summary");
@@ -142,6 +155,7 @@ import { updateResultColumns } from "../features/scan.js";
   export function renderResults() {
     const list = document.getElementById("stch-list");
     if (!list) return;
+    enableResultDragSelection(list);
     list.innerHTML = "";
     if (state.results.length === 0) {
       updateBulkActionState();
@@ -160,6 +174,7 @@ import { updateResultColumns } from "../features/scan.js";
   export function renderOrderResults() {
     const list = document.getElementById("stch-order-list");
     if (!list) return;
+    enableResultDragSelection(list);
     pruneOrderCache(true);
     list.innerHTML = "";
     const fragment = document.createDocumentFragment();
@@ -270,7 +285,7 @@ import { updateResultColumns } from "../features/scan.js";
     checkbox.type = "checkbox";
     checkbox.className = "stch-result-cb";
     checkbox.checked = sourceState.selected.has(getResultKey(info));
-    checkbox.title = "选择此游戏进行重新计算或提交订购单";
+    checkbox.title = "选择此游戏进行重新计算或提交订购单；按住并上下拖动可连续选择或取消";
     buyCell.appendChild(buyLink);
     row.appendChild(buyCell);
     const checkboxCell = document.createElement("span");
@@ -296,7 +311,8 @@ import { updateResultColumns } from "../features/scan.js";
         updateBulkActionState();
       }
     };
-    checkbox.addEventListener("click", e => {
+    checkbox.addEventListener("click", e => e.stopPropagation());
+    checkbox.addEventListener("change", e => {
       e.stopPropagation();
       applyChecked(checkbox.checked);
     });
@@ -325,22 +341,56 @@ import { updateResultColumns } from "../features/scan.js";
     updateResultColumns();
   }
 
-  export function getAdjustedCompletionCostCents(info) {
-    const originalTotal = Math.max(0, Number(info?.cheapestSetCostCents) || 0);
-    const adjustmentCents = Math.round((Number(state.cfg.priceAdjustment) || 0) * 100);
-    if (adjustmentCents === 0) return originalTotal;
-
+  export function getRealtimePricingTotals(info) {
+    const profile = getActiveOrderPricingProfile(state.cfg);
+    const adjustmentCents = Math.round((Number(profile.adjustment) || 0) * 100);
     const minimumCents = getMarketMinimumPriceCents();
-    let knownOriginalTotal = 0;
-    let knownAdjustedTotal = 0;
-    for (const card of Array.isArray(info?.cards) ? info.cards : []) {
-      const quantity = Math.max(0, 1 - (Number(card.owned) || 0));
-      const basePriceCents = Number(card.lowestCents);
-      if (quantity <= 0 || !Number.isFinite(basePriceCents) || basePriceCents <= 0) continue;
-      knownOriginalTotal += basePriceCents * quantity;
-      knownAdjustedTotal += Math.max(minimumCents, basePriceCents + adjustmentCents) * quantity;
-    }
-    return Math.max(0, originalTotal - knownOriginalTotal) + knownAdjustedTotal;
+    const currencyId = Number(state.currencyContext?.currencyId || state.cfg.currencyId) || 23;
+    const getCacheKey = card => JSON.stringify([
+      String(currencyId),
+      String(card?.marketHashName || ""),
+    ]);
+    const getHighestBuy = card => {
+      const cached = state.highestBuyPrices.get(getCacheKey(card));
+      return Number.isFinite(cached?.priceCents) && cached.priceCents > 0
+        ? cached.priceCents
+        : null;
+    };
+    const resolveBasePriceMinor = card => {
+      if (profile.priceSource === "median") return card?.medianCents;
+      if (profile.priceSource === "highest") return getHighestBuy(card);
+      return card?.lowestCents;
+    };
+    const resolveFinalPriceMinor = profile.automatic
+      ? card => {
+        const depth = state.marketOrderDepths.get(getCacheKey(card))?.depth;
+        if (depth) {
+          return calculateAutomaticBuyPrice(depth, {
+            strategy: profile.priceSource,
+            adjustmentMinor: adjustmentCents,
+            minimumPriceMinor: minimumCents,
+          })?.finalPriceMinor ?? null;
+        }
+        const highestBuy = getHighestBuy(card);
+        if (highestBuy == null) return null;
+        const strategyOffset = profile.priceSource === "conservative"
+          ? -1
+          : profile.priceSource === "aggressive" ? 1 : 0;
+        return Math.max(minimumCents, highestBuy + strategyOffset + adjustmentCents);
+      }
+      : null;
+    return calculateResultPricingTotals(info, {
+      automatic: profile.automatic,
+      priceSource: profile.priceSource,
+      adjustmentMinor: adjustmentCents,
+      minimumPriceMinor: minimumCents,
+      resolveBasePriceMinor,
+      resolveFinalPriceMinor,
+    });
+  }
+
+  export function getAdjustedCompletionCostCents(info) {
+    return getRealtimePricingTotals(info).completionCents;
   }
 
   export function updateSummary() {
@@ -349,11 +399,15 @@ import { updateResultColumns } from "../features/scan.js";
     const count = state.results.length;
     const modeLabel = state.results.some(info => info.isFoil) ? "闪卡" : "普通卡";
     const thresholdCents = Math.round((Number(state.cfg.threshold) || 0) * 100);
-    const totalCents = state.results.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0);
-    const fullCents = state.results.reduce((s, r) => s + (Number(r.fullSetCostCents) || 0), 0);
-    const lv5Cents = state.results.reduce((s, r) => s + (Number(r.level5CostCents) || 0), 0);
+    const totals = state.results.reduce((sum, result) => {
+      const value = getRealtimePricingTotals(result);
+      sum.completion += value.completionCents;
+      sum.full += value.fullCents;
+      sum.level += value.levelCents;
+      return sum;
+    }, { completion: 0, full: 0, level: 0 });
     summary.innerHTML = `
-      共 <b>${count}</b> 个${modeLabel} ≤ ${formatMoney(thresholdCents)} (单套卡牌价格上限)，补全总价 <b>${formatMoney(totalCents)}</b>，全套总价 ${formatMoney(fullCents)}，满级总价 ${formatMoney(lv5Cents)}
+      共 <b>${count}</b> 个${modeLabel} ≤ ${formatMoney(thresholdCents)} (单套卡牌价格上限)，补全总价 <b>${formatMoney(totals.completion)}</b>，全套总价 ${formatMoney(totals.full)}，满级总价 ${formatMoney(totals.level)}
     `;
   }
 
@@ -368,11 +422,15 @@ import { updateResultColumns } from "../features/scan.js";
     if (options.prune !== false) pruneOrderCache(true);
     const count = state.orderResults.length;
     const selectedCount = getSelectedOrderResults().length;
-    const totalCents = state.orderResults.reduce((s, r) => s + getAdjustedCompletionCostCents(r), 0);
-    const fullCents = state.orderResults.reduce((s, r) => s + (Number(r.fullSetCostCents) || 0), 0);
-    const lv5Cents = state.orderResults.reduce((s, r) => s + (Number(r.level5CostCents) || 0), 0);
+    const totals = state.orderResults.reduce((sum, result) => {
+      const value = getRealtimePricingTotals(result);
+      sum.completion += value.completionCents;
+      sum.full += value.fullCents;
+      sum.level += value.levelCents;
+      return sum;
+    }, { completion: 0, full: 0, level: 0 });
     summary.innerHTML = `
-      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>${formatMoney(totalCents)}</b>，全套总价 ${formatMoney(fullCents)}，满级总价 ${formatMoney(lv5Cents)}
+      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>${formatMoney(totals.completion)}</b>，全套总价 ${formatMoney(totals.full)}，满级总价 ${formatMoney(totals.level)}
     `;
   }
 

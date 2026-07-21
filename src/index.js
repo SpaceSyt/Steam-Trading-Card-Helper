@@ -36,6 +36,6 @@ if (pageUrl.includes("/market/multibuy")) {
 } else {
   initWhenReady(() => {
     observeEntryBtn();
-    injectSidebar();
+    if (!state.cfg.sidebarDisabled) injectSidebar();
   });
 }

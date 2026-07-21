@@ -11,6 +11,7 @@ import { formatInt } from "../utils/format.js";
 import { getBadgeTargetLevel, getBadgeModeLabel, getGameCardsUrl } from "../utils/badge.js";
 
 import { createTextSpan, createCheckboxHit } from "../utils/dom.js";
+import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
 
 import { isSharedActionBusy, updateAllActionStates, updateCraftActionState } from "../ui/action-state.js";
 
@@ -64,6 +65,12 @@ export { updateCraftActionState };
   export function renderCraftResults() {
     const list = document.getElementById("stch-craft-list");
     if (!list) return;
+    enableCheckboxDragSelection(list, {
+      checkboxSelector: ".stch-result-cb",
+      activationSelector: ".stch-result-cb, .stch-check-hit, .stch-check",
+      rowSelector: ".stch-craft-row",
+      excludeSelector: "#stch-craft-select-all",
+    });
     list.innerHTML = "";
 
     if (state.craftResults.length === 0) {
@@ -177,6 +184,7 @@ export { updateCraftActionState };
       checkbox.className = "stch-result-cb";
       checkbox.type = "checkbox";
       checkbox.checked = !!result.selected;
+      checkbox.title = "按住并上下拖动可连续选择或取消";
       checkbox.disabled = state.craftScanning
         || state.craftActionRunning
         || state.surplusActionRunning
