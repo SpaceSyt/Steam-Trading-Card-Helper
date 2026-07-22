@@ -6,9 +6,7 @@ import { parseCraftableGameCardsHtml, parseCraftCandidatesHtml } from "../parser
 
 import { getResultKey } from "../services/result-info.js";
 
-import { formatInt } from "../utils/format.js";
-
-import { getBadgeTargetLevel, getBadgeModeLabel, getGameCardsUrl } from "../utils/badge.js";
+import { getGameCardsUrl } from "../utils/badge.js";
 
 import { createTextSpan, createCheckboxHit } from "../utils/dom.js";
 import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
@@ -24,8 +22,6 @@ import { craftStatus } from "../status-controllers.js";
 import { getProfileUrl, getSessionId } from "../utils/steam.js";
 
 const { log: craftLog, setStatus: setCraftStatus, setProgress: setCraftProgress, hideProgress: hideCraftProgress } = craftStatus;
-
-export { updateCraftActionState };
 
   export function getCraftPlan() {
     return state.craftResults

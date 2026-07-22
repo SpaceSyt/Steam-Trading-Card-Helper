@@ -12,30 +12,67 @@ import { scanBadgePages } from "../services/badge-pages.js";
 
 import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
-import { priceCard, predictFullSetLowerBound } from "../parsers/price.js";
+import {
+  PRICE_CARD_ERROR_KINDS,
+  PRICE_CARD_OUTCOMES,
+  applyPriceCardResult,
+  priceCard,
+  predictFullSetLowerBound,
+} from "../parsers/price.js";
 
 import { formatMoney } from "../utils/format.js";
 
 import { getBadgeModeLabel, getGameCardsUrl, getBadgeTargetLevel } from "../utils/badge.js";
 
-import { getCachedOrderResult, getOrderCacheAgeDays } from "../services/order-cache.js";
+import {
+  getCachedOrderResult,
+  getOrderCacheAgeDays,
+  saveOrderCache,
+} from "../services/order-cache.js";
 
 import { persistMarketObservations } from "../services/market-observations.js";
 
 import { addToBlacklist } from "./blacklist.js";
 
-import { renderGameRow, setSummary, setSummaryVisibility, updateSummary } from "../ui/render.js";
+import {
+  renderGameRow,
+  renderOrderResults,
+  setSummary,
+  setSummaryVisibility,
+  updateSummary,
+} from "../ui/render.js";
 
 import {
   isPriceOverviewProbeBlocked,
   updateAllActionStates,
-  updateGrindActionState,
-  updateSurplusActionState,
 } from "../ui/action-state.js";
 
 import { scanStatus } from "../status-controllers.js";
 
 const { log, setStatus, setProgress, hideProgress } = scanStatus;
+
+  function describePriceCardError(result) {
+    if (result?.errorKind === PRICE_CARD_ERROR_KINDS.HTTP) {
+      return `HTTP ${result.httpStatus || "错误"}`;
+    }
+    switch (result?.errorKind) {
+      case PRICE_CARD_ERROR_KINDS.PARSE: return "响应解析失败";
+      case PRICE_CARD_ERROR_KINDS.RESPONSE: return "Steam 返回失败";
+      case PRICE_CARD_ERROR_KINDS.STOPPED: return "请求已停止";
+      case PRICE_CARD_ERROR_KINDS.CURRENCY: return "币种未确认";
+      case PRICE_CARD_ERROR_KINDS.INVALID_INPUT: return "请求信息不完整";
+      default: return "网络请求失败";
+    }
+  }
+
+  function describeBlacklistWriteError(result) {
+    return String(
+      result?.error
+      || result?.message
+      || result?.diagnostics?.[0]?.reason
+      || "黑名单存储不可用"
+    );
+  }
 
   export function skipCurrentBadge() {
     state.skipCurrent = true;
@@ -138,8 +175,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
       document.getElementById("stch-scan-btn")?.classList.remove("disabled");
       document.getElementById("stch-skip-btn")?.classList.add("disabled");
       document.getElementById("stch-stop-btn")?.classList.add("disabled");
-      updateSurplusActionState();
-      updateGrindActionState();
+      updateAllActionStates();
       applyScanModeTheme();
       return;
     }
@@ -289,36 +325,37 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               break;
             }
             if (!card.marketHashName) {
-              log(`  ⚠ 卡牌 "${card.name}" 无 market hash name, 跳过此游戏`, "warn");
-              allPriced = false;
-              break;
+              log(`  ⚠ 卡牌 "${card.name}" 无 market hash name，保留为缺价`, "warn");
+              applyPriceCardResult(card, {
+                outcome: PRICE_CARD_OUTCOMES.ERROR,
+                errorKind: PRICE_CARD_ERROR_KINDS.INVALID_INPUT,
+                errorMessage: "缺少 market_hash_name",
+                httpStatus: null,
+                record: null,
+                currencyId: info.currencyId,
+                observedAt: null,
+              }, info.currencyId);
+              failedPriceCount++;
+              continue;
             }
 
             const pk = await priceCard(card.marketHashName, queue, { persistMarketCache: false });
             if (pk?.record) marketRecords.push(pk.record);
-            if (!pk) {
-              log(`  ⚠ 卡牌 "${card.name}" (market: ${card.marketHashName}) 查价失败, 跳过此卡`, "warn");
-              card.priceSource = "failed";
-              card.currencyId = info.currencyId;
+            const appliedPrice = applyPriceCardResult(card, pk, info.currencyId);
+            if (appliedPrice.outcome === PRICE_CARD_OUTCOMES.ERROR) {
+              log(
+                `  ⚠ 卡牌 "${card.name}" (market: ${card.marketHashName}) ` +
+                `${describePriceCardError(appliedPrice)}，保留为缺价`,
+                "warn"
+              );
               failedPriceCount++;
               continue;
             }
-            if (pk.noPriceData) {
-              log(`  ⚠ 卡牌 "${card.name}" Steam 仅返回 success，无可用价格`, "warn");
-              card.priceSource = "none";
-              card.currencyId = pk.currencyId;
-              card.marketRecord = pk.record;
+            if (appliedPrice.outcome === PRICE_CARD_OUTCOMES.NO_PRICE) {
+              log(`  ⚠ 卡牌 "${card.name}" Steam 未返回可用价格，保留为缺价`, "warn");
               noPriceCards.push(card);
               continue;
             }
-
-            card.lowestCents = pk.lowestSellCents;
-            card.medianCents = pk.medianCents;
-            card.volume = pk.volume;
-            card.priceSource = pk.priceSource;
-            card.currencyId = pk.currencyId;
-            card.observedAt = pk.observedAt;
-            card.marketRecord = pk.record;
             if (pk.volume < minVolume) minVolume = pk.volume;
             if (pk.estimated) {
               info.hasEstimated = true;
@@ -343,14 +380,15 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               ? pk.lowestSellCents + (need5 - 1) * Math.max(pk.lowestSellCents, pk.medianCents)
               : 0;
 
-            if (fullSetCostCents > getThresholdCents()) {
+            const hasIncompletePricing = noPriceCards.length + failedPriceCount > 0;
+            if (!hasIncompletePricing && fullSetCostCents > getThresholdCents()) {
               log(`  → 已查${info.cardPrices.length}/${info.totalInSet}张, 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(getThresholdCents())}，跳过`, "info");
               allPriced = false;
               thresholdSkip = true;
               break;
             }
 
-            if (state.cfg.earlyPricePrediction) {
+            if (!hasIncompletePricing && state.cfg.earlyPricePrediction) {
               const prediction = predictFullSetLowerBound(
                 info.cardPrices,
                 info.totalInSet,
@@ -374,20 +412,24 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
                   "info"
                 );
                 if (shouldAutoBlacklistPrediction) {
-                  addToBlacklist(b.appid, info.gameName || b.gameName || "", 1, 0, {
+                  const added = addToBlacklist(b.appid, info.gameName || b.gameName || "", 1, 0, {
                     priceMinor: prediction.predictedCents,
                     currencyId: info.cardPrices[0]?.currencyId || state.cfg.currencyId,
                     accuracy: "estimated",
                     reason: "prediction",
                     observedAt: Date.now(),
                   });
-                  blacklistedAppids.add(String(b.appid));
-                  log(
-                    `  → 价格预测自动加入游戏黑名单: ` +
-                    `预测全套≥${formatMoney(prediction.predictedCents)} > ` +
-                    formatMoney(predictionAutoBlacklistCents),
-                    "info"
-                  );
+                  if (added.ok) {
+                    blacklistedAppids.add(String(b.appid));
+                    log(
+                      `  → 价格预测自动加入游戏黑名单: ` +
+                      `预测全套≥${formatMoney(prediction.predictedCents)} > ` +
+                      formatMoney(predictionAutoBlacklistCents),
+                      "info"
+                    );
+                  } else {
+                    log(`  → 自动加入游戏黑名单失败: ${describeBlacklistWriteError(added)}`, "warn");
+                  }
                 }
                 allPriced = false;
                 thresholdSkip = true;
@@ -427,20 +469,23 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           info.minVolume = minVolume === Infinity ? 0 : minVolume;
           const autoBlCents = Math.round((state.cfg.autoBlackThreshold || 0) * 100);
           if (!info.hasIncompletePricing && state.cfg.autoBlackEnabled && autoBlCents > 0 && fullSetCostCents > autoBlCents) {
-            addToBlacklist(b.appid, info.gameName || b.gameName || "", 1, 0, {
+            const added = addToBlacklist(b.appid, info.gameName || b.gameName || "", 1, 0, {
               priceMinor: fullSetCostCents,
               currencyId: info.cardPrices[0]?.currencyId || state.cfg.currencyId,
               accuracy: info.hasEstimated ? "estimated" : "exact",
               reason: info.hasEstimated ? "fallback" : "complete",
               observedAt: Date.now(),
             });
-            blacklistedAppids.add(String(b.appid));
-            log(`  → 自动加入游戏黑名单: 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(autoBlCents)}`, "info");
-            skipped++;
-            continue;
+            if (added.ok) {
+              blacklistedAppids.add(String(b.appid));
+              log(`  → 自动加入游戏黑名单: 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(autoBlCents)}`, "info");
+              skipped++;
+              continue;
+            }
+            log(`  → 自动加入游戏黑名单失败: ${describeBlacklistWriteError(added)}`, "warn");
           }
 
-          if (fullSetCostCents > getThresholdCents()) {
+          if (!info.hasIncompletePricing && fullSetCostCents > getThresholdCents()) {
             log(`  → 整套卡牌价格已大于上限(${formatMoney(fullSetCostCents)} > ${formatMoney(getThresholdCents())})，跳过`, "info");
             skipped++;
             continue;
@@ -488,6 +533,12 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
     } finally {
       queue.stop();
       persistMarketObservations(marketRecords);
+      try {
+        if (state.results.length > 0) saveOrderCache();
+      } catch (error) {
+        log(`订购缓存保存失败: ${error?.message || error}`, "warn");
+      }
+      renderOrderResults();
       if (_stopTimeout) {
         clearTimeout(_stopTimeout);
         _stopTimeout = null;
@@ -518,16 +569,14 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
         if (state.scanning) {
           state.scanning = false;
           state.stopRequested = false;
-          if (state.queue) {
-            state.queue.clear();
-            state.queue = null;
-          }
+          state.queue = null;
           hideProgress();
           document.getElementById("stch-scan-btn").classList.remove("disabled");
           document.getElementById("stch-skip-btn").classList.add("disabled");
           document.getElementById("stch-stop-btn").classList.add("disabled");
           applyScanModeTheme();
           setScanPhase("done");
+          updateAllActionStates();
         }
       }, 5000);
     }

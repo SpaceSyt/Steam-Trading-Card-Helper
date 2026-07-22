@@ -6,7 +6,12 @@ import { getGameCardsUrl, getBadgeTargetLevel } from "../utils/badge.js";
 
 import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
-import { priceCard } from "../parsers/price.js";
+import {
+  PRICE_CARD_ERROR_KINDS,
+  PRICE_CARD_OUTCOMES,
+  applyPriceCardResult,
+  priceCard,
+} from "../parsers/price.js";
 
 import { persistMarketObservations } from "./market-observations.js";
 
@@ -56,31 +61,29 @@ import { persistMarketObservations } from "./market-observations.js";
     try {
       for (const card of info.cards) {
         if (!card.marketHashName) {
-          throw new Error(`卡牌“${card.name}”缺少 market hash name`);
-        }
-        const pk = await priceCard(card.marketHashName, queue, { persistMarketCache: false });
-        if (pk?.record) marketRecords.push(pk.record);
-        if (!pk) {
-          card.priceSource = "failed";
-          card.currencyId = info.currencyId;
+          applyPriceCardResult(card, {
+            outcome: PRICE_CARD_OUTCOMES.ERROR,
+            errorKind: PRICE_CARD_ERROR_KINDS.INVALID_INPUT,
+            errorMessage: "缺少 market_hash_name",
+            httpStatus: null,
+            record: null,
+            currencyId: info.currencyId,
+            observedAt: null,
+          }, info.currencyId);
           failedPriceCount++;
           continue;
         }
-        if (pk.noPriceData) {
-          card.priceSource = "none";
-          card.currencyId = pk.currencyId;
-          card.marketRecord = pk.record;
+        const pk = await priceCard(card.marketHashName, queue, { persistMarketCache: false });
+        if (pk?.record) marketRecords.push(pk.record);
+        const appliedPrice = applyPriceCardResult(card, pk, info.currencyId);
+        if (appliedPrice.outcome === PRICE_CARD_OUTCOMES.ERROR) {
+          failedPriceCount++;
+          continue;
+        }
+        if (appliedPrice.outcome === PRICE_CARD_OUTCOMES.NO_PRICE) {
           noPriceCards.push(card);
           continue;
         }
-
-        card.lowestCents = pk.lowestSellCents;
-        card.medianCents = pk.medianCents;
-        card.volume = pk.volume;
-        card.priceSource = pk.priceSource;
-        card.currencyId = pk.currencyId;
-        card.observedAt = pk.observedAt;
-        card.marketRecord = pk.record;
         minVolume = Math.min(minVolume, pk.volume);
         if (pk.estimated) {
           info.hasEstimated = true;

@@ -11,7 +11,6 @@ export const DEFAULT_MARKET_CACHE_MAX_ENTRIES = 5000;
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-
 function diagnostic(code, message, severity = "error", details = undefined) {
   return details === undefined
     ? { code, message, severity }
@@ -583,7 +582,6 @@ export function upsertStoredMarketCache(record, options = {}) {
   const saved = saveNormalizedMarketCache(updated, options);
   return { ...saved, saved: saved.ok };
 }
-
 /** Read, upsert, prune, and persist a group of observations in one storage transaction. */
 export function upsertManyStoredMarketCache(records, options = {}) {
   if (!Array.isArray(records)) {
@@ -594,23 +592,34 @@ export function upsertManyStoredMarketCache(records, options = {}) {
     return { ...loaded, saved: false };
   }
 
-  // Prune after each logical update so batching changes storage I/O only, not
-  // max-entry eviction order or the result of a later update to an evicted key.
-  const updated = records.reduce(
-    (cache, record) => pruneNormalizedMarketCache(
-      upsertNormalizedMarketCache(cache, record, options),
+  const maxEntries = options.maxEntries === undefined
+    ? DEFAULT_MARKET_CACHE_MAX_ENTRIES
+    : Number(options.maxEntries);
+  const capacitySafe = !Number.isFinite(maxEntries)
+    || loaded.envelope.records.length + records.length <= Math.max(0, Math.floor(maxEntries));
+  const freshnessOptions = {
+    ...options,
+    now: options.now === undefined ? Date.now() : options.now,
+  };
+  const expirationSafe = loaded.envelope.records.every(record => (
+    isMarketCacheRecordFresh(record, freshnessOptions)
+  )) && records.every(record => isMarketCacheRecordFresh(record, freshnessOptions));
+
+  // The normal below-cap batch can merge through one index and prune once.
+  // Near eviction/expiry boundaries retain the sequential behavior so a later
+  // update to an already-evicted key keeps the same ordering semantics.
+  const updated = capacitySafe && expirationSafe
+    ? pruneNormalizedMarketCache(
+      upsertManyNormalizedMarketCache(loaded.envelope, records, options),
       options
-    ),
-    loaded.envelope
-  );
+    )
+    : records.reduce(
+      (cache, record) => pruneNormalizedMarketCache(
+        upsertNormalizedMarketCache(cache, record, options),
+        options
+      ),
+      loaded.envelope
+    );
   const saved = saveNormalizedMarketCache(updated, options);
   return { ...saved, saved: saved.ok };
 }
-
-export const makeMarketCacheKey = getMarketCacheKey;
-export const upsertMarketCacheRecord = upsertMarketCache;
-export const upsertManyMarketCacheRecords = upsertManyMarketCache;
-export const findMarketCacheRecord = findMarketCache;
-export const pruneMarketCacheRecords = pruneMarketCache;
-export const readMarketCacheFromGM = loadMarketCache;
-export const writeMarketCacheToGM = saveMarketCache;

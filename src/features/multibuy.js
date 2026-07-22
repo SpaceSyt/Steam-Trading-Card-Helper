@@ -6,7 +6,7 @@ import { getBadgeTargetLevel, getBadgeUrlSuffix } from "../utils/badge.js";
 
 import { getProfileUrl, getMarketMinimumPriceCents } from "../utils/steam.js";
 
-import { parseMarketHashNameFromHref, getMarketHashNameFromLink } from "../parsers/market-listing.js";
+import { getMarketHashNameFromLink } from "../parsers/market-listing.js";
 
 import { MULTIBUY_DATA_KEY, MULTIBUY_DATA_TTL, MULTIBUY_FILL_TIMEOUT } from "../constants.js";
 
@@ -169,6 +169,15 @@ const { log } = scanStatus;
       (Number.isFinite(adjustmentValue) ? adjustmentValue : 0) * 100
     );
     const currencyContext = getActiveCurrencyContext();
+    const minimumPriceMinor = getMarketMinimumPriceCents(currencyContext);
+    if (
+      !Number.isInteger(currencyContext?.currencyId)
+      || !Number.isSafeInteger(minimumPriceMinor)
+      || minimumPriceMinor <= 0
+    ) {
+      log(`${info.gameName}: 无法确认 Steam 钱包币种，已停止打开批量购买`, "warn");
+      return;
+    }
     const buyData = {
       appid: info.appid,
       isFoil: !!info.isFoil,
@@ -237,6 +246,12 @@ const { log } = scanStatus;
     }
 
     const bufferCents = data.bufferCents || 0;
+    const minimumPriceMinor = getMarketMinimumPriceCents(currencyContext);
+    if (!Number.isSafeInteger(minimumPriceMinor) || minimumPriceMinor <= 0) {
+      console.warn("[STCH] Ignoring multibuy data because the market minimum is unavailable");
+      clearMultibuyData();
+      return;
+    }
 
     // Inject "恢复默认价格" button next to Steam's title
     const injectResetBtn = () => {
@@ -294,13 +309,13 @@ const { log } = scanStatus;
           changed = setMultibuyFieldValue(
             price,
             (
-              Math.max(getMarketMinimumPriceCents(), card.lowestCents + bufferCents)
+              Math.max(minimumPriceMinor, card.lowestCents + bufferCents)
               / currencyContext.minorUnitFactor
             ).toFixed(currencyContext.decimalDigits)
           ) || changed;
         }
         if (quantity) {
-          changed = setMultibuyFieldValue(quantity, card.qty || 1) || changed;
+          changed = setMultibuyFieldValue(quantity, card.qty || 0) || changed;
         }
         filledCards.add(marketHashName);
       });

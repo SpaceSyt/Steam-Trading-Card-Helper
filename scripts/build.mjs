@@ -10,6 +10,26 @@ const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
 const normalizeNewlines = text => text.replace(/\r\n?/g, "\n");
 
+function compactMainModalHtml(source) {
+  let matches = 0;
+  const compacted = source.replace(
+    /(modal\.innerHTML\s*=\s*`)([\s\S]*?)(`;\s*document\.body\.appendChild\(modal\);)/,
+    (_match, open, html, close) => {
+      matches += 1;
+      const compactHtml = html
+        .split("\n")
+        .map(line => line.trim())
+        .filter(Boolean)
+        .join(" ");
+      return `${open}${compactHtml}${close}`;
+    }
+  );
+  if (matches !== 1) {
+    throw new Error(`Expected one main modal HTML template, found ${matches}.`);
+  }
+  return compacted;
+}
+
 const banner = normalizeNewlines(
   readFileSync(join(root, "src", "meta.txt"), "utf8")
 ).replace(/__VERSION__/g, pkg.version);
@@ -25,7 +45,7 @@ await build({
   sourcemap: false,
   loader: { ".css": "text" },
   plugins: [{
-    name: "minify-css-text",
+    name: "compact-embedded-assets",
     setup(buildContext) {
       buildContext.onLoad({ filter: /\.css$/ }, async args => {
         const result = await transform(
@@ -42,6 +62,11 @@ await build({
           loader: "text",
         };
       });
+      buildContext.onLoad({ filter: /[\\/]ui[\\/]modal\.js$/ }, args => ({
+        contents: compactMainModalHtml(normalizeNewlines(readFileSync(args.path, "utf8"))),
+        loader: "js",
+        resolveDir: dirname(args.path),
+      }));
     },
   }],
   banner: { js: banner },

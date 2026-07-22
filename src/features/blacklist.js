@@ -6,77 +6,131 @@ import { getProfileUrl } from "../utils/steam.js";
 
 import { createTextSpan } from "../utils/dom.js";
 import { formatMoney } from "../utils/format.js";
+import { normalizeBlacklistPriceEntry } from "../services/blacklist-price.js";
 import {
-  normalizeBlacklistPriceEntry,
-  parseBlacklistPriceData,
-  setBlacklistPriceEntry,
-} from "../services/blacklist-price.js";
+  describeBlacklistStorageError,
+  mutateBlacklistStorage,
+  readBlacklistStorage,
+} from "../services/blacklist-storage.js";
 import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
 
-  export function addToBlacklist(appid, name, source, fixedVal = 0, priceEntry = null) {
-    appid = String(appid || "");
-    const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
-    const normalizedPrice = normalizeBlacklistPriceEntry(priceEntry);
+function showBlacklistStorageError(result) {
+  const message = describeBlacklistStorageError(result);
+  if (!message) return "";
+  console.warn(`[STCH] ${message}`, result.diagnostics);
+  const resultEl = document.getElementById("stch-bl-result");
+  if (resultEl) {
+    resultEl.dataset.storageError = "true";
+    resultEl.textContent = message;
+    resultEl.style.color = "#d94126";
+  }
+  return message;
+}
 
-    // Existing rows can still be promoted to fixed or receive fresher scan data.
-    if (bl.includes(appid)) {
-      let changed = false;
-      if (fixedVal) {
-        let fixed = {};
-        try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
-        if (!fixed[appid]) {
-          fixed[appid] = 1;
-          state.cfg.blacklistFixed = JSON.stringify(fixed);
-          changed = true;
-        }
-      }
-      if (normalizedPrice) {
-        state.cfg.blacklistPriceData = JSON.stringify(setBlacklistPriceEntry(
-          state.cfg.blacklistPriceData,
-          appid,
-          normalizedPrice
-        ));
+function clearBlacklistStorageError() {
+  const resultEl = document.getElementById("stch-bl-result");
+  if (!resultEl || resultEl.dataset.storageError !== "true") return;
+  delete resultEl.dataset.storageError;
+  resultEl.textContent = "";
+  resultEl.style.removeProperty("color");
+}
+
+function persistBlacklistMutation(mutate) {
+  const result = mutateBlacklistStorage(state.cfg, mutate);
+  if (!result.ok) {
+    showBlacklistStorageError(result);
+    return result;
+  }
+  clearBlacklistStorageError();
+  if (result.changed) saveConfig(state.cfg);
+  return result;
+}
+
+export function getBlacklistSnapshot() {
+  return readBlacklistStorage(state.cfg);
+}
+
+export function addToBlacklist(appid, name, source, fixedVal = 0, priceEntry = null) {
+  const key = String(appid || "");
+  if (!/^\d+$/.test(key)) {
+    return {
+      ok: false,
+      changed: false,
+      diagnostics: [{ field: "blacklist", label: "AppID", reason: "invalid-appid", appid: key }],
+    };
+  }
+  const normalizedPrice = normalizeBlacklistPriceEntry(priceEntry);
+  return persistBlacklistMutation(storage => {
+    const existing = storage.appids.includes(key);
+    let changed = false;
+    if (!existing) {
+      storage.appids.push(key);
+      storage.names[key] = String(name || "");
+      storage.sources[key] = source;
+      storage.dates[key] = Date.now();
+      changed = true;
+    }
+    if (fixedVal && !storage.fixed[key]) {
+      storage.fixed[key] = 1;
+      changed = true;
+    }
+    if (normalizedPrice) {
+      storage.priceData[key] = normalizedPrice;
+      changed = true;
+    }
+    return changed;
+  });
+}
+
+export function removeBlacklistEntries(appids) {
+  const targets = new Set(appids.map(value => String(value || "")).filter(Boolean));
+  return persistBlacklistMutation(storage => {
+    const next = storage.appids.filter(appid => !targets.has(appid));
+    if (next.length === storage.appids.length) return false;
+    storage.appids = next;
+    for (const appid of targets) {
+      delete storage.names[appid];
+      delete storage.sources[appid];
+      delete storage.dates[appid];
+      delete storage.fixed[appid];
+      delete storage.priceData[appid];
+    }
+    return true;
+  });
+}
+
+export function setBlacklistEntriesFixed(appids, isFixed) {
+  const targets = new Set(appids.map(value => String(value || "")).filter(Boolean));
+  return persistBlacklistMutation(storage => {
+    let changed = false;
+    for (const appid of storage.appids) {
+      if (!targets.has(appid)) continue;
+      if (isFixed && !storage.fixed[appid]) {
+        storage.fixed[appid] = 1;
+        changed = true;
+      } else if (!isFixed && Object.hasOwn(storage.fixed, appid)) {
+        delete storage.fixed[appid];
         changed = true;
       }
-      if (changed) saveConfig(state.cfg);
-      return;
     }
+    return changed;
+  });
+}
 
-    bl.push(appid);
-    state.cfg.blacklist = bl.join(",");
-
-    let names = {};
-    try { names = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) {}
-    names[appid] = name;
-    state.cfg.blacklistNames = JSON.stringify(names);
-
-    let sources = {};
-    try { sources = JSON.parse(state.cfg.blacklistSources || "{}"); } catch (_) {}
-    sources[appid] = source;
-    state.cfg.blacklistSources = JSON.stringify(sources);
-
-    let dates = {};
-    try { dates = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) {}
-    dates[appid] = Date.now();
-    state.cfg.blacklistDates = JSON.stringify(dates);
-
-    if (normalizedPrice) {
-      state.cfg.blacklistPriceData = JSON.stringify(setBlacklistPriceEntry(
-        state.cfg.blacklistPriceData,
-        appid,
-        normalizedPrice
-      ));
-    }
-
-    if (fixedVal) {
-      let fixed = {};
-      try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
-      fixed[appid] = 1;
-      state.cfg.blacklistFixed = JSON.stringify(fixed);
-    }
-
-    saveConfig(state.cfg);
-  }
+export function findExpiredBlacklistEntries(expiryDays, now = Date.now()) {
+  const storage = getBlacklistSnapshot();
+  if (!storage.ok) return { ...storage, appids: [] };
+  const threshold = Math.max(1, Number(expiryDays) || 1) * 86400000;
+  return {
+    ok: true,
+    diagnostics: [],
+    appids: storage.appids.filter(appid => (
+      !storage.fixed[appid]
+      && storage.dates[appid]
+      && now - storage.dates[appid] > threshold
+    )),
+  };
+}
 
   export async function lookupGameName(appid) {
     try {
@@ -114,28 +168,32 @@ import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
     const cbs = [...(list ? list.querySelectorAll(".stch-bl-cb:checked") : [])];
     if (listFixed) cbs.push(...listFixed.querySelectorAll(".stch-bl-cb:checked"));
 
-    const anyChecked = cbs.length > 0;
+    const storage = getBlacklistSnapshot();
+    const writesAllowed = storage.ok;
+    if (writesAllowed) clearBlacklistStorageError();
+    else showBlacklistStorageError(storage);
+    const anyChecked = writesAllowed && cbs.length > 0;
+    const fixed = storage.fixed;
     const hasNormal = cbs.some(cb => {
-      let fixed = {};
-      try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
       return !fixed[cb.dataset.appid];
     });
     const hasFixed = cbs.some(cb => {
-      let fixed = {};
-      try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
       return !!fixed[cb.dataset.appid];
     });
 
-    add.style.display = (state.blLookupName && !anyChecked) ? "" : "none";
-    addF.style.display = (state.blLookupName && !anyChecked) ? "" : "none";
+    add.style.display = (writesAllowed && state.blLookupName && !anyChecked) ? "" : "none";
+    addF.style.display = (writesAllowed && state.blLookupName && !anyChecked) ? "" : "none";
     del.style.display = anyChecked ? "" : "none";
     fix.style.display = (anyChecked && hasNormal) ? "" : "none";
     unfix.style.display = (anyChecked && hasFixed) ? "" : "none";
 
-    if (anyChecked) { del.classList.remove("disabled"); del.classList.add("stch-btn-danger"); }
-    if (fix.style.display !== "none") fix.classList.remove("disabled");
-    if (unfix.style.display !== "none") unfix.classList.remove("disabled");
-    if (anyChecked) document.getElementById("stch-bl-result").textContent = "";
+    del.classList.toggle("disabled", !anyChecked);
+    del.classList.toggle("stch-btn-danger", anyChecked);
+    fix.classList.toggle("disabled", fix.style.display === "none");
+    unfix.classList.toggle("disabled", unfix.style.display === "none");
+    if (anyChecked && document.getElementById("stch-bl-result")?.dataset.storageError !== "true") {
+      document.getElementById("stch-bl-result").textContent = "";
+    }
   }
 
   export function renderBlacklist() {
@@ -148,16 +206,17 @@ import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
       activationSelector: ".stch-bl-cb, .stch-bl-cb-hd",
       rowSelector: ".stch-bl-row",
     });
-    const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
-    let names = {};
-    try { names = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) {}
-    let sources = {};
-    try { sources = JSON.parse(state.cfg.blacklistSources || "{}"); } catch (_) {}
-    let dates = {};
-    try { dates = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) {}
-    let fixed = {};
-    try { fixed = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) {}
-    const priceData = parseBlacklistPriceData(state.cfg.blacklistPriceData);
+    const storage = getBlacklistSnapshot();
+    const {
+      appids: bl,
+      names,
+      sources,
+      dates,
+      fixed,
+      priceData,
+    } = storage;
+    if (storage.ok) clearBlacklistStorageError();
+    else showBlacklistStorageError(storage);
 
     const sourceLabels = { "0": "手动", "1": "自动" };
     const normal = bl.filter(a => !fixed[a]);
@@ -193,6 +252,7 @@ import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
     };
 
     const appendItems = (target, items) => {
+      const fragment = document.createDocumentFragment();
       for (const appid of items) {
         const row = document.createElement("div");
         row.className = "stch-bl-row";
@@ -221,11 +281,13 @@ import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
         checkbox.type = "checkbox";
         checkbox.className = "stch-bl-cb";
         checkbox.dataset.appid = appid;
-        checkbox.setAttribute("aria-label", `选择 ${name || appid}`);
+        checkbox.setAttribute("aria-label", `选择 ${names[appid] || appid}`);
+        checkbox.disabled = !storage.ok;
         checkboxCell.appendChild(checkbox);
         row.appendChild(checkboxCell);
-        target.appendChild(row);
+        fragment.appendChild(row);
       }
+      target.appendChild(fragment);
     };
 
     list.replaceChildren();
@@ -254,21 +316,25 @@ import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
 
     const allCbs = [...list.querySelectorAll(".stch-bl-cb")];
     if (listFixed) allCbs.push(...listFixed.querySelectorAll(".stch-bl-cb"));
+    let updateFrame = 0;
     allCbs.forEach(cb => {
       cb.addEventListener("change", () => {
-        const delBtn2 = document.getElementById("stch-bl-del-sel");
-        const anyChecked = [...list.querySelectorAll(".stch-bl-cb:checked")].length > 0
-          || (listFixed && [...listFixed.querySelectorAll(".stch-bl-cb:checked")].length > 0);
-        if (delBtn2) {
-          if (anyChecked) { delBtn2.classList.remove("disabled"); delBtn2.classList.add("stch-btn-danger"); }
-          else { delBtn2.classList.add("disabled"); delBtn2.classList.remove("stch-btn-danger"); }
-        }
-        updateBlRow();
+        if (updateFrame) return;
+        updateFrame = requestAnimationFrame(() => {
+          updateFrame = 0;
+          updateBlRow();
+        });
       });
     });
 
-    if (cleanupBtn) {
-      const hasExpired = bl.some(a => !fixed[a] && dates[a] && (Date.now() - dates[a] > 7 * 86400000));
+    if (cleanupBtn && storage.ok) {
+      const expiryDays = Math.max(
+        1,
+        Number(state.cfg.blacklistExpiryDays) || 7
+      );
+      const hasExpired = bl.some(a => (
+        !fixed[a] && dates[a] && (Date.now() - dates[a] > expiryDays * 86400000)
+      ));
       if (hasExpired) { cleanupBtn.classList.remove("disabled"); cleanupBtn.classList.add("stch-btn-danger"); }
     }
   }

@@ -1,6 +1,7 @@
 import { state } from "../state.js";
 
 import {
+  AUTOMATIC_PRICE_STRATEGY_CONFIG,
   createAutomaticPricingDraft,
   saveConfig,
   DEFAULT_CONFIG,
@@ -20,7 +21,7 @@ import { recalculateSelectedResults, recalculateSelectedOrderResults } from "../
 
 import { activatePriceHistoryTab, initPriceHistoryUi, resetPriceHistoryRuntime, stopPriceHistoryRefresh } from "../features/price-history.js";
 
-import { submitSelectedBuyOrders, submitSelectedOrderBuyOrders, addManualOrderAppid, deleteExpiredOrderResults } from "../features/orders.js";
+import { submitSelectedBuyOrders, submitSelectedOrderBuyOrders, addManualOrderAppid } from "../features/orders.js";
 
 import {
   activateActiveBuyOrdersTab,
@@ -28,19 +29,27 @@ import {
   resetActiveBuyOrdersRuntime,
 } from "../features/active-orders.js";
 
-import { startCraftScan, requestCraftStop, setAllCraftCounts, submitCraftPlan, renderCraftResults, updateCraftActionState, updateCraftSummary } from "../features/craft.js";
+import { startCraftScan, requestCraftStop, setAllCraftCounts, submitCraftPlan, renderCraftResults } from "../features/craft.js";
 
-import { startSurplusScan, requestSurplusStop, renderSurplusResults, updateSurplusActionState, setAllVisibleSurplusSelection } from "../features/surplus.js";
+import { startSurplusScan, requestSurplusStop, renderSurplusResults, setAllVisibleSurplusSelection } from "../features/surplus.js";
 
-import { startGrindScan, requestGrindStop, renderGrindResults, updateGrindActionState, setAllVisibleGrindSelection } from "../features/grind.js";
+import { startGrindScan, requestGrindStop, renderGrindResults, setAllVisibleGrindSelection } from "../features/grind.js";
 
 import { submitSelectedProcessingSell, submitSelectedProcessingGems } from "../features/item-actions.js";
 
-import { renderBlacklist, updateBlRow, addToBlacklist, lookupGameName } from "../features/blacklist.js";
+import {
+  addToBlacklist,
+  findExpiredBlacklistEntries,
+  lookupGameName,
+  removeBlacklistEntries,
+  renderBlacklist,
+  setBlacklistEntriesFixed,
+  updateBlRow,
+} from "../features/blacklist.js";
 
 import { renderResults, renderOrderResults, updateSummary, updateOrderSummary, updateOrderResultColumns } from "./render.js";
 
-import { isSharedActionBusy, updateAllActionStates, updateBulkActionState } from "./action-state.js";
+import { isSharedActionBusy, updateAllActionStates, updateSurplusActionState } from "./action-state.js";
 
 import { clearOrderCache, loadOrderCache, pruneOrderCache, readRawOrderCache } from "../services/order-cache.js";
 
@@ -72,29 +81,18 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     ["balanced", "平衡"],
     ["aggressive", "抢单"],
   ];
-  const AUTOMATIC_STRATEGY_SETTING_ROWS = [
-    {
-      id: "conservative",
-      label: "保守",
-      anchorKey: "automaticConservativeWallAnchor",
-      wallOffsetKey: "automaticConservativeWallOffset",
-      noWallOffsetKey: "automaticConservativeNoWallOffset",
-    },
-    {
-      id: "balanced",
-      label: "平衡",
-      anchorKey: "automaticBalancedWallAnchor",
-      wallOffsetKey: "automaticBalancedWallOffset",
-      noWallOffsetKey: "automaticBalancedNoWallOffset",
-    },
-    {
-      id: "aggressive",
-      label: "抢单",
-      anchorKey: "automaticAggressiveWallAnchor",
-      wallOffsetKey: "automaticAggressiveWallOffset",
-      noWallOffsetKey: "automaticAggressiveNoWallOffset",
-    },
-  ];
+  const AUTOMATIC_STRATEGY_LABELS = Object.freeze({
+    conservative: "保守",
+    balanced: "平衡",
+    aggressive: "抢单",
+  });
+  const AUTOMATIC_STRATEGY_SETTING_ROWS = Object.entries(
+    AUTOMATIC_PRICE_STRATEGY_CONFIG
+  ).map(([id, fields]) => ({
+    id,
+    label: AUTOMATIC_STRATEGY_LABELS[id],
+    ...fields,
+  }));
   function getOrderPriceOptionsHtml(automatic, selected) {
     const options = automatic ? AUTOMATIC_ORDER_PRICE_OPTIONS : MANUAL_ORDER_PRICE_OPTIONS;
     return options.map(([value, label]) => (
@@ -424,7 +422,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             <div class="stch-btn alt" id="stch-order-add-btn">读取并加入</div>
             <div class="stch-btn alt disabled" id="stch-order-recalculate-btn">重新计算</div>
             <div class="stch-btn disabled" id="stch-order-submit-orders-btn">提交订购单</div>
-            <div class="stch-btn alt stch-btn-danger disabled stch-order-tools" id="stch-order-delete-btn">删除过期</div>
           </div>
           <div class="stch-toolbar">
             <label id="stch-order-page-price-label" class="stch-primary-label ${automaticPricingClass}">购买价格
@@ -703,7 +700,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       renderSurplusResults();
       renderGrindResults();
       updateSurplusActionState();
-      updateGrindActionState();
     };
     const syncConfigFromInputs = changedId => {
       const previousSurplusItemMode = state.cfg.surplusItemMode || DEFAULT_CONFIG.surplusItemMode;
@@ -785,10 +781,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         { integer: true, min: 0 }
       );
       state.cfg.grindIncludePointsShopItems = !!document.getElementById("stch-grind-include-points-shop")?.checked;
-      const includeSurplusCards = document.getElementById("stch-grind-include-surplus-cards");
-      if (includeSurplusCards) {
-        state.cfg.grindIncludeSurplusCards = !!includeSurplusCards.checked;
-      }
       state.cfg.craftInterval = readNumberInput(
         "stch-craft-interval",
         state.cfg.craftInterval ?? DEFAULT_CONFIG.craftInterval,
@@ -848,7 +840,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       "stch-craft-mode", "stch-surplus-item-mode",
       "stch-surplus-only-tradable", "stch-surplus-only-recommended", "stch-surplus-sell-price-source",
       "stch-surplus-sell-adjustment",
-      "stch-grind-include-surplus-cards", "stch-grind-reserve-copies",
+      "stch-grind-reserve-copies",
       "stch-grind-include-points-shop",
       ...AUTOMATIC_STRATEGY_SETTING_ROWS.flatMap(rule => [
         `stch-auto-${rule.id}-wall-anchor`,
@@ -1084,7 +1076,15 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       setSettingsActionStatus(`已移除 ${cachedCount} 项缓存`);
     };
     const restoreDefaultSettings = event => {
-      if (event.currentTarget.classList.contains("disabled")) return;
+      if (
+        event.currentTarget.classList.contains("disabled")
+        || isSharedActionBusy()
+        || state.sidebarPriceRefreshing
+      ) {
+        setSettingsActionStatus("请先停止当前操作，再恢复默认设置");
+        updateAllActionStates();
+        return;
+      }
       if (!confirm("将恢复所有设置项为默认值。游戏/AppID黑名单和订购缓存会保留，确定？")) return;
       const preservedKeys = [
         "blacklist",
@@ -1128,7 +1128,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     document.getElementById("stch-order-add-btn").addEventListener("click", addManualOrderAppid);
     document.getElementById("stch-order-recalculate-btn").addEventListener("click", recalculateSelectedOrderResults);
     document.getElementById("stch-order-submit-orders-btn").addEventListener("click", submitSelectedOrderBuyOrders);
-    document.getElementById("stch-order-delete-btn").addEventListener("click", deleteExpiredOrderResults);
     initActiveBuyOrdersUi();
     document.getElementById("stch-craft-scan-btn").addEventListener("click", startCraftScan);
     document.getElementById("stch-craft-stop-btn").addEventListener("click", requestCraftStop);
@@ -1276,7 +1275,8 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
 
     document.getElementById("stch-bl-add").addEventListener("click", () => {
       if (!state.blLookupAppid || !state.blLookupName) return;
-      addToBlacklist(state.blLookupAppid, state.blLookupName, 0, 0);
+      const result = addToBlacklist(state.blLookupAppid, state.blLookupName, 0, 0);
+      if (!result.ok) return;
       document.getElementById("stch-bl-result").textContent = `${state.blLookupName} 已加入游戏黑名单`;
       document.getElementById("stch-bl-appid").value = "";
       state.blLookupAppid = "";
@@ -1287,7 +1287,8 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
 
     document.getElementById("stch-bl-add-fixed").addEventListener("click", () => {
       if (!state.blLookupAppid || !state.blLookupName) return;
-      addToBlacklist(state.blLookupAppid, state.blLookupName, 0, 1);
+      const result = addToBlacklist(state.blLookupAppid, state.blLookupName, 0, 1);
+      if (!result.ok) return;
       document.getElementById("stch-bl-result").textContent = `${state.blLookupName} 已加入固定游戏黑名单`;
       document.getElementById("stch-bl-appid").value = "";
       state.blLookupAppid = "";
@@ -1303,26 +1304,8 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       const allCbs = [...list.querySelectorAll(".stch-bl-cb:checked")];
       if (listFixed) allCbs.push(...listFixed.querySelectorAll(".stch-bl-cb:checked"));
       if (allCbs.length === 0) return;
-      const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
-      let n, s, d, f, p;
-      try { n = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) { n = {}; }
-      try { s = JSON.parse(state.cfg.blacklistSources || "{}"); } catch (_) { s = {}; }
-      try { d = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) { d = {}; }
-      try { f = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { f = {}; }
-      try { p = JSON.parse(state.cfg.blacklistPriceData || "{}"); } catch (_) { p = {}; }
-      allCbs.forEach(cb => {
-        const appid = cb.dataset.appid;
-        const idx = bl.indexOf(appid);
-        if (idx >= 0) bl.splice(idx, 1);
-        delete n[appid]; delete s[appid]; delete d[appid]; delete f[appid]; delete p[appid];
-      });
-      state.cfg.blacklist = bl.join(",");
-      state.cfg.blacklistNames = JSON.stringify(n);
-      state.cfg.blacklistSources = JSON.stringify(s);
-      state.cfg.blacklistDates = JSON.stringify(d);
-      state.cfg.blacklistFixed = JSON.stringify(f);
-      state.cfg.blacklistPriceData = JSON.stringify(p);
-      saveConfig(state.cfg);
+      const result = removeBlacklistEntries(allCbs.map(cb => cb.dataset.appid));
+      if (!result.ok) return;
       updateBlRow();
       renderBlacklist();
     });
@@ -1334,11 +1317,8 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       const allCbs = [...list.querySelectorAll(".stch-bl-cb:checked")];
       if (listFixed) allCbs.push(...listFixed.querySelectorAll(".stch-bl-cb:checked"));
       if (allCbs.length === 0) return;
-      let f = {};
-      try { f = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { f = {}; }
-      allCbs.forEach(cb => { f[cb.dataset.appid] = 1; });
-      state.cfg.blacklistFixed = JSON.stringify(f);
-      saveConfig(state.cfg);
+      const result = setBlacklistEntriesFixed(allCbs.map(cb => cb.dataset.appid), true);
+      if (!result.ok) return;
       updateBlRow();
       renderBlacklist();
     });
@@ -1350,54 +1330,37 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       const allCbs = [...list.querySelectorAll(".stch-bl-cb:checked")];
       if (listFixed) allCbs.push(...listFixed.querySelectorAll(".stch-bl-cb:checked"));
       if (allCbs.length === 0) return;
-      let f = {};
-      try { f = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { f = {}; }
-      allCbs.forEach(cb => { f[cb.dataset.appid] = 0; });
-      state.cfg.blacklistFixed = JSON.stringify(f);
-      saveConfig(state.cfg);
+      const result = setBlacklistEntriesFixed(allCbs.map(cb => cb.dataset.appid), false);
+      if (!result.ok) return;
       updateBlRow();
       renderBlacklist();
     });
 
     document.getElementById("stch-bl-cleanup").addEventListener("click", () => {
-      const bl = state.cfg.blacklist ? state.cfg.blacklist.split(",").map(s => s.trim()).filter(Boolean) : [];
-      let n, s, d, f, p;
-      try { n = JSON.parse(state.cfg.blacklistNames || "{}"); } catch (_) { n = {}; }
-      try { s = JSON.parse(state.cfg.blacklistSources || "{}"); } catch (_) { s = {}; }
-      try { d = JSON.parse(state.cfg.blacklistDates || "{}"); } catch (_) { d = {}; }
-      try { f = JSON.parse(state.cfg.blacklistFixed || "{}"); } catch (_) { f = {}; }
-      try { p = JSON.parse(state.cfg.blacklistPriceData || "{}"); } catch (_) { p = {}; }
-      const now = Date.now();
       const expiryDays = Math.max(
         1,
         Number(state.cfg.blacklistExpiryDays) || DEFAULT_CONFIG.blacklistExpiryDays
       );
-      const expired = bl.filter(a => !f[a] && d[a] && (now - d[a] > expiryDays * 86400000));
+      const preview = findExpiredBlacklistEntries(expiryDays);
+      if (!preview.ok) {
+        renderBlacklist();
+        return;
+      }
+      const expired = preview.appids;
       if (expired.length === 0) {
         document.getElementById("stch-bl-result").textContent = "没有可清理的过期项";
         return;
       }
       if (!confirm(`将清理 ${expired.length} 项过期（>${expiryDays}天）游戏黑名单，确定？`)) return;
-      const keep = bl.filter(a => !expired.includes(a));
-      expired.forEach(a => {
-        delete n[a]; delete s[a]; delete d[a]; delete f[a]; delete p[a];
-      });
-      state.cfg.blacklist = keep.join(",");
-      state.cfg.blacklistNames = JSON.stringify(n);
-      state.cfg.blacklistSources = JSON.stringify(s);
-      state.cfg.blacklistDates = JSON.stringify(d);
-      state.cfg.blacklistFixed = JSON.stringify(f);
-      state.cfg.blacklistPriceData = JSON.stringify(p);
-      saveConfig(state.cfg);
+      const result = removeBlacklistEntries(expired);
+      if (!result.ok) return;
       document.getElementById("stch-bl-result").textContent = `已清理 ${expired.length} 项`;
       renderBlacklist();
     });
 
     renderBlacklist();
     applySurplusItemMode();
-    updateSurplusActionState();
     renderSurplusResults();
-    updateGrindActionState();
     renderGrindResults();
     pruneOrderCache(true);
     renderOrderResults();

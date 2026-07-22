@@ -441,12 +441,6 @@ export function loadMarketHistory(options = {}) {
   return { ...decodeMarketHistory(raw, options), raw, storageKey };
 }
 
-export function saveMarketHistory(history, options = {}) {
-  const decoded = decodeMarketHistory(history, options);
-  if (!decoded.ok || !decoded.envelope) return decoded;
-  return saveNormalizedMarketHistory(pruneNormalizedMarketHistory(decoded.envelope, options), options);
-}
-
 /** Read, sample, prune, and persist observations in one GM storage transaction. */
 export function upsertManyStoredMarketHistory(records, options = {}) {
   if (!Array.isArray(records)) throw new TypeError("Market history records must be an array.");
@@ -457,10 +451,6 @@ export function upsertManyStoredMarketHistory(records, options = {}) {
   const updated = upsertManyMarketHistory(loaded.envelope, records, options);
   const saved = saveNormalizedMarketHistory(updated, options);
   return { ...saved, saved: saved.ok };
-}
-
-export function upsertStoredMarketHistory(record, options = {}) {
-  return upsertManyStoredMarketHistory([record], options);
 }
 
 function normalizeIdentity(identity) {
@@ -522,7 +512,10 @@ export function groupMarketHistoryRecordsByItem(history, scope, options = {}) {
     : now - Math.max(0, ttlMs);
   const to = Number.isFinite(now) ? now + futureToleranceMs : Infinity;
   const groups = new Map();
-  normalizeMarketHistory(history, options).records.forEach(record => {
+  const envelope = options.normalized === true
+    ? history
+    : normalizeMarketHistory(history, options);
+  (Array.isArray(envelope?.records) ? envelope.records : []).forEach(record => {
     if (
       record.appid !== appid
       || record.currencyId !== currencyId
@@ -601,15 +594,17 @@ export function getMarketHistoryStatistics(points, field) {
   };
 }
 
-function getPriceOverviewRecords(records) {
-  return (Array.isArray(records) ? records : [])
-    .filter(record => record?.source === "priceoverview")
-    .sort((left, right) => Number(left.observedAt) - Number(right.observedAt));
+function getPriceOverviewRecords(records, sorted = false) {
+  const overview = (Array.isArray(records) ? records : [])
+    .filter(record => record?.source === "priceoverview");
+  return sorted
+    ? overview
+    : overview.sort((left, right) => Number(left.observedAt) - Number(right.observedAt));
 }
 
 /** Build the current row metrics without mixing endpoint snapshots. */
-export function getMarketOverviewMetrics(records) {
-  const overview = getPriceOverviewRecords(records);
+export function getMarketOverviewMetrics(records, options = {}) {
+  const overview = getPriceOverviewRecords(records, options.sorted === true);
   const prices = overview.filter(record => (
     Number.isFinite(Number(record.lowestSellMinor))
     && Number(record.lowestSellMinor) > 0
@@ -652,7 +647,7 @@ export function getMarketSparklinePoints(records, options = {}) {
   const from = options.from === undefined ? -Infinity : Number(options.from);
   const maxValue = options.maxPoints === undefined ? 96 : Number(options.maxPoints);
   const maxPoints = Number.isFinite(maxValue) ? Math.max(1, Math.floor(maxValue)) : 96;
-  const points = getPriceOverviewRecords(records)
+  const points = getPriceOverviewRecords(records, options.sorted === true)
     .filter(record => (
       Number(record.observedAt) >= from
       && Number.isFinite(Number(record.lowestSellMinor))

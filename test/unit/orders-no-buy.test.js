@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import test, { afterEach } from "node:test";
+import { readFile } from "node:fs/promises";
+import test, { afterEach, beforeEach } from "node:test";
 
 globalThis.GM_getValue = () => null;
 globalThis.GM_setValue = () => {};
@@ -22,15 +23,28 @@ globalThis.unsafeWindow = {
 };
 
 const { state } = await import("../../src/state.js");
-const { setActiveCurrencyContext, getCurrencyContextById } = await import(
+const {
+  clearActiveCurrencyContext,
+  setActiveCurrencyContext,
+  getCurrencyContextById,
+} = await import(
   "../../src/services/currency.js"
 );
-const { buildBuyOrderPlan } = await import("../../src/features/orders.js");
+const {
+  buildBuyOrderPlan,
+  loadActiveBuyOrders,
+} = await import("../../src/features/orders.js");
+
+beforeEach(() => {
+  state.cfg.currencyId = 23;
+  setActiveCurrencyContext(getCurrencyContextById(23));
+});
 
 afterEach(() => {
   state.marketOrderDepths.clear();
   state.highestBuyPrices.clear();
   state.automaticPricingDraft = null;
+  state.cfg.currencyId = 23;
 });
 
 const MARKET_HASH_NAME = "123-Test Card";
@@ -176,7 +190,7 @@ test("manual ordering uses the market minimum when the scanned price is missing"
   assert.equal(result.plan[0].minimumFallbackReason, "missing-price");
 });
 
-test("automatic ordering uses the market minimum when the pricing request fails", async () => {
+test("automatic ordering fails closed when the pricing request fails", async () => {
   Object.assign(state.cfg, {
     automaticPricingEnabled: true,
     automaticPriceStrategy: "balanced",
@@ -188,7 +202,55 @@ test("automatic ordering uses the market minimum when the pricing request fails"
 
   const result = await buildBuyOrderPlan(selected, new Map(), ui);
 
-  assert.equal(result.plan.length, 1);
-  assert.equal(result.plan[0].unitPriceCents, 21);
-  assert.equal(result.plan[0].minimumFallbackReason, "pricing-request-failed");
+  assert.equal(result.plan.length, 0);
+  assert.equal(result.skipped.missingPrice, 1);
+  assert.equal(result.skipped.minimumPriceFallback, 0);
+});
+
+test("legacy order-spread markup is not used when SSR orderbook data is missing", async () => {
+  Object.assign(state.cfg, {
+    automaticPricingEnabled: false,
+    orderPriceSource: "highest",
+    priceAdjustment: 0,
+    minimumPriceFallback: true,
+  });
+  let requestCount = 0;
+  const ui = makeUi();
+  ui.queue.fetch = async () => {
+    requestCount += 1;
+    return {
+      status: 200,
+      text: "<script>Market_LoadOrderSpread(123456);</script>",
+      data: null,
+    };
+  };
+
+  const result = await buildBuyOrderPlan(selected, new Map(), ui);
+
+  assert.equal(requestCount, 1);
+  assert.equal(result.plan.length, 0);
+  assert.equal(result.skipped.missingPrice, 1);
+});
+
+test("ordering is blocked when neither the wallet nor settings identify a currency", async () => {
+  clearActiveCurrencyContext();
+  state.cfg.currencyId = null;
+
+  await assert.rejects(
+    () => buildBuyOrderPlan(selected, new Map(), makeUi()),
+    /无法确认 Steam 钱包币种/,
+  );
+});
+
+test("existing-order parse diagnostics block order planning", async () => {
+  const fixtureUrl = new URL(
+    "../fixtures-public/market/mylistings-buy-orders.json",
+    import.meta.url,
+  );
+  const data = JSON.parse(await readFile(fixtureUrl, "utf8"));
+
+  await assert.rejects(
+    () => loadActiveBuyOrders({ fetch: async () => ({ data }) }),
+    /无法完整解析现有 Steam 订购单（1 项）/,
+  );
 });

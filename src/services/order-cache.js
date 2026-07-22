@@ -3,7 +3,6 @@ import { state } from "../state.js";
 import { DEFAULT_CONFIG } from "../config.js";
 
 import {
-  ORDER_CACHE_BACKUP_KEY,
   ORDER_CACHE_KEY,
   ORDER_CACHE_SCHEMA_VERSION,
 } from "../constants.js";
@@ -254,10 +253,6 @@ export function saveOrderCache(currencyId = getActiveOrderCurrencyId()) {
   } catch (error) {
     decoded = { corrupt: true, raw: null, envelope: createOrderCacheEnvelope(now), error };
   }
-  if (decoded.corrupt && decoded.raw != null) {
-    // A later v2.1.x cache inspector can offer explicit recovery from this untouched backup.
-    GM_setValue(ORDER_CACHE_BACKUP_KEY, decoded.raw);
-  }
   const base = decoded.corrupt ? createOrderCacheEnvelope(now) : decoded.envelope;
   const envelope = replaceDecodedOrderCachePartition(
     base,
@@ -315,7 +310,7 @@ export function upsertOrderResult(info, options = {}) {
   if (index >= 0) state.orderResults[index] = item;
   else state.orderResults.push(item);
   if (options.select) state.selectedOrderResults.add(key);
-  saveOrderCache(currencyId);
+  if (options.persist !== false) saveOrderCache(currencyId);
   return item;
 }
 
@@ -337,8 +332,4 @@ export function readRawOrderCache(currencyId = getActiveOrderCurrencyId()) {
   } catch (_) {
     return [];
   }
-}
-
-export function getExpiredOrderCacheCount() {
-  return readRawOrderCache().filter(item => !isOrderCacheFresh(item)).length;
 }

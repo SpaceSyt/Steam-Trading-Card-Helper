@@ -43,9 +43,13 @@ export function enableCheckboxDragSelection(root, options = {}) {
 
   const finish = () => {
     if (!drag) return;
+    const pointerId = drag.pointerId;
     drag = null;
     suppressClickUntil = Date.now() + 80;
     root.classList.remove("stch-checkbox-dragging");
+    try {
+      if (root.hasPointerCapture?.(pointerId)) root.releasePointerCapture(pointerId);
+    } catch (_) {}
   };
 
   root.addEventListener("pointerdown", event => {
@@ -58,25 +62,26 @@ export function enableCheckboxDragSelection(root, options = {}) {
       visited: new Set(),
     };
     root.classList.add("stch-checkbox-dragging");
+    try { root.setPointerCapture?.(event.pointerId); } catch (_) {}
     apply(checkbox);
     suppressClickUntil = Date.now() + 80;
     event.preventDefault();
     event.stopPropagation();
   });
 
-  document.addEventListener("pointermove", event => {
+  root.addEventListener("pointermove", event => {
     if (!drag || event.pointerId !== drag.pointerId) return;
     const checkbox = findCheckbox(document.elementFromPoint(event.clientX, event.clientY));
     if (checkbox) apply(checkbox);
     event.preventDefault();
   }, { passive: false });
-  document.addEventListener("pointerup", event => {
+  root.addEventListener("pointerup", event => {
     if (drag && event.pointerId === drag.pointerId) finish();
   });
-  document.addEventListener("pointercancel", event => {
+  root.addEventListener("pointercancel", event => {
     if (drag && event.pointerId === drag.pointerId) finish();
   });
-  window.addEventListener("blur", finish);
+  root.addEventListener("lostpointercapture", finish);
 
   root.addEventListener("click", event => {
     if (Date.now() > suppressClickUntil) return;
@@ -115,9 +120,13 @@ export function enableTileDragSelection(root, options = {}) {
 
   const finish = () => {
     if (!drag) return;
+    const pointerId = drag.pointerId;
     drag = null;
     suppressClickUntil = Date.now() + 80;
     root.classList.remove("stch-checkbox-dragging");
+    try {
+      if (root.hasPointerCapture?.(pointerId)) root.releasePointerCapture(pointerId);
+    } catch (_) {}
   };
 
   root.addEventListener("pointerdown", event => {
@@ -130,25 +139,26 @@ export function enableTileDragSelection(root, options = {}) {
       visited: new Set(),
     };
     root.classList.add("stch-checkbox-dragging");
+    try { root.setPointerCapture?.(event.pointerId); } catch (_) {}
     apply(item);
     suppressClickUntil = Date.now() + 80;
     event.preventDefault();
     event.stopPropagation();
   });
 
-  document.addEventListener("pointermove", event => {
+  root.addEventListener("pointermove", event => {
     if (!drag || event.pointerId !== drag.pointerId) return;
     const item = findItem(document.elementFromPoint(event.clientX, event.clientY));
     if (item) apply(item);
     event.preventDefault();
   }, { passive: false });
-  document.addEventListener("pointerup", event => {
+  root.addEventListener("pointerup", event => {
     if (drag && event.pointerId === drag.pointerId) finish();
   });
-  document.addEventListener("pointercancel", event => {
+  root.addEventListener("pointercancel", event => {
     if (drag && event.pointerId === drag.pointerId) finish();
   });
-  window.addEventListener("blur", finish);
+  root.addEventListener("lostpointercapture", finish);
 
   root.addEventListener("click", event => {
     const item = findItem(event.target);

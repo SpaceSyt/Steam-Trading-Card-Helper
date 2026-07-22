@@ -2,8 +2,6 @@ import { state } from "../state.js";
 
 import { getSelectedResults, getSelectedOrderResults } from "../services/result-info.js";
 
-import { getExpiredOrderCacheCount } from "../services/order-cache.js";
-
   function getSurplusProcessingMode() {
     const value = document.getElementById("stch-surplus-item-mode")?.value
       || state.cfg.surplusItemMode
@@ -30,7 +28,10 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     }
 
     const disabled = selectedCount === 0 || isSharedActionBusy();
-    document.getElementById("stch-surplus-sell-btn")?.classList.toggle("disabled", disabled);
+    document.getElementById("stch-surplus-sell-btn")?.classList.toggle(
+      "disabled",
+      disabled || isPriceOverviewGroupBusy()
+    );
     document.getElementById("stch-surplus-gem-btn")?.classList.toggle("disabled", disabled);
     ["stch-surplus-sell-price-source", "stch-surplus-sell-adjustment"].forEach(id => {
       const el = document.getElementById(id);
@@ -83,18 +84,13 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
       "disabled",
       !detectionBusy
     );
-    ["stch-surplus-only-tradable", "stch-surplus-only-recommended", "stch-grind-include-surplus-cards", "stch-grind-reserve-copies", "stch-grind-include-points-shop", "stch-surplus-item-mode"].forEach(id => {
+    ["stch-surplus-only-tradable", "stch-surplus-only-recommended", "stch-grind-reserve-copies", "stch-grind-include-points-shop", "stch-surplus-item-mode"].forEach(id => {
       const element = document.getElementById(id);
       if (element) element.disabled = probeBlocked;
     });
   }
 
   export function updateSurplusActionState() {
-    updateSurplusDetectionControls();
-    updateSurplusProcessingActionState();
-  }
-
-  export function updateGrindActionState() {
     updateSurplusDetectionControls();
     updateSurplusProcessingActionState();
   }
@@ -127,7 +123,8 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
       || state.surplusScanning
       || state.grindScanning
       || state.activeOrderPriceQueryRunning
-      || state.recalculationRunning;
+      || state.recalculationRunning
+      || state.sidebarPriceRefreshing;
   }
 
   export function isPriceOverviewProbeBlocked(ownBusy = false) {
@@ -169,10 +166,6 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     const submitDisabled = selectedCount === 0 || state.orderSubmissionRunning;
     document.getElementById("stch-order-recalculate-btn")?.classList.toggle("disabled", recalculateDisabled);
     document.getElementById("stch-order-submit-orders-btn")?.classList.toggle("disabled", submitDisabled);
-    document.getElementById("stch-order-delete-btn")?.classList.toggle(
-      "disabled",
-      getExpiredOrderCacheCount() === 0 || isSharedActionBusy()
-    );
     document.getElementById("stch-order-add-btn")?.classList.toggle(
       "disabled",
       isPriceOverviewProbeBlocked(state.orderActionRunning)
@@ -211,10 +204,16 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     updateBulkActionState();
     updateCraftActionState();
     updateSurplusActionState();
-    updateGrindActionState();
     updateActiveOrdersActionState();
     const historyRefresh = document.getElementById("stch-history-refresh");
     const historyRefreshDisabled = isPriceOverviewProbeBlocked(state.historyRefreshing);
     historyRefresh?.classList.toggle("disabled", historyRefreshDisabled);
+    const sidebarRefresh = document.getElementById("stch-sidebar-refresh");
+    if (sidebarRefresh) sidebarRefresh.disabled = isPriceOverviewGroupBusy();
+    const settingsReset = document.getElementById("stch-settings-reset");
+    settingsReset?.classList.toggle(
+      "disabled",
+      isSharedActionBusy() || state.sidebarPriceRefreshing
+    );
     if (historyRefresh) historyRefresh.disabled = historyRefreshDisabled;
   }

@@ -68,8 +68,10 @@ test("rejects unsuccessful mylistings responses", () => {
 });
 
 test("requires an unambiguous successful cancellation response", () => {
-  assert.equal(isCancelBuyOrderResponseSuccessful(true, {}), true);
+  assert.equal(isCancelBuyOrderResponseSuccessful(true, {}), false);
   assert.equal(isCancelBuyOrderResponseSuccessful(true, { success: 1 }), true);
+  assert.equal(isCancelBuyOrderResponseSuccessful(true, { success: true }), false);
+  assert.equal(isCancelBuyOrderResponseSuccessful(true, { success: "1" }), false);
   assert.equal(isCancelBuyOrderResponseSuccessful(true, { success: 0 }), false);
   assert.equal(isCancelBuyOrderResponseSuccessful(false, { success: 1 }), false);
   assert.equal(isCancelBuyOrderResponseSuccessful(true, null), false);

@@ -6,7 +6,6 @@ import {
   MARKET_DATA_SCHEMA_VERSION,
   MARKET_DATA_SOURCES,
   fromLegacyPriceResult,
-  normalizeItemOrdersHistogram,
   normalizeListingOrderbook,
   normalizePriceHistory,
   normalizePriceOverview,
@@ -86,23 +85,11 @@ test("missing endpoint prices stay null instead of becoming zero", () => {
   assert.equal(record.highestBuyMinor, null);
   assert.equal(record.volume, null);
 
-  const zeroSentinels = normalizeItemOrdersHistogram({
-    success: 1,
-    lowest_sell_order: "0",
-    highest_buy_order: 0,
-  }, {
-    ...baseContext,
-    currencyId: 23,
-    currencyCode: "CNY",
-  });
-  assert.equal(zeroSentinels.lowestSellMinor, null);
-  assert.equal(zeroSentinels.highestBuyMinor, null);
 });
 
 test("explicit endpoint failures are not cacheable observations", () => {
   const context = { ...baseContext, currencyId: 23, currencyCode: "CNY" };
   assert.equal(normalizePriceOverview({ success: false }, context), null);
-  assert.equal(normalizeItemOrdersHistogram({ success: 0 }, context), null);
   assert.deepEqual(normalizePriceHistory({ success: false, prices: [] }, context), []);
 });
 
@@ -139,21 +126,6 @@ test("listing payload currency wins and a mismatched context code is discarded",
 
   assert.equal(record.currencyId, 23);
   assert.equal(record.currencyCode, null);
-});
-
-test("itemordershistogram does not infer prices from graph or table text", async () => {
-  const payload = await readFixture("itemordershistogram.json");
-  const record = normalizeItemOrdersHistogram({ data: payload }, {
-    ...baseContext,
-    currencyId: 23,
-    currencyCode: "CNY",
-  });
-
-  assert.equal(record.lowestSellMinor, 32);
-  assert.equal(record.highestBuyMinor, 29);
-  assert.equal(record.medianMinor, null);
-  assert.equal(record.volume, null);
-  assert.equal(record.source, MARKET_DATA_SOURCES.ITEM_ORDERS_HISTOGRAM);
 });
 
 test("price history creates one timestamped canonical record per valid tuple", async () => {

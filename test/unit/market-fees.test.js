@@ -65,14 +65,14 @@ test("walletInfo can be passed directly without first creating a context", async
   );
 });
 
-test("legacy one-argument calls remain valid and use the active context when initialized", async () => {
+test("context-free minimum lookup fails closed until currency initialization", async () => {
   assert.deepEqual(getMarketFeesForSellerReceive(100), {
     steamFee: 5,
     publisherFee: 10,
     totalFees: 15,
     buyerCents: 115,
   });
-  assert.equal(getMarketMinimumPriceCents(), 21);
+  assert.equal(getMarketMinimumPriceCents(), null);
 
   const cny = detectCurrencyContext({ walletInfo: await readWalletFixture("cny-wallet.json") });
   setActiveCurrencyContext(cny);

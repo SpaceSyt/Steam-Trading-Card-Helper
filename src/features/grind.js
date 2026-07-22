@@ -10,10 +10,15 @@ import { getSteamId } from "../utils/steam.js";
 
 import { loadSidebarGemPrice } from "../sidebar/gems.js";
 
-import { priceCard } from "../parsers/price.js";
+import {
+  isPriceCardError,
+  isPriceCardNoPrice,
+  isPriceCardPriced,
+  priceCard,
+} from "../parsers/price.js";
 import { persistMarketObservations } from "../services/market-observations.js";
 
-import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, isTradingCardDescription, isFoilCardDescription, getCardGameName, getCommunityItemType, getCommunityItemCategory, getDescriptionImageUrl, getDescriptionColor, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, normalizeInventoryText, addInventoryCard, getDescriptionKey, isPointsShopCommunityItemDescription } from "../parsers/inventory.js";
+import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, getCardGameName, getCommunityItemType, getCommunityItemCategory, getDescriptionImageUrl, getDescriptionColor, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, getDescriptionKey, isPointsShopCommunityItemDescription } from "../parsers/inventory.js";
 
 import { getGemBreakEvenBuyerPrice, getGemSackSellerNetCents } from "../utils/market-fees.js";
 
@@ -23,17 +28,14 @@ import { summarizeAssetIds } from "../parsers/inventory.js";
 
 import {
   isPriceOverviewProbeBlocked,
-  isSharedActionBusy,
   updateAllActionStates,
-  updateGrindActionState,
+  updateSurplusActionState,
 } from "../ui/action-state.js";
 
 import { grindStatus } from "../status-controllers.js";
 import { enableTileDragSelection } from "../ui/checkbox-drag.js";
 
 const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress, hideProgress: hideGrindProgress } = grindStatus;
-
-export { updateGrindActionState };
 
   let cachedBlacklistSource = null;
   let cachedBlacklistAppids = new Set();
@@ -47,10 +49,6 @@ export { updateGrindActionState };
       );
     }
     return cachedBlacklistAppids;
-  }
-
-  export function getBlacklistAppids() {
-    return new Set(readBlacklistAppids());
   }
 
   export function isBlacklistedAppid(appid) {
@@ -79,18 +77,6 @@ export { updateGrindActionState };
       grindGemValueCache.set(key, 0);
       return 0;
     }
-  }
-
-  export function getSurplusAssetAllowance() {
-    const allowance = new Map();
-    for (const result of state.surplusResults || []) {
-      for (const asset of result.assets || []) {
-        const assetid = String(asset.assetid || "");
-        if (!assetid) continue;
-        allowance.set(assetid, (allowance.get(assetid) || 0) + (asset.selectedAmount || 0));
-      }
-    }
-    return allowance;
   }
 
   export function addGrindItem(groupMap, asset, description, amount, source, gemValue, pointsShop = false) {
@@ -208,8 +194,6 @@ export { updateGrindActionState };
   export async function loadGrindInventoryItems(steamId, queue) {
     const groupMap = new Map();
     const language = unsafeWindow.g_strLanguage || "schinese";
-    const surplusAllowance = getSurplusAssetAllowance();
-    const includeCards = !!state.cfg.grindIncludeSurplusCards;
     const reserveCopies = Math.max(0, Math.floor(Number(state.cfg.grindReserveCopies) || 0));
     const includePointsShopItems = !!state.cfg.grindIncludePointsShopItems;
     const itemMode = ["background", "emoticon"].includes(state.cfg.surplusItemMode)
@@ -220,7 +204,6 @@ export { updateGrindActionState };
     let totalInventoryCount = 0;
     let totalAssetsSeen = 0;
     const skipped = {
-      cardsWithoutSurplus: 0,
       noGemValue: 0,
       blacklisted: 0,
       gems: 0,
@@ -272,29 +255,19 @@ export { updateGrindActionState };
           skipped.pointsShop += assetAmount;
           continue;
         }
-        let amount = assetAmount;
-        if (isTradingCardDescription(description)) {
-          const allowed = surplusAllowance.get(String(asset.assetid || "")) || 0;
-          amount = includeCards ? Math.min(assetAmount, allowed) : 0;
-          if (amount <= 0) {
-            skipped.cardsWithoutSurplus += assetAmount;
-            continue;
-          }
-        }
-
         const gemValue = await getGrindGemValue(description, queue);
         const result = addGrindItem(
           groupMap,
           asset,
           description,
-          amount,
-          isTradingCardDescription(description) ? "card" : "item",
+          assetAmount,
+          "item",
           gemValue,
           pointsShop
         );
-        if (result === "noGemValue") skipped.noGemValue += amount;
-        else if (result === "blacklisted") skipped.blacklisted += amount;
-        else if (result === "gem") skipped.gems += amount;
+        if (result === "noGemValue") skipped.noGemValue += assetAmount;
+        else if (result === "blacklisted") skipped.blacklisted += assetAmount;
+        else if (result === "gem") skipped.gems += assetAmount;
       }
 
       grindLog(
@@ -340,7 +313,7 @@ export { updateGrindActionState };
 
   export function getGrindResultKey(item) {
     const assetKey = (item.assets || [])
-      .map(asset => `${asset.assetid || ""}x${asset.amount || 1}`)
+      .map(asset => `${asset.assetid || ""}x${asset.amount ?? ""}`)
       .join(",");
     return [
       "item",
@@ -422,7 +395,7 @@ export { updateGrindActionState };
       },
       onSelectionChange: () => {
         updateGrindSummary();
-        updateGrindActionState();
+        updateSurplusActionState();
       },
     });
     list.innerHTML = "";
@@ -440,7 +413,7 @@ export { updateGrindActionState };
           : "尚未扫描可分解物品";
       list.appendChild(empty);
       updateGrindSummary();
-      updateGrindActionState();
+      updateSurplusActionState();
       return;
     }
 
@@ -520,7 +493,7 @@ export { updateGrindActionState };
     }
 
     updateGrindSummary();
-    updateGrindActionState();
+    updateSurplusActionState();
   }
 
   export async function startGrindScan() {
@@ -542,6 +515,7 @@ export { updateGrindActionState };
     state.grindResults = [];
     state.selectedGrindResults = new Set();
     state.grindGemPrice = null;
+    grindGemValueCache.clear();
     const logBox = document.getElementById("stch-grind-log");
     if (logBox) logBox.innerHTML = "";
     renderGrindResults();
@@ -564,16 +538,17 @@ export { updateGrindActionState };
       grindLog("【阶段 1/3】读取宝石袋市场价格");
       setGrindProgress(0, 1, "阶段1: 读取宝石价格");
       const gemPrice = await loadSidebarGemPrice(queue);
-      if (!gemPrice.priceCents) {
-        throw new Error("宝石袋暂无可用市场价格，无法计算分解临界点");
-      }
       state.grindGemPrice = gemPrice;
-      const sackNet = getGemSackSellerNetCents(gemPrice.priceCents);
-      const breakEven10 = getGemBreakEvenBuyerPrice(10, gemPrice.priceCents);
-      grindLog(
-        `宝石袋 ${gemPrice.source} ${formatMoney(gemPrice.priceCents)}，税后到手约 ${formatMoney(sackNet)}；10宝石临界价 ${formatMoney(breakEven10)}`,
-        "ok"
-      );
+      if (gemPrice.priceCents) {
+        const sackNet = getGemSackSellerNetCents(gemPrice.priceCents);
+        const breakEven10 = getGemBreakEvenBuyerPrice(10, gemPrice.priceCents);
+        grindLog(
+          `宝石袋 ${gemPrice.source} ${formatMoney(gemPrice.priceCents)}，税后到手约 ${formatMoney(sackNet)}；10宝石临界价 ${formatMoney(breakEven10)}`,
+          "ok"
+        );
+      } else {
+        grindLog("宝石袋价格不可用；继续检测，但不会给出分解或出售建议", "warn");
+      }
 
       const itemModeLabel = state.cfg.surplusItemMode === "emoticon" ? "表情" : "背景";
       grindLog(`本次只分析${itemModeLabel}类社区物品`, "info");
@@ -620,24 +595,29 @@ export { updateGrindActionState };
         if (item.marketHashName && item.marketableCount > 0) {
           const price = await priceCard(item.marketHashName, queue, { persistMarketCache: false });
           if (price?.record) marketRecords.push(price.record);
-          if (price && !price.noPriceData) {
+          if (isPriceCardPriced(price)) {
             item.priceCents = price.lowestSellCents;
             item.medianCents = price.medianCents;
             item.volume = price.volume;
             item.priceSource = price.priceSource === "lowest" ? "在售最低" : "平均价格";
             priced++;
-          } else if (price?.noPriceData) {
+          } else if (isPriceCardNoPrice(price)) {
             item.volume = 0;
             item.priceSource = "无可用价格";
-          } else {
+            item.priceLookupFailed = false;
+          } else if (isPriceCardError(price)) {
             failed++;
             item.priceSource = "查价失败";
+            item.priceLookupFailed = true;
           }
+        } else {
+          item.priceSource = "缺少市场信息";
+          item.priceLookupFailed = true;
         }
 
         applyGrindRecommendation(item, gemPrice.priceCents);
         state.grindResults.push(item);
-        renderGrindResults();
+        if (index === 0 || (index + 1) % 5 === 0) renderGrindResults();
       }
 
       state.grindResults.sort((left, right) => {
@@ -685,5 +665,5 @@ export { updateGrindActionState };
     state.grindStopRequested = true;
     state.grindQueue?.stop();
     grindLog("已请求停止扫描", "warn");
-    updateGrindActionState();
+    updateSurplusActionState();
   }

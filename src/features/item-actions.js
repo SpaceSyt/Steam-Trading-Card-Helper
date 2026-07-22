@@ -2,7 +2,7 @@ import { state } from "../state.js";
 
 import { RequestQueue } from "../request/queue.js";
 
-import { priceCard } from "../parsers/price.js";
+import { isPriceCardPriced, priceCard } from "../parsers/price.js";
 import { persistMarketObservations } from "../services/market-observations.js";
 
 import { getBuyerPriceForSellerReceive, getSellerReceiveForBuyerPrice } from "../utils/market-fees.js";
@@ -13,7 +13,11 @@ import { getMarketMinimumPriceCents, getProfileUrl, getSessionId, getSteamId } f
 
 import { createTextSpan } from "../utils/dom.js";
 
-import { updateAllActionStates, isSharedActionBusy } from "../ui/action-state.js";
+import {
+  isPriceOverviewProbeBlocked,
+  isSharedActionBusy,
+  updateAllActionStates,
+} from "../ui/action-state.js";
 
 import { surplusStatus, grindStatus } from "../status-controllers.js";
 
@@ -82,7 +86,8 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
   }
 
   function getAssetQuantity(asset, field = "amount") {
-    return Math.max(1, parseInt(asset?.[field], 10) || 1);
+    const quantity = Number(asset?.[field]);
+    return Number.isSafeInteger(quantity) && quantity > 0 ? quantity : null;
   }
 
   function getSelectedGroups(mode) {
@@ -101,15 +106,23 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
 
   function makeSellGroups(mode) {
     const selected = getSelectedGroups(mode);
+    let invalidQuantity = 0;
     if (mode === "card") {
-      return selected.map(result => {
+      const groups = selected.map(result => {
         const assets = (result.assets || [])
           .filter(asset => asset.assetid && asset.marketable)
-          .map(asset => ({
-            assetid: String(asset.assetid || ""),
-            contextid: String(asset.contextid || "6"),
-            amount: getAssetQuantity(asset, "selectedAmount"),
-          }));
+          .flatMap(asset => {
+            const amount = getAssetQuantity(asset, "selectedAmount");
+            if (amount == null) {
+              invalidQuantity++;
+              return [];
+            }
+            return [{
+              assetid: String(asset.assetid || ""),
+              contextid: String(asset.contextid || "6"),
+              amount,
+            }];
+          });
         return {
           gameName: result.gameName || "",
           itemName: result.cardName || result.marketHashName || "未知卡牌",
@@ -118,16 +131,24 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
           assets,
         };
       });
+      return { groups, invalidQuantity };
     }
 
-    return selected.map(item => {
+    const groups = selected.map(item => {
       const assets = (item.assets || [])
         .filter(asset => asset.assetid && asset.marketable)
-        .map(asset => ({
-          assetid: String(asset.assetid || ""),
-          contextid: String(asset.contextid || "6"),
-          amount: getAssetQuantity(asset, "amount"),
-        }));
+        .flatMap(asset => {
+          const amount = getAssetQuantity(asset, "amount");
+          if (amount == null) {
+            invalidQuantity++;
+            return [];
+          }
+          return [{
+            assetid: String(asset.assetid || ""),
+            contextid: String(asset.contextid || "6"),
+            amount,
+          }];
+        });
       return {
         gameName: item.gameName || "",
         itemName: item.itemName || item.marketHashName || "未知物品",
@@ -136,37 +157,57 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
         assets,
       };
     });
+    return { groups, invalidQuantity };
   }
 
   function makeGemAssets(mode) {
     const selected = getSelectedGroups(mode);
+    let invalidQuantity = 0;
     if (mode === "card") {
-      return selected.flatMap(result =>
-        (result.assets || []).map(asset => ({
-          appid: String(result.appid || ""),
-          gameName: result.gameName || "",
-          itemName: result.cardName || result.marketHashName || "未知卡牌",
-          assetid: String(asset.assetid || ""),
-          contextid: String(asset.contextid || "6"),
-          selectedAmount: getAssetQuantity(asset, "selectedAmount"),
-          assetAmount: getAssetQuantity(asset, "amount"),
-          estimatedGems: (asset.gemValue || result.gemValue || 0) * getAssetQuantity(asset, "selectedAmount"),
-        }))
+      const candidates = selected.flatMap(result =>
+        (result.assets || []).flatMap(asset => {
+          const selectedAmount = getAssetQuantity(asset, "selectedAmount");
+          const assetAmount = getAssetQuantity(asset, "amount");
+          if (selectedAmount == null || assetAmount == null) {
+            invalidQuantity++;
+            return [];
+          }
+          return [{
+            appid: String(result.appid || ""),
+            gameName: result.gameName || "",
+            itemName: result.cardName || result.marketHashName || "未知卡牌",
+            assetid: String(asset.assetid || ""),
+            contextid: String(asset.contextid || "6"),
+            selectedAmount,
+            assetAmount,
+            estimatedGems: (asset.gemValue || result.gemValue || 0) * selectedAmount,
+          }];
+        })
       );
+      return { candidates, invalidQuantity };
     }
 
-    return selected.flatMap(item =>
-      (item.assets || []).map(asset => ({
-        appid: String(item.appid || ""),
-        gameName: item.gameName || "",
-        itemName: item.itemName || item.marketHashName || "未知物品",
-        assetid: String(asset.assetid || ""),
-        contextid: String(asset.contextid || "6"),
-        selectedAmount: getAssetQuantity(asset, "amount"),
-        assetAmount: getAssetQuantity(asset, "originalAmount"),
-        estimatedGems: (item.gemValue || 0) * getAssetQuantity(asset, "amount"),
-      }))
+    const candidates = selected.flatMap(item =>
+      (item.assets || []).flatMap(asset => {
+        const selectedAmount = getAssetQuantity(asset, "amount");
+        const assetAmount = getAssetQuantity(asset, "originalAmount");
+        if (selectedAmount == null || assetAmount == null) {
+          invalidQuantity++;
+          return [];
+        }
+        return [{
+          appid: String(item.appid || ""),
+          gameName: item.gameName || "",
+          itemName: item.itemName || item.marketHashName || "未知物品",
+          assetid: String(asset.assetid || ""),
+          contextid: String(asset.contextid || "6"),
+          selectedAmount,
+          assetAmount,
+          estimatedGems: (item.gemValue || 0) * selectedAmount,
+        }];
+      })
     );
+    return { candidates, invalidQuantity };
   }
 
   async function getSellBasePrice(group, priceSource, queue, ui, index, total, cache, marketRecords) {
@@ -183,7 +224,9 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
       ui.setStatus(`读取出售参考价 ${index + 1}/${total}: ${group.itemName}`);
       const price = await priceCard(group.marketHashName, queue, { persistMarketCache: false });
       if (price?.record) marketRecords.push(price.record);
-      if (priceSource === "lowest") {
+      if (!isPriceCardPriced(price)) {
+        basePriceCents = null;
+      } else if (priceSource === "lowest") {
         basePriceCents = price?.priceSource === "lowest" ? price.lowestSellCents : null;
       } else {
         basePriceCents = Number.isFinite(price?.medianCents) && price.medianCents > 0
@@ -202,6 +245,9 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
   async function buildSellPlan(mode, ui, queue) {
     const { priceSource, adjustmentCents } = getSellPriceControls();
     const minimumBuyerCents = getMarketMinimumPriceCents();
+    if (!Number.isSafeInteger(minimumBuyerCents) || minimumBuyerCents <= 0) {
+      throw new Error("无法确认 Steam 钱包币种，已停止生成出售计划");
+    }
     const priceCache = new Map();
     const marketRecords = [];
     const plan = [];
@@ -212,7 +258,9 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
       clamped: 0,
       failedPrice: 0,
     };
-    const candidates = makeSellGroups(mode).filter(group => {
+    const sellGroups = makeSellGroups(mode);
+    skipped.invalidQuantity = sellGroups.invalidQuantity;
+    const candidates = sellGroups.groups.filter(group => {
       if (!group.marketHashName) {
         skipped.missingHash++;
         return false;
@@ -301,13 +349,15 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
   }
 
   async function buildGemPlan(mode, ui, queue) {
-    const candidates = makeGemAssets(mode);
+    const gemAssets = makeGemAssets(mode);
+    const candidates = gemAssets.candidates;
     const plan = [];
     const skipped = {
       missingAsset: 0,
       missingAppid: 0,
       partialStack: 0,
       noGooValue: 0,
+      invalidQuantity: gemAssets.invalidQuantity,
     };
 
     for (let index = 0; index < candidates.length; index++) {
@@ -360,7 +410,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
       appid: "753",
       contextid: asset.contextid || "6",
       assetid: asset.assetid,
-      amount: String(asset.amount || 1),
+      amount: String(asset.amount),
       price: String(sellerReceiveCents),
     });
     const response = await window.fetch("https://steamcommunity.com/market/sellitem/", {
@@ -456,6 +506,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     if (skipped.unmarketable) notes.push(`${skipped.unmarketable} 项不可出售`);
     if (skipped.missingPrice) notes.push(`${skipped.missingPrice} 项缺少所选价格`);
     if (skipped.failedPrice) notes.push(`${skipped.failedPrice} 项查价失败`);
+    if (skipped.invalidQuantity) notes.push(`${skipped.invalidQuantity} 个资产数量无效，已跳过`);
     if (skipped.clamped) {
       notes.push(`${skipped.clamped} 项低于 Steam 最低售价，已调整到 ${formatMoney(minimumBuyerCents)}`);
     }
@@ -489,6 +540,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     if (skipped.missingAppid) notes.push(`${skipped.missingAppid} 项缺少来源游戏 AppID`);
     if (skipped.partialStack) notes.push(`${skipped.partialStack} 项是部分堆叠资产，Steam 原生接口不支持只销毁一部分，已跳过`);
     if (skipped.noGooValue) notes.push(`${skipped.noGooValue} 项未读取到可分解宝石值`);
+    if (skipped.invalidQuantity) notes.push(`${skipped.invalidQuantity} 个资产数量无效，已跳过`);
 
     return showProcessingConfirmation({
       title: "确认转化宝石",
@@ -511,7 +563,7 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
   export async function submitSelectedProcessingSell() {
     const mode = getProcessingMode();
     const ui = getProcessingUi(mode);
-    if (isSharedActionBusy()) return;
+    if (isPriceOverviewProbeBlocked(state.surplusActionRunning)) return;
     if (getSelectedGroups(mode).length === 0) {
       ui.log(ui.emptySell, "warn");
       return;

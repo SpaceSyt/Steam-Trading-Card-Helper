@@ -34,3 +34,13 @@ test("item recommendation remains unknown when the gem sack price is missing", (
   assert.equal(item.recommendationKey, "unknown");
   assert.equal(item.recommendationLabel, "缺宝石价");
 });
+
+test("a failed market request never becomes a destructive grind recommendation", () => {
+  const item = applyItemRecommendation(createItem({
+    priceCents: 0,
+    priceLookupFailed: true,
+  }), 400);
+
+  assert.equal(item.recommendationKey, "unknown");
+  assert.equal(item.recommendationLabel, "缺市场价");
+});

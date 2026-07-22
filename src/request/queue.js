@@ -14,11 +14,6 @@ const PRICEOVERVIEW_POLICY = Object.freeze({
   retry429: true,
 });
 
-export const REQUEST_POLICIES = Object.freeze({
-  default: DEFAULT_POLICY,
-  priceoverview: PRICEOVERVIEW_POLICY,
-});
-
 function stoppedError() {
   return { status: 0, error: "stopped" };
 }
@@ -589,7 +584,4 @@ export class RequestQueue {
     this.queue = [];
   }
 
-  clear() {
-    this.queue = [];
-  }
 }

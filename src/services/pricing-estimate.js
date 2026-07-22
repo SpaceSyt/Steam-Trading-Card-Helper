@@ -24,7 +24,14 @@ export function calculateResultPricingTotals(info, options = {}) {
   const adjustmentMinor = Number.isFinite(Number(options.adjustmentMinor))
     ? Math.round(Number(options.adjustmentMinor))
     : 0;
-  const minimumPriceMinor = positiveMinor(options.minimumPriceMinor) ?? 1;
+  const minimumPriceMinor = positiveMinor(options.minimumPriceMinor);
+  if (minimumPriceMinor === null) {
+    return {
+      completionCents: null,
+      fullCents: null,
+      levelCents: null,
+    };
+  }
   const source = String(options.priceSource || "lowest");
   const automatic = options.automatic === true;
   const setsToTarget = Math.max(

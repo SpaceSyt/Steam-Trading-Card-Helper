@@ -1,15 +1,5 @@
 import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
 
-  export function parseMarketHashNameFromHref(href) {
-    const match = String(href || "").match(/\/market\/listings\/753\/(.+?)(?:\?|#|$)/);
-    if (!match) return "";
-    try {
-      return decodeURIComponent(match[1]);
-    } catch (_) {
-      return match[1];
-    }
-  }
-
   function parseCount(value) {
     if (value === null || value === undefined || value === "") return null;
     const count = Number(String(value).replace(/[\s,.'’]/g, ""));

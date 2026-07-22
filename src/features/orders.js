@@ -18,17 +18,14 @@ import {
 import { getActiveOrderPricingProfile } from "../config.js";
 import { calculateAutomaticBuyPrice } from "../services/order-wall.js";
 
-import { upsertOrderResult, getCachedOrderResult, readRawOrderCache, isOrderCacheFresh, saveOrderCache } from "../services/order-cache.js";
+import { upsertOrderResult, getCachedOrderResult } from "../services/order-cache.js";
 
-import { getSelectedResults, getSelectedOrderResults, refreshResultInfo, getResultKey } from "../services/result-info.js";
+import { getSelectedResults, getSelectedOrderResults, refreshResultInfo } from "../services/result-info.js";
 
 import {
   isPriceOverviewProbeBlocked,
-  isSharedActionBusy,
   updateAllActionStates,
 } from "../ui/action-state.js";
-
-import { renderOrderResults } from "../ui/render.js";
 
 import { scanStatus, orderStatus, orderLog } from "../status-controllers.js";
 
@@ -40,7 +37,6 @@ import {
   getCurrencyContextById,
 } from "../services/currency.js";
 import {
-  normalizeItemOrdersHistogram,
   normalizeListingOrderbook,
 } from "../services/market-data.js";
 import { persistMarketObservations } from "../services/market-observations.js";
@@ -63,8 +59,17 @@ export function isNoBuyOrdersError(error) {
 const { setStatus: setOrderStatus } = orderStatus;
 
   export function getOrderCurrencyContext() {
-    return getActiveCurrencyContext()
-      || getCurrencyContextById(state.cfg.currencyId || 23);
+    const activeContext = getActiveCurrencyContext();
+    if (Number.isInteger(activeContext?.currencyId) && activeContext.currencyId > 0) {
+      return activeContext;
+    }
+
+    const configuredCurrencyId = Number(state.cfg.currencyId);
+    if (Number.isInteger(configuredCurrencyId) && configuredCurrencyId > 0) {
+      return getCurrencyContextById(configuredCurrencyId);
+    }
+
+    throw new Error("无法确认 Steam 钱包币种");
   }
 
   export function getCurrencyMarketKey(marketHashName, currencyId = getOrderCurrencyContext().currencyId) {
@@ -122,27 +127,6 @@ const { setStatus: setOrderStatus } = orderStatus;
     }
   }
 
-  export function deleteExpiredOrderResults() {
-    if (isSharedActionBusy()) return;
-    const raw = readRawOrderCache();
-    const fresh = raw.filter(isOrderCacheFresh);
-    const expiredCount = raw.length - fresh.length;
-    if (expiredCount <= 0) {
-      setOrderStatus("没有过期缓存", false);
-      return;
-    }
-    if (!confirm(`将删除 ${expiredCount} 项过期订购缓存，确定？`)) return;
-    state.orderResults = fresh;
-    state.selectedOrderResults.forEach(key => {
-      if (!state.orderResults.some(info => getResultKey(info) === key)) {
-        state.selectedOrderResults.delete(key);
-      }
-    });
-    saveOrderCache();
-    renderOrderResults();
-    setOrderStatus(`已删除 ${expiredCount} 项过期缓存`, false);
-  }
-
   export async function fetchActiveBuyOrderSnapshot(queue = null) {
     const ownedQueue = queue ? null : new RequestQueue(
       state.cfg.requestInterval,
@@ -171,10 +155,9 @@ const { setStatus: setOrderStatus } = orderStatus;
 
   export async function loadActiveBuyOrders(queue = null) {
     const snapshot = await fetchActiveBuyOrderSnapshot(queue);
-    // 测试阶段暂不因局部探测诊断阻止下单；可确认的订单仍用于数量覆盖检查。
-    // if (snapshot.diagnostics.length > 0) {
-    //   throw new Error(`无法完整解析现有 Steam 订购单（${snapshot.diagnostics.length} 项）`);
-    // }
+    if (snapshot.diagnostics.length > 0) {
+      throw new Error(`无法完整解析现有 Steam 订购单（${snapshot.diagnostics.length} 项）`);
+    }
     const orders = new Map();
     snapshot.orders.filter(order => order.appid === "753").forEach(order => {
       const current = orders.get(order.marketHashName) || { quantity: 0, orderIds: [] };
@@ -312,69 +295,7 @@ const { setStatus: setOrderStatus } = orderStatus;
         return newOrderbook.highestBuyCents;
       }
 
-      const itemNameIdMatch =
-        listingHtml.match(/Market_LoadOrderSpread\(\s*(\d+)\s*\)/)
-        || listingHtml.match(/ItemActivityTicker\.Start\(\s*(\d+)\s*\)/);
-      if (!itemNameIdMatch) {
-        throw new Error("商品页缺少可用的订单簿数据");
-      }
-
-      const params = new URLSearchParams({
-        country: unsafeWindow.g_rgWalletInfo?.wallet_country
-          || unsafeWindow.g_strCountryCode
-          || "CN",
-        language: unsafeWindow.g_strLanguage || "schinese",
-        currency: String(currencyContext.currencyId),
-        item_nameid: itemNameIdMatch[1],
-      });
-      const histogramResponse = await requestQueue.fetch(
-        `https://steamcommunity.com/market/itemordershistogram?${params}`,
-        { requestPolicy: "default" }
-      );
-      const histogram = histogramResponse?.data;
-      const histogramRecord = normalizeItemOrdersHistogram(histogram, {
-        appid: "753",
-        marketHashName,
-        currencyId: currencyContext.currencyId,
-        currencyCode: currencyContext.code,
-        observedAt: Date.now(),
-      });
-      const highestBuyCents = histogramRecord?.highestBuyMinor;
-      if (histogram?.success !== true && histogram?.success !== 1) {
-        throw new Error("Steam 订单簿请求失败");
-      }
-      if (!Number.isFinite(highestBuyCents) || highestBuyCents <= 0) {
-        throw createNoBuyOrdersError();
-      }
-
-      const histogramSellOrderCount = Number(
-        String(histogram?.sell_order_count ?? "").replace(/[\s,.'’]/g, "")
-      );
-      if (typeof options.onMetadata === "function") {
-        options.onMetadata({
-          displayName: listingSnapshot?.displayName || "",
-          imageUrl: listingSnapshot?.imageUrl || "",
-          sellOrderCount: Number.isSafeInteger(histogramSellOrderCount)
-            && histogramSellOrderCount >= 0
-            ? histogramSellOrderCount
-            : listingSnapshot?.sellOrderCount ?? null,
-          observedAt: histogramRecord.observedAt,
-        });
-      }
-
-      observeRecord(histogramRecord);
-      state.highestBuyPrices.set(cacheKey, {
-        currencyId: currencyContext.currencyId,
-        priceCents: highestBuyCents,
-        fetchedAt: histogramRecord.observedAt,
-        displayName: listingSnapshot?.displayName || "",
-        imageUrl: listingSnapshot?.imageUrl || "",
-        sellOrderCount: Number.isSafeInteger(histogramSellOrderCount)
-          && histogramSellOrderCount >= 0
-          ? histogramSellOrderCount
-          : listingSnapshot?.sellOrderCount ?? null,
-      });
-      return highestBuyCents;
+      throw new Error("商品页缺少可用的 SSR 订单簿数据");
     } finally {
       ownedQueue?.stop();
     }
@@ -470,7 +391,11 @@ const { setStatus: setOrderStatus } = orderStatus;
     const adjustmentCents = Math.round(
       (Number.isFinite(adjustmentValue) ? adjustmentValue : 0) * 100
     );
-    const minimumCents = getMarketMinimumPriceCents();
+    const currencyContext = getOrderCurrencyContext();
+    const minimumCents = getMarketMinimumPriceCents(currencyContext);
+    if (!Number.isSafeInteger(minimumCents) || minimumCents <= 0) {
+      throw new Error("无法确认当前币种的 Steam 市场最低价");
+    }
     const plan = [];
     const skipped = {
       covered: 0,
@@ -543,6 +468,9 @@ const { setStatus: setOrderStatus } = orderStatus;
               ?? null
             : null;
           unitPriceCents = automaticQuote?.finalPriceMinor ?? null;
+          if (!automaticQuote) {
+            pricingError = new Error("无法根据订单簿计算自动定价");
+          }
         } catch (error) {
           pricingError = error;
         }
@@ -571,19 +499,17 @@ const { setStatus: setOrderStatus } = orderStatus;
         }
       }
       if (basePriceCents == null) {
-        if (state.cfg.minimumPriceFallback) {
+        const canUseMinimumFallback = state.cfg.minimumPriceFallback
+          && (!pricingError || isNoBuyOrdersError(pricingError));
+        if (canUseMinimumFallback) {
           basePriceCents = minimumCents;
           minimumFallbackReason = isNoBuyOrdersError(pricingError)
             ? "no-buy-orders"
-            : pricingError
-              ? "pricing-request-failed"
-              : "missing-price";
+            : "missing-price";
           skipped.minimumPriceFallback++;
           const reasonLabel = minimumFallbackReason === "no-buy-orders"
             ? "当前无买单"
-            : minimumFallbackReason === "pricing-request-failed"
-              ? `查价失败（${pricingError?.message || pricingError}）`
-              : "缺少所选价格";
+            : "缺少所选价格";
           logFn(
             `  ${info.gameName} · ${card.name}: ${reasonLabel}，使用市场最低价 ${formatMoney(minimumCents)}`,
             "warn"
@@ -711,9 +637,7 @@ const { setStatus: setOrderStatus } = orderStatus;
         const priceBasisLabel = item.minimumPriceFallback
           ? item.minimumFallbackReason === "no-buy-orders"
             ? "无买单 · 最低价回退"
-            : item.minimumFallbackReason === "pricing-request-failed"
-              ? "查价失败 · 最低价回退"
-              : "缺价 · 最低价回退"
+            : "缺价 · 最低价回退"
           : item.automaticPricing
             ? `${item.isolatedHighPrice ? "孤立价已排除 · " : ""}${item.wallClassification === "near-wall" ? "有墙" : "无墙"}`
             : "";

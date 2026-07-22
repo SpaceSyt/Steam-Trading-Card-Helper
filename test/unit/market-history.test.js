@@ -105,7 +105,7 @@ test("global pruning preserves a recent sample for each item before deeper histo
   const history = createMarketHistoryEnvelope([
     makeRecord({ observedAt: BASE_AT + 8_000, marketHashName: "A" }),
     makeRecord({ observedAt: BASE_AT + 9_000, marketHashName: "A", source: "listing-orderbook" }),
-    makeRecord({ observedAt: BASE_AT + 10_000, marketHashName: "A", source: "itemordershistogram" }),
+    makeRecord({ observedAt: BASE_AT + 10_000, marketHashName: "A", source: "legacy-source" }),
     makeRecord({ observedAt: BASE_AT + 1_000, marketHashName: "B" }),
   ], { sampleIntervalMs: 1 });
 

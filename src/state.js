@@ -49,11 +49,11 @@ import { loadConfig } from "./config.js";
     activeOrdersLoadedAt: 0,
     activeOrdersGameFilter: "all",
     activeOrderLowestPrices: new Map(),
-    activeOrdersDiagnostics: [],
     historySource: "scan",
     historyMarketHashName: "",
     historyRange: "7d",
     historyRefreshing: false,
+    sidebarPriceRefreshing: false,
     blLookupAppid: "",
     blLookupName: "",
   };

@@ -202,3 +202,22 @@ test("runtime upsert replaces the first matching result and preserves other part
   );
   assert.equal(persisted.partitions["1"].items[0].appid, "20");
 });
+
+test("runtime upsert can defer persistence for a batch checkpoint", () => {
+  const now = Date.now();
+  let writeCount = 0;
+  globalThis.GM_getValue = () => JSON.stringify(createOrderCacheEnvelope(now));
+  globalThis.GM_setValue = () => { writeCount += 1; };
+  state.cfg = { ...state.cfg, currencyId: 23, orderCacheDays: 3 };
+  state.currencyContext = { currencyId: 23 };
+  state.orderResults = [];
+  state.selectedOrderResults = new Set();
+
+  const inserted = upsertOrderResult(makeOrderResult("10", { cachedAt: now }), {
+    persist: false,
+  });
+
+  assert.equal(inserted.appid, "10");
+  assert.equal(state.orderResults.length, 1);
+  assert.equal(writeCount, 0);
+});

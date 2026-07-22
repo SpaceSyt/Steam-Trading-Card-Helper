@@ -70,7 +70,6 @@
     surplusItemMode: "card",
     surplusSellPriceSource: "lowest",
     surplusSellPriceAdjustment: 0,
-    grindIncludeSurplusCards: true,
     grindReserveCopies: 1,
     grindIncludePointsShopItems: false,
   };

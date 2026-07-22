@@ -4,7 +4,7 @@ import { RequestQueue } from "../request/queue.js";
 
 import { refreshResultInfo, getResultKey, getSelectedResults, getSelectedOrderResults } from "../services/result-info.js";
 
-import { upsertOrderResult, removeOrderResultByKey, getCachedOrderResult, saveOrderCache, normalizeOrderResult } from "../services/order-cache.js";
+import { upsertOrderResult, removeOrderResultByKey, saveOrderCache, normalizeOrderResult } from "../services/order-cache.js";
 
 import { getBadgeTargetLevel } from "../utils/badge.js";
 
@@ -65,7 +65,7 @@ const { setStatus: setOrderStatus } = orderStatus;
               targetResults[resultIndex] = normalizeOrderResult(next, Date.now());
             } else {
               targetResults[resultIndex] = next;
-              upsertOrderResult(next, { render: false });
+              upsertOrderResult(next, { persist: false });
             }
             refreshed++;
             const completion = next.hasIncompletePricing
@@ -90,8 +90,12 @@ const { setStatus: setOrderStatus } = orderStatus;
       queue.stop();
       state.recalculationRunning = false;
       statusFn(null);
-      if (isOrder) {
+      try {
         saveOrderCache();
+      } catch (error) {
+        logFn(`订购缓存保存失败: ${error?.message || error}`, "warn");
+      }
+      if (isOrder) {
         renderOrderResults();
       } else {
         renderResults();

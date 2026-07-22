@@ -277,11 +277,12 @@ function createMetric(label, value, className = "") {
 }
 
 function createItemRow(item, records) {
-  const metrics = getMarketOverviewMetrics(records);
+  const metrics = getMarketOverviewMetrics(records, { sorted: true });
   const range = RANGE_MS[state.historyRange] ?? RANGE_MS["7d"];
   const points = getMarketSparklinePoints(records, {
     from: range === Infinity ? -Infinity : Date.now() - range,
     maxPoints: 96,
+    sorted: true,
   });
   const row = document.createElement("div");
   row.className = "stch-history-row";
@@ -415,12 +416,14 @@ function renderOverview() {
     ? groupMarketHistoryRecordsByItem(history.envelope, {
       appid: MARKET_APPID,
       currencyId,
-    })
+    }, { normalized: true })
     : new Map();
+  const fragment = document.createDocumentFragment();
   items.forEach(item => {
     const records = recordsByItem.get(item.marketHashName) || [];
-    list.appendChild(createItemRow(item, records));
+    fragment.appendChild(createItemRow(item, records));
   });
+  list.appendChild(fragment);
   scheduleSparklines();
 }
 

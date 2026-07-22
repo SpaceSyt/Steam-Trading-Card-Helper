@@ -198,5 +198,5 @@ export function aggregateActiveBuyOrders(orders) {
 
 export function isCancelBuyOrderResponseSuccessful(responseOk, data) {
   if (!responseOk || !data || typeof data !== "object" || Array.isArray(data)) return false;
-  return data.success !== false && data.success !== 0;
+  return data.success === 1;
 }

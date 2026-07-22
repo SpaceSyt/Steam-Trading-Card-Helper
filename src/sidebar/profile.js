@@ -1,5 +1,3 @@
-import { unsafeWindow } from "../globals.js";
-
 import { getSteamId, getProfileUrl, parseSteamIdFromText, parseSteamIdFromProfileUrl } from "../utils/steam.js";
 
 import { stchRequestText } from "../request/http.js";

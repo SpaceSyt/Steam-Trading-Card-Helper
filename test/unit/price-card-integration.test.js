@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
 
-import { priceCard } from "../../src/parsers/price.js";
+import {
+  PRICE_CARD_ERROR_KINDS,
+  PRICE_CARD_OUTCOMES,
+  applyPriceCardResult,
+  isPriceCardError,
+  isPriceCardNoPrice,
+  isPriceCardPriced,
+  priceCard,
+} from "../../src/parsers/price.js";
 import {
   clearActiveCurrencyContext,
   getActiveCurrencyContext,
@@ -157,6 +165,7 @@ test("priceCard follows the active CNY/USD context and keeps their cached record
   });
 
   assert.deepEqual(cnyResult, {
+    outcome: PRICE_CARD_OUTCOMES.PRICED,
     lowestSellCents: 32,
     medianCents: 35,
     volume: 1234,
@@ -167,6 +176,7 @@ test("priceCard follows the active CNY/USD context and keeps their cached record
     observedAt: cnyObservedAt,
   });
   assert.deepEqual(usdResult, {
+    outcome: PRICE_CARD_OUTCOMES.PRICED,
     lowestSellCents: 3,
     medianCents: 4,
     volume: 987,
@@ -221,6 +231,7 @@ test("priceCard preserves a successful response with no price data", async () =>
 
   assert.equal(queue.calls[0].url.searchParams.get("currency"), "23");
   assert.deepEqual(result, {
+    outcome: PRICE_CARD_OUTCOMES.NO_PRICE,
     noPriceData: true,
     volume: 0,
     record,
@@ -232,6 +243,109 @@ test("priceCard preserves a successful response with no price data", async () =>
   assert.equal(loaded.ok, true);
   assert.deepEqual(findMarketCache(loaded.envelope, record), record);
   assert.equal(gmStore.has(MARKET_HISTORY_STORAGE_KEY), false);
+});
+
+test("priceCard distinguishes HTTP, network, malformed JSON, and endpoint failures", async () => {
+  initializeActiveCurrency(23);
+  const cases = [
+    {
+      label: "HTTP",
+      queue: { fetch: async () => { throw { status: 503, error: "unavailable" }; } },
+      errorKind: PRICE_CARD_ERROR_KINDS.HTTP,
+      httpStatus: 503,
+    },
+    {
+      label: "network",
+      queue: { fetch: async () => { throw new Error("offline"); } },
+      errorKind: PRICE_CARD_ERROR_KINDS.NETWORK,
+      httpStatus: null,
+    },
+    {
+      label: "malformed JSON",
+      queue: { fetch: async () => ({ status: 200, text: "<html>", data: null }) },
+      errorKind: PRICE_CARD_ERROR_KINDS.PARSE,
+      httpStatus: null,
+    },
+    {
+      label: "endpoint failure",
+      queue: { fetch: async () => ({ status: 200, text: '{"success":false}', data: { success: false } }) },
+      errorKind: PRICE_CARD_ERROR_KINDS.RESPONSE,
+      httpStatus: null,
+    },
+    {
+      label: "unparseable price",
+      queue: {
+        fetch: async () => ({
+          status: 200,
+          text: '{"success":true,"lowest_price":"not-a-price"}',
+          data: { success: true, lowest_price: "not-a-price" },
+        }),
+      },
+      errorKind: PRICE_CARD_ERROR_KINDS.PARSE,
+      httpStatus: null,
+    },
+  ];
+
+  for (const entry of cases) {
+    const result = await priceCard(`${MARKET_HASH_NAME}-${entry.label}`, entry.queue);
+    assert.equal(isPriceCardError(result), true, entry.label);
+    assert.equal(result.outcome, PRICE_CARD_OUTCOMES.ERROR, entry.label);
+    assert.equal(result.errorKind, entry.errorKind, entry.label);
+    assert.equal(result.httpStatus, entry.httpStatus, entry.label);
+    assert.equal(result.record, null, entry.label);
+  }
+
+  assert.equal(gmWrites.length, 0);
+});
+
+test("structured price results keep failed cards incomplete instead of inventing zero prices", () => {
+  const pricedCard = { name: "priced" };
+  const missingCard = { name: "missing" };
+  const failedCard = { name: "failed" };
+  const observedAt = 1_720_000_003_000;
+
+  const priced = applyPriceCardResult(pricedCard, {
+    outcome: PRICE_CARD_OUTCOMES.PRICED,
+    lowestSellCents: 32,
+    medianCents: 35,
+    volume: 12,
+    estimated: false,
+    priceSource: "lowest",
+    record: null,
+    currencyId: 23,
+    observedAt,
+  }, 23);
+  const noPrice = applyPriceCardResult(missingCard, {
+    outcome: PRICE_CARD_OUTCOMES.NO_PRICE,
+    noPriceData: true,
+    volume: 0,
+    record: null,
+    currencyId: 23,
+    observedAt,
+  }, 23);
+  const failed = applyPriceCardResult(failedCard, {
+    outcome: PRICE_CARD_OUTCOMES.ERROR,
+    errorKind: PRICE_CARD_ERROR_KINDS.NETWORK,
+    errorMessage: "offline",
+    httpStatus: null,
+    record: null,
+    currencyId: 23,
+    observedAt: null,
+  }, 23);
+
+  assert.equal(isPriceCardPriced(priced), true);
+  assert.equal(isPriceCardNoPrice(noPrice), true);
+  assert.equal(isPriceCardError(failed), true);
+  assert.equal(pricedCard.lowestCents, 32);
+  assert.equal(missingCard.lowestCents, null);
+  assert.equal(failedCard.lowestCents, null);
+  assert.equal(missingCard.priceSource, "none");
+  assert.equal(failedCard.priceSource, "failed");
+  assert.equal(failedCard.priceErrorKind, PRICE_CARD_ERROR_KINDS.NETWORK);
+
+  const hasIncompletePricing = [noPrice, failed].some(result => !isPriceCardPriced(result));
+  const displayedAggregate = hasIncompletePricing ? null : pricedCard.lowestCents;
+  assert.equal(displayedAggregate, null);
 });
 
 test("priceCard reports a history persistence failure without overwriting corrupt data", async () => {

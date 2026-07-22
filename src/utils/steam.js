@@ -81,8 +81,7 @@ const unsafeWindow = typeof globalThis !== "undefined"
       if (Number.isFinite(minimum) && minimum > 0) return Math.floor(minimum);
     }
 
-    // Preserve the historical no-argument CNY behavior until initialization.
-    return 21;
+    return null;
   }
 
   export function getMarketMinimumPriceCents(currencyContextOrWalletInfo) {

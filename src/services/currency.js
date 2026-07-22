@@ -74,8 +74,6 @@ const CURRENCY_DEFINITION_MAP = Object.freeze({
   }),
 });
 
-export const CURRENCY_DEFINITIONS = CURRENCY_DEFINITION_MAP;
-
 let activeCurrencyContext = null;
 const normalizedCurrencyContexts = new WeakSet();
 
@@ -454,8 +452,6 @@ export function initializeCurrencyContext(options = {}) {
   activeCurrencyContext = detectCurrencyContext(options);
   return activeCurrencyContext;
 }
-
-export const initCurrencyContext = initializeCurrencyContext;
 
 export function setActiveCurrencyContext(context) {
   if (context == null) {

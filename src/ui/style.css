@@ -668,8 +668,6 @@
       inset: 0;
       z-index: 1;
       pointer-events: none;
-    }
-    .stch-inv-tile.stch-volume-zero::after {
       background: rgba(217, 166, 24, 0.28);
       box-shadow: inset 0 0 0 2px rgba(255, 201, 2, 0.68);
     }
@@ -746,108 +744,10 @@
       text-shadow: 0 1px 1px #000;
       z-index: 2;
     }
-    .stch-surplus-row .stch-name {
-      flex: 0 0 190px;
-    }
-    .stch-surplus-row .stch-surplus-card {
-      flex: 1;
-      min-width: 120px;
-      color: #e2e2e2;
-      font-size: 13px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .stch-surplus-row .stch-surplus-badge {
-      width: 72px;
-      flex-shrink: 0;
-      text-align: center;
-      color: #a1b053;
-      font-size: 12px;
-    }
-    .stch-surplus-row .stch-surplus-num {
-      width: 48px;
-      flex-shrink: 0;
-      text-align: center;
-      color: #c6d4df;
-      font-size: 12px;
-    }
-    .stch-surplus-row .stch-surplus-extra {
-      width: 70px;
-      flex-shrink: 0;
-      text-align: center;
-      color: #75b022;
-      font-size: 12px;
-      font-weight: bold;
-    }
-    .stch-surplus-row .stch-surplus-assets {
-      width: 150px;
-      flex-shrink: 0;
-      color: #8db7d7;
-      font-family: "Courier New", monospace;
-      font-size: 11px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
     .stch-grind-list {
       flex: 1;
       min-height: 0;
       max-height: none;
-    }
-    .stch-grind-row .stch-name {
-      flex: 0 0 150px;
-    }
-    .stch-grind-row .stch-grind-type {
-      width: 66px;
-      flex-shrink: 0;
-      text-align: center;
-      color: #8db7d7;
-      font-size: 12px;
-    }
-    .stch-grind-row .stch-grind-item {
-      flex: 1;
-      min-width: 120px;
-      color: #e2e2e2;
-      font-size: 13px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .stch-grind-row .stch-grind-num {
-      width: 48px;
-      flex-shrink: 0;
-      text-align: center;
-      color: #c6d4df;
-      font-size: 12px;
-    }
-    .stch-grind-row .stch-grind-price {
-      width: 70px;
-      flex-shrink: 0;
-      text-align: center;
-      color: #ffc902;
-      font-size: 12px;
-    }
-    .stch-grind-row .stch-grind-action {
-      width: 72px;
-      flex-shrink: 0;
-      text-align: center;
-      color: #8f98a0;
-      font-size: 12px;
-      font-weight: bold;
-    }
-    .stch-grind-row .stch-grind-action.ok { color: #75b022; }
-    .stch-grind-row .stch-grind-action.warn { color: #ffc902; }
-    .stch-grind-row .stch-grind-action.info { color: #66c0f4; }
-    .stch-grind-row .stch-grind-assets {
-      width: 132px;
-      flex-shrink: 0;
-      color: #8db7d7;
-      font-family: "Courier New", monospace;
-      font-size: 11px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
     .stch-scan-actions {
       display: flex;
@@ -904,7 +804,6 @@
       cursor: default !important;
     }
     .stch-settings-hint::before { content: "* "; }
-    .stch-settings-hint-block { margin-top: 4px; }
     .stch-primary-label { color: #fff !important; font-weight: bold; }
     .stch-auto-pricing-toggle {
       color: #d6b45a;
@@ -963,7 +862,6 @@
     }
     .stch-tab:hover { color: #fff; background: rgba(103,193,245,0.1); }
     .stch-tab.active { color: #fff; background: #1b2838; border: 1px solid #45556b; border-bottom-color: #1b2838; }
-    .stch-tab-disabled { color: #555; cursor: not-allowed; opacity: 0.5; pointer-events: none; }
     .stch-tab-right { margin-left: auto; }
     .stch-tab-content { display: none; position: relative; }
     .stch-tab-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }

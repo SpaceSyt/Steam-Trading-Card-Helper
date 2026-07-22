@@ -3,7 +3,6 @@ export const MARKET_DATA_SCHEMA_VERSION = 1;
 export const MARKET_DATA_SOURCES = Object.freeze({
   PRICE_OVERVIEW: "priceoverview",
   LISTING_ORDERBOOK: "listing-orderbook",
-  ITEM_ORDERS_HISTOGRAM: "itemordershistogram",
   PRICE_HISTORY: "price-history",
   LEGACY_PRICE_RESULT: "legacy-price-result",
 });
@@ -13,7 +12,6 @@ const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-
 function firstDefined(...values) {
   return values.find(value => value !== undefined && value !== null);
 }
@@ -277,20 +275,6 @@ export function normalizeListingOrderbook(payload, context = {}) {
   });
 }
 
-export function normalizeItemOrdersHistogram(payload, context = {}) {
-  const data = unwrapResponseData(payload);
-  if (isExplicitFailure(data.success)) return null;
-  return normalizeMarketRecord({
-    ...adapterIdentity(data, context, MARKET_DATA_SOURCES.ITEM_ORDERS_HISTOGRAM),
-    // Only the explicitly named minor-unit integer fields are accepted.
-    // Graph/table text is intentionally not used as a fallback.
-    lowestSellMinor: normalizeMinorAmount(data.lowest_sell_order),
-    medianMinor: null,
-    highestBuyMinor: normalizeMinorAmount(data.highest_buy_order),
-    volume: null,
-  });
-}
-
 function normalizeHistoryPoint(point, context) {
   let observedAt;
   let price;
@@ -374,9 +358,3 @@ export function fromLegacyPriceResult(result, context = {}) {
     volume: result.volume === undefined ? null : normalizeMarketVolume(result.volume),
   });
 }
-
-// Adapter aliases keep call sites readable while retaining the normalize* API.
-export const adaptPriceOverview = normalizePriceOverview;
-export const adaptListingOrderbook = normalizeListingOrderbook;
-export const adaptItemOrdersHistogram = normalizeItemOrdersHistogram;
-export const adaptPriceHistory = normalizePriceHistory;

@@ -12,7 +12,11 @@ import { loadCommunityInventoryCards } from "../services/inventory.js";
 
 import { loadSidebarGemPrice } from "../sidebar/gems.js";
 
-import { priceCard } from "../parsers/price.js";
+import {
+  isPriceCardNoPrice,
+  isPriceCardPriced,
+  priceCard,
+} from "../parsers/price.js";
 import { persistMarketObservations } from "../services/market-observations.js";
 
 import { formatMoney } from "../utils/format.js";
@@ -24,7 +28,6 @@ import { findInventoryCardForBadgeCard, selectSurplusAssets, summarizeAssetIds }
 
 import {
   isPriceOverviewProbeBlocked,
-  isSharedActionBusy,
   updateAllActionStates,
   updateSurplusActionState,
 } from "../ui/action-state.js";
@@ -34,14 +37,15 @@ import { enableTileDragSelection } from "../ui/checkbox-drag.js";
 
 const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusProgress, hideProgress: hideSurplusProgress } = surplusStatus;
 
-export { updateSurplusActionState };
-export { getSurplusReservePolicy } from "../services/surplus-policy.js";
-
   function applySurplusMarketInfo(result, price, gemSackPriceCents) {
-    result.priceCents = price && !price.noPriceData ? price.lowestSellCents || 0 : 0;
-    result.medianCents = price && !price.noPriceData ? price.medianCents || 0 : 0;
-    result.volume = price ? price.volume : null;
-    result.priceSource = price?.priceSource || (price?.noPriceData ? "none" : "failed");
+    const priced = isPriceCardPriced(price);
+    const noPrice = isPriceCardNoPrice(price);
+    const failed = !priced && !noPrice;
+    result.priceCents = priced ? price.lowestSellCents || 0 : 0;
+    result.medianCents = priced ? price.medianCents || 0 : 0;
+    result.volume = failed ? null : price?.volume ?? null;
+    result.priceSource = priced ? price.priceSource : (noPrice ? "none" : "failed");
+    result.priceLookupFailed = failed;
     applyItemRecommendation(result, gemSackPriceCents);
   }
 
@@ -123,7 +127,7 @@ export { getSurplusReservePolicy } from "../services/surplus-policy.js";
 
   export function getSurplusResultKey(result) {
     const assetKey = (result.assets || [])
-      .map(asset => `${asset.assetid || ""}x${asset.selectedAmount || asset.amount || 1}`)
+      .map(asset => `${asset.assetid || ""}x${asset.selectedAmount ?? asset.amount ?? ""}`)
       .join(",");
     return [
       "card",
@@ -398,7 +402,7 @@ export { getSurplusReservePolicy } from "../services/surplus-policy.js";
             `[${group.appid}] ${label}: ${rows.length} 种卡牌，多余 ${surplusCount} 张`,
             "ok"
           );
-          renderSurplusResults();
+          if (index === 0 || (index + 1) % 5 === 0) renderSurplusResults();
         } catch (error) {
           if (state.surplusStopRequested) break;
           failed++;
@@ -454,9 +458,9 @@ export { getSurplusReservePolicy } from "../services/surplus-policy.js";
             price,
             state.surplusGemPrice?.priceCents || 0
           );
-          if (!price) priceFailed++;
+          if (!isPriceCardPriced(price) && !isPriceCardNoPrice(price)) priceFailed++;
           if (result.volume === 0) zeroVolume++;
-          renderSurplusResults();
+          if (index === 0 || (index + 1) % 5 === 0) renderSurplusResults();
         }
 
         sortSurplusResults();

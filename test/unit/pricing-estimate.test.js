@@ -43,11 +43,23 @@ test("cached final strategy prices can drive automatic estimates", () => {
   assert.deepEqual(calculateResultPricingTotals(result, {
     automatic: true,
     priceSource: "balanced",
+    minimumPriceMinor: 3,
     resolveFinalPriceMinor: card => card.lowestCents - 2,
   }), {
     completionCents: 98,
     fullCents: 296,
     levelCents: 986,
+  });
+});
+
+test("unknown market minimum keeps every displayed total unavailable", () => {
+  assert.deepEqual(calculateResultPricingTotals(result, {
+    priceSource: "lowest",
+    minimumPriceMinor: null,
+  }), {
+    completionCents: null,
+    fullCents: null,
+    levelCents: null,
   });
 });
 

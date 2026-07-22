@@ -9,6 +9,8 @@ import { loadSidebarProfileInfo } from "./profile.js";
 
 import { loadSidebarGemInfo, loadSidebarGemPrice } from "./gems.js";
 
+import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action-state.js";
+
   let sidebarLoading = false;
 
   let sidebarData = {
@@ -113,10 +115,12 @@ import { loadSidebarGemInfo, loadSidebarGemPrice } from "./gems.js";
   }
 
   export async function refreshSidebarData() {
-    if (sidebarLoading) return;
+    if (isPriceOverviewProbeBlocked(sidebarLoading || state.sidebarPriceRefreshing)) return;
     sidebarLoading = true;
+    state.sidebarPriceRefreshing = true;
     sidebarData.error = "";
     renderSidebar();
+    updateAllActionStates();
     try {
       const profile = await loadSidebarProfileInfo();
       sidebarData.profile = profile;
@@ -169,7 +173,9 @@ import { loadSidebarGemInfo, loadSidebarGemPrice } from "./gems.js";
       sidebarData.error = error?.message || "侧栏信息读取失败";
     } finally {
       sidebarLoading = false;
+      state.sidebarPriceRefreshing = false;
       renderSidebar();
+      updateAllActionStates();
     }
   }
 

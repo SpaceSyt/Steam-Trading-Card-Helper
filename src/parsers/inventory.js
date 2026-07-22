@@ -98,7 +98,8 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
   }
 
   export function getAssetAmount(asset) {
-    return Math.max(1, parseInt(asset?.amount, 10) || 1);
+    const amount = Number(asset?.amount);
+    return Number.isSafeInteger(amount) && amount > 0 ? amount : 0;
   }
 
   export function addInventoryCard(groupMap, asset, description) {

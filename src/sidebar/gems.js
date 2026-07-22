@@ -8,7 +8,7 @@ import { isGemSackDescription, isLooseGemDescription, getDescriptionKey, getAsse
 import { stchRequestJson } from "../request/http.js";
 import { RequestQueue } from "../request/queue.js";
 
-import { priceCard } from "../parsers/price.js";
+import { isPriceCardPriced, priceCard } from "../parsers/price.js";
 
   export async function loadSidebarGemInfo(steamId) {
     if (!steamId) throw new Error("未找到 SteamID，无法读取库存");
@@ -74,16 +74,17 @@ import { priceCard } from "../parsers/price.js";
     const requestQueue = queue || ownedQueue;
     try {
       const price = await priceCard(SIDEBAR_GEM_SACK_HASH, requestQueue);
-      const priceCents = price && !price.noPriceData ? price.lowestSellCents || 0 : 0;
+      const priced = isPriceCardPriced(price);
+      const priceCents = priced ? price.lowestSellCents || 0 : 0;
       return {
         priceCents,
-        medianCents: price?.medianCents || 0,
-        source: price?.priceSource === "lowest"
+        medianCents: priced ? price.medianCents || 0 : 0,
+        source: priced && price.priceSource === "lowest"
           ? "在售最低"
-          : price?.priceSource === "median"
+          : priced && price.priceSource === "median"
             ? "平均价格"
             : "暂无价格",
-        volume: price?.volume || 0,
+        volume: priced ? price.volume || 0 : 0,
         currencyId: price?.currencyId || state.currencyContext?.currencyId || state.cfg.currencyId,
         observedAt: price?.observedAt || Date.now(),
         record: price?.record || null,

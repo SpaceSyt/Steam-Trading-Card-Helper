@@ -8,7 +8,7 @@ import { formatMoney } from "../utils/format.js";
 
 import { getBadgeTargetLevel, getBadgeUrlSuffix } from "../utils/badge.js";
 
-import { getResultKey, getSelectedResults, getSelectedOrderResults } from "../services/result-info.js";
+import { getResultKey, getSelectedOrderResults } from "../services/result-info.js";
 
 import { pruneOrderCache, upsertOrderResult, getOrderCacheAgeDays } from "../services/order-cache.js";
 
@@ -21,6 +21,23 @@ import { getActiveOrderPricingProfile } from "../config.js";
 import { calculateAutomaticBuyPrice } from "../services/order-wall.js";
 import { calculateResultPricingTotals } from "../services/pricing-estimate.js";
 import { enableCheckboxDragSelection } from "./checkbox-drag.js";
+
+  const pendingSelectionUpdates = new Set();
+  let selectionUpdateFrame = 0;
+
+  function scheduleSelectionUpdate(source) {
+    pendingSelectionUpdates.add(source);
+    if (selectionUpdateFrame) return;
+    selectionUpdateFrame = requestAnimationFrame(() => {
+      selectionUpdateFrame = 0;
+      if (pendingSelectionUpdates.has("order")) {
+        updateOrderSummary({ prune: false });
+        updateOrderActionState();
+      }
+      if (pendingSelectionUpdates.has("scan")) updateBulkActionState();
+      pendingSelectionUpdates.clear();
+    });
+  }
 
   function enableResultDragSelection(list) {
     enableCheckboxDragSelection(list, {
@@ -297,12 +314,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
       } else {
         sourceState.selected.delete(key);
       }
-      if (source === "order") {
-        updateOrderSummary();
-        updateOrderActionState();
-      } else {
-        updateBulkActionState();
-      }
+      scheduleSelectionUpdate(source);
     };
     checkbox.addEventListener("click", e => e.stopPropagation());
     checkbox.addEventListener("change", e => {
@@ -328,8 +340,9 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     const list = document.getElementById("stch-list");
     if (list.children.length === 0) renderHeader(list);
     renderDataRow(list, info);
-    upsertOrderResult(info);
-    renderOrderResults();
+    const checkpoint = state.results.length % 10 === 0;
+    upsertOrderResult(info, { persist: checkpoint });
+    if (checkpoint) renderOrderResults();
     updateBulkActionState();
     updateResultColumns();
   }
@@ -341,6 +354,13 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     );
     const adjustmentCents = Math.round((Number(profile.adjustment) || 0) * 100);
     const minimumCents = getMarketMinimumPriceCents();
+    if (!Number.isSafeInteger(minimumCents) || minimumCents <= 0) {
+      return {
+        completionCents: null,
+        fullCents: null,
+        levelCents: null,
+      };
+    }
     const currencyId = Number(state.currencyContext?.currencyId || state.cfg.currencyId) || 23;
     const getCacheKey = card => JSON.stringify([
       String(currencyId),
@@ -382,10 +402,6 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
       resolveBasePriceMinor,
       resolveFinalPriceMinor,
     });
-  }
-
-  export function getAdjustedCompletionCostCents(info) {
-    return getRealtimePricingTotals(info).completionCents;
   }
 
   export function updateSummary() {

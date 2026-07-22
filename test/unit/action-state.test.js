@@ -20,6 +20,7 @@ const BUSY_FLAGS = [
   "activeOrderPriceQueryRunning",
   "activeOrdersCancelling",
   "historyRefreshing",
+  "sidebarPriceRefreshing",
   "craftScanning",
   "craftActionRunning",
   "surplusActionRunning",
@@ -42,6 +43,7 @@ test("priceoverview operations share one mutual-exclusion group", () => {
     "grindScanning",
     "activeOrderPriceQueryRunning",
     "recalculationRunning",
+    "sidebarPriceRefreshing",
   ];
 
   priceOverviewFlags.forEach(key => {

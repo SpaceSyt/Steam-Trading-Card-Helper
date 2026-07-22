@@ -9,7 +9,6 @@ function firstFinite(...values) {
   }
   return null;
 }
-
 function normalizeRate(value, fallback) {
   const number = firstFinite(value);
   if (number == null || number < 0) return fallback;
@@ -140,8 +139,3 @@ export function getGemBreakEvenBuyerPrice(gems, gemSackPriceCents, currencyConte
     ? getBuyerPriceForSellerReceive(desiredSellerNet, currencyContextOrWalletInfo)
     : 0;
 }
-
-// Generic minor-unit aliases. The legacy *Cents names remain valid for CNY/USD.
-export const getMarketFeesForSellerReceiveMinor = getMarketFeesForSellerReceive;
-export const getBuyerPriceForSellerReceiveMinor = getBuyerPriceForSellerReceive;
-export const getSellerReceiveForBuyerPriceMinor = getSellerReceiveForBuyerPrice;

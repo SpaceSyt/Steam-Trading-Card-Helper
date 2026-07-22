@@ -58,20 +58,20 @@ test("same item CNY and USD records remain isolated in cache", () => {
 
 test("cache key also isolates source and appid", () => {
   const overview = makeRecord();
-  const histogram = makeRecord({
-    source: MARKET_DATA_SOURCES.ITEM_ORDERS_HISTOGRAM,
+  const legacySource = makeRecord({
+    source: "legacy-source",
     highestBuyMinor: 29,
   });
   const otherApp = makeRecord({ appid: "440" });
 
-  const cache = [overview, histogram, otherApp].reduce(
+  const cache = [overview, legacySource, otherApp].reduce(
     (current, record) => upsertMarketCache(current, record),
     createMarketCacheEnvelope()
   );
 
   assert.equal(cache.records.length, 3);
-  assert.equal(findMarketCache(cache, histogram).highestBuyMinor, 29);
-  assert.equal(findMarketCache(cache, { ...histogram, source: "missing" }), null);
+  assert.equal(findMarketCache(cache, legacySource).highestBuyMinor, 29);
+  assert.equal(findMarketCache(cache, { ...legacySource, source: "missing" }), null);
 });
 
 test("upsert is immutable and keeps the newest observation by default", () => {
@@ -300,6 +300,31 @@ test("stored bulk upsert persists multiple observations in one transaction", () 
   const records = JSON.parse(storedValue).records;
   assert.deepEqual(records, expected.records);
   assert.deepEqual(records.map(record => record.marketHashName), ["new", "existing"]);
+});
+
+test("stored bulk upsert preserves order on the below-capacity fast path", () => {
+  const initial = createMarketCacheEnvelope([
+    makeRecord({ marketHashName: "existing", observedAt: 100 }),
+    makeRecord({ marketHashName: "untouched", observedAt: 150 }),
+  ]);
+  let storedValue = JSON.stringify(initial);
+  const updates = [
+    makeRecord({ marketHashName: "new", observedAt: 200 }),
+    makeRecord({ marketHashName: "existing", observedAt: 300, lowestSellMinor: 30 }),
+  ];
+
+  const result = upsertManyStoredMarketCache(updates, {
+    ttlMs: Infinity,
+    maxEntries: 10,
+    getValue: () => storedValue,
+    setValue: (_key, value) => { storedValue = value; },
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    JSON.parse(storedValue).records.map(record => [record.marketHashName, record.lowestSellMinor]),
+    [["existing", 30], ["untouched", 32], ["new", 32]]
+  );
 });
 
 test("cache refuses records without a known currency id", () => {

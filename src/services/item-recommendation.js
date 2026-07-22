@@ -22,6 +22,11 @@ export function applyItemRecommendation(item, gemSackPriceCents) {
     item.recommendationLabel = "分解";
     item.recommendationClass = "ok";
     item.recommendationReason = "不可出售或缺少市场标识";
+  } else if (item.priceLookupFailed) {
+    item.recommendationKey = "unknown";
+    item.recommendationLabel = "缺市场价";
+    item.recommendationClass = "warn";
+    item.recommendationReason = "市场价格请求失败";
   } else if (!item.priceCents) {
     item.recommendationKey = "grind";
     item.recommendationLabel = "分解";
