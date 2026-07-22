@@ -474,6 +474,8 @@
       overflow: visible;
     }
     .stch-game-list:not(.stch-show-drops) .stch-drops { display: none; }
+    .stch-game-list:not(.stch-show-completion) .stch-cost { display: none; }
+    .stch-game-list:not(.stch-show-sell-set) .stch-full { display: none; }
     .stch-result-cb {
       margin: 0;
       cursor: pointer;
@@ -1567,14 +1569,16 @@
       margin: 0 16px;
       max-height: 42vh;
       overflow-y: auto;
+      scrollbar-gutter: stable;
       border: 1px solid #2a3f5a;
       background: #0e1621;
     }
     .stch-order-item {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 55px minmax(105px, auto) 70px;
+      grid-template-columns: minmax(0, 1fr) 58px 260px 76px;
+      align-items: center;
       gap: 10px;
-      padding: 7px 10px;
+      padding: 7px 12px 7px 10px;
       border-bottom: 1px solid rgba(69,85,107,0.4);
       font-size: 12px;
     }
@@ -1583,7 +1587,21 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .stch-order-price-basis { color: #8f98a0; }
+    .stch-order-item span:nth-child(2) {
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .stch-order-price-basis {
+      color: #8f98a0;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .stch-order-item span:last-child {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
     .stch-processing-dialog-item.sell {
       grid-template-columns: minmax(0, 1fr) 58px 95px 95px;
     }

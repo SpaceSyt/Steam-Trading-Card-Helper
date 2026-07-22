@@ -40,21 +40,14 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
 
   export function updateCraftActionState() {
     const craftBusy = state.craftScanning || state.craftActionRunning;
-    const otherBusy = state.scanning
-      || state.bulkActionRunning
-      || state.orderActionRunning
-      || state.activeOrdersLoading
-      || state.activeOrdersCancelling
-      || state.historyRefreshing
-      || state.surplusActionRunning
-      || state.surplusScanning
-      || state.grindScanning;
+    const otherBusy = state.activeOrdersCancelling || state.surplusActionRunning;
+    const probeBlocked = isIndependentProbeBlocked(craftBusy);
     const hasResults = state.craftResults.length > 0;
     const hasPlan = state.craftResults.some(r => r.selected && r.maxCraftable > 0 && (state.cfg.craftMode === "max" ? r.maxCraftable : (parseInt(r.craftCount,10)||0)) > 0);
 
     document.getElementById("stch-craft-scan-btn")?.classList.toggle(
       "disabled",
-      craftBusy || otherBusy
+      probeBlocked
     );
     document.getElementById("stch-craft-stop-btn")?.classList.toggle(
       "disabled",
@@ -81,18 +74,10 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
 
   function updateSurplusDetectionControls() {
     const detectionBusy = state.surplusScanning || state.grindScanning;
-    const otherBusy = state.scanning
-      || state.bulkActionRunning
-      || state.orderActionRunning
-      || state.activeOrdersLoading
-      || state.activeOrdersCancelling
-      || state.historyRefreshing
-      || state.craftScanning
-      || state.craftActionRunning
-      || state.surplusActionRunning;
+    const probeBlocked = isPriceOverviewProbeBlocked(detectionBusy);
     document.getElementById("stch-surplus-scan-btn")?.classList.toggle(
       "disabled",
-      detectionBusy || otherBusy
+      probeBlocked
     );
     document.getElementById("stch-surplus-stop-btn")?.classList.toggle(
       "disabled",
@@ -100,7 +85,7 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     );
     ["stch-surplus-only-tradable", "stch-surplus-only-recommended", "stch-grind-include-surplus-cards", "stch-grind-reserve-copies", "stch-grind-include-points-shop", "stch-surplus-item-mode"].forEach(id => {
       const element = document.getElementById(id);
-      if (element) element.disabled = detectionBusy || otherBusy;
+      if (element) element.disabled = probeBlocked;
     });
   }
 
@@ -116,9 +101,11 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
 
   export function isSharedActionBusy() {
     return state.scanning
-      || state.bulkActionRunning
+      || state.recalculationRunning
+      || state.orderSubmissionRunning
       || state.orderActionRunning
       || state.activeOrdersLoading
+      || state.activeOrderPriceQueryRunning
       || state.activeOrdersCancelling
       || state.historyRefreshing
       || state.craftScanning
@@ -128,17 +115,41 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
       || state.grindScanning;
   }
 
+  export function isWriteActionBusy() {
+    return state.activeOrdersCancelling
+      || state.surplusActionRunning;
+  }
+
+  export function isPriceOverviewGroupBusy() {
+    return state.scanning
+      || state.orderActionRunning
+      || state.historyRefreshing
+      || state.surplusScanning
+      || state.grindScanning
+      || state.activeOrderPriceQueryRunning
+      || state.recalculationRunning;
+  }
+
+  export function isPriceOverviewProbeBlocked(ownBusy = false) {
+    return Boolean(ownBusy) || isPriceOverviewGroupBusy() || isWriteActionBusy();
+  }
+
+  export function isIndependentProbeBlocked(ownBusy = false) {
+    return Boolean(ownBusy) || isWriteActionBusy();
+  }
+
   export function updateBulkActionState() {
     const selectedCount = getSelectedResults().length;
     const countEl = document.getElementById("stch-selected-count");
     if (countEl) countEl.textContent = `已选择 ${selectedCount} 项`;
 
-    const disabled = selectedCount === 0 || isSharedActionBusy();
-    document.getElementById("stch-recalculate-btn")?.classList.toggle("disabled", disabled);
-    document.getElementById("stch-submit-orders-btn")?.classList.toggle("disabled", disabled);
+    const recalculateDisabled = selectedCount === 0 || isPriceOverviewGroupBusy();
+    const submitDisabled = selectedCount === 0 || state.orderSubmissionRunning;
+    document.getElementById("stch-recalculate-btn")?.classList.toggle("disabled", recalculateDisabled);
+    document.getElementById("stch-submit-orders-btn")?.classList.toggle("disabled", submitDisabled);
     document.getElementById("stch-scan-btn")?.classList.toggle(
       "disabled",
-      isSharedActionBusy()
+      isPriceOverviewProbeBlocked(state.scanning)
     );
 
     const selectAll = document.getElementById("stch-result-select-all");
@@ -154,14 +165,18 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     const countEl = document.getElementById("stch-order-selected-count");
     if (countEl) countEl.textContent = `已选择 ${selectedCount} 项`;
 
-    const disabled = selectedCount === 0 || isSharedActionBusy();
-    document.getElementById("stch-order-recalculate-btn")?.classList.toggle("disabled", disabled);
-    document.getElementById("stch-order-submit-orders-btn")?.classList.toggle("disabled", disabled);
+    const recalculateDisabled = selectedCount === 0 || isPriceOverviewGroupBusy();
+    const submitDisabled = selectedCount === 0 || state.orderSubmissionRunning;
+    document.getElementById("stch-order-recalculate-btn")?.classList.toggle("disabled", recalculateDisabled);
+    document.getElementById("stch-order-submit-orders-btn")?.classList.toggle("disabled", submitDisabled);
     document.getElementById("stch-order-delete-btn")?.classList.toggle(
       "disabled",
       getExpiredOrderCacheCount() === 0 || isSharedActionBusy()
     );
-    document.getElementById("stch-order-add-btn")?.classList.toggle("disabled", isSharedActionBusy());
+    document.getElementById("stch-order-add-btn")?.classList.toggle(
+      "disabled",
+      isPriceOverviewProbeBlocked(state.orderActionRunning)
+    );
 
     const selectAll = document.getElementById("stch-order-select-all");
     if (selectAll) {
@@ -172,6 +187,9 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
 
   export function updateActiveOrdersActionState() {
     const busy = isSharedActionBusy();
+    const activeOrderBusy = state.activeOrdersLoading || state.activeOrderPriceQueryRunning;
+    const refreshBlocked = isIndependentProbeBlocked(activeOrderBusy);
+    const priceQueryBlocked = isPriceOverviewProbeBlocked(activeOrderBusy);
     const selectedGroups = state.activeBuyOrderGroups.filter(group => (
       state.selectedActiveBuyOrderGroups.has(group.key)
     ));
@@ -179,14 +197,14 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     if (count) count.textContent = `已选 ${selectedGroups.length} 项`;
 
     const refresh = document.getElementById("stch-active-orders-refresh");
-    refresh?.classList.toggle("disabled", busy);
-    if (refresh) refresh.disabled = busy;
+    refresh?.classList.toggle("disabled", refreshBlocked);
+    if (refresh) refresh.disabled = refreshBlocked;
     const cancel = document.getElementById("stch-active-orders-cancel-selected");
     cancel?.classList.toggle("disabled", busy || selectedGroups.length === 0);
     if (cancel) cancel.disabled = busy || selectedGroups.length === 0;
     const query = document.getElementById("stch-active-orders-query-prices");
-    query?.classList.toggle("disabled", busy || selectedGroups.length === 0);
-    if (query) query.disabled = busy || selectedGroups.length === 0;
+    query?.classList.toggle("disabled", priceQueryBlocked || selectedGroups.length === 0);
+    if (query) query.disabled = priceQueryBlocked || selectedGroups.length === 0;
   }
 
   export function updateAllActionStates() {
@@ -195,12 +213,8 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     updateSurplusActionState();
     updateGrindActionState();
     updateActiveOrdersActionState();
-    const settingsBusy = isSharedActionBusy();
-    ["stch-settings-clear-cache", "stch-settings-reset"].forEach(id => {
-      document.getElementById(id)?.classList.toggle("disabled", settingsBusy);
-    });
     const historyRefresh = document.getElementById("stch-history-refresh");
-    const historyRefreshDisabled = settingsBusy && !state.historyRefreshing;
+    const historyRefreshDisabled = isPriceOverviewProbeBlocked(state.historyRefreshing);
     historyRefresh?.classList.toggle("disabled", historyRefreshDisabled);
     if (historyRefresh) historyRefresh.disabled = historyRefreshDisabled;
   }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { afterEach } from "node:test";
 
 globalThis.GM_getValue = () => null;
 globalThis.GM_setValue = () => {};
@@ -26,6 +26,12 @@ const { setActiveCurrencyContext, getCurrencyContextById } = await import(
   "../../src/services/currency.js"
 );
 const { buildBuyOrderPlan } = await import("../../src/features/orders.js");
+
+afterEach(() => {
+  state.marketOrderDepths.clear();
+  state.highestBuyPrices.clear();
+  state.automaticPricingDraft = null;
+});
 
 const MARKET_HASH_NAME = "123-Test Card";
 const noBuyOrderHtml = (() => {
@@ -61,13 +67,59 @@ function makeUi() {
   };
 }
 
+function makeOrderbookHtml(data) {
+  const renderContext = {
+    queryData: JSON.stringify({
+      queries: [{
+        queryKey: ["market", "orderbook", 753, MARKET_HASH_NAME],
+        state: { data },
+      }],
+    }),
+  };
+  return `<script>window.SSR.renderContext=JSON.parse(${JSON.stringify(JSON.stringify(renderContext))});</script>`;
+}
+
+test("automatic ordering keeps the unadjusted reference separate from a temporary no-wall offset", async () => {
+  setActiveCurrencyContext(getCurrencyContextById(23));
+  Object.assign(state.cfg, {
+    buyMode: "buy1",
+    automaticPricingEnabled: true,
+    automaticPriceStrategy: "conservative",
+    minimumPriceFallback: true,
+  });
+  state.automaticPricingDraft = {
+    strategy: "conservative",
+    wallAnchor: "bottom",
+    wallOffsetMinor: 0,
+    noWallOffsetMinor: -3,
+  };
+  const ui = makeUi();
+  ui.queue.fetch = async () => ({
+    status: 200,
+    text: makeOrderbookHtml({
+      amtMaxBuyOrder: 45,
+      amtMinSellOrder: 60,
+      eCurrency: 23,
+      cBuyOrders: 42,
+      rgCompactBuyOrders: [45, 10, 44, 12, 43, 11, 42, 9],
+    }),
+    data: null,
+  });
+
+  const result = await buildBuyOrderPlan(selected, new Map(), ui);
+
+  assert.equal(result.plan.length, 1);
+  assert.equal(result.plan[0].basePriceCents, 45);
+  assert.equal(result.plan[0].strategyOffsetCents, -3);
+  assert.equal(result.plan[0].unitPriceCents, 42);
+});
+
 test("automatic ordering uses the currency minimum when Steam confirms there are no buy orders", async () => {
   setActiveCurrencyContext(getCurrencyContextById(23));
   Object.assign(state.cfg, {
     buyMode: "buy1",
     automaticPricingEnabled: true,
     automaticPriceStrategy: "balanced",
-    automaticPriceAdjustment: 0,
     minimumPriceFallback: true,
   });
 
@@ -128,7 +180,6 @@ test("automatic ordering uses the market minimum when the pricing request fails"
   Object.assign(state.cfg, {
     automaticPricingEnabled: true,
     automaticPriceStrategy: "balanced",
-    automaticPriceAdjustment: 0,
     minimumPriceFallback: true,
   });
   state.marketOrderDepths.clear();

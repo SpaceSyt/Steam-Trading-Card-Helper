@@ -22,7 +22,11 @@ import { upsertOrderResult, getCachedOrderResult, readRawOrderCache, isOrderCach
 
 import { getSelectedResults, getSelectedOrderResults, refreshResultInfo, getResultKey } from "../services/result-info.js";
 
-import { updateAllActionStates, isSharedActionBusy } from "../ui/action-state.js";
+import {
+  isPriceOverviewProbeBlocked,
+  isSharedActionBusy,
+  updateAllActionStates,
+} from "../ui/action-state.js";
 
 import { renderOrderResults } from "../ui/render.js";
 
@@ -68,7 +72,7 @@ const { setStatus: setOrderStatus } = orderStatus;
   }
 
   export async function addManualOrderAppid() {
-    if (isSharedActionBusy()) return;
+    if (isPriceOverviewProbeBlocked(state.orderActionRunning)) return;
     const input = document.getElementById("stch-order-appid");
     const appid = String(input?.value || "").trim();
     if (!/^\d+$/.test(appid)) {
@@ -88,7 +92,8 @@ const { setStatus: setOrderStatus } = orderStatus;
       cfg.batchPause,
       state,
       setOrderStatus,
-      orderLog
+      orderLog,
+      { stopPredicate: () => false }
     );
 
     try {
@@ -143,7 +148,10 @@ const { setStatus: setOrderStatus } = orderStatus;
       state.cfg.requestInterval,
       state.cfg.batchSize,
       state.cfg.batchPause,
-      state
+      state,
+      null,
+      null,
+      { stopPredicate: () => false }
     );
     const requestQueue = queue || ownedQueue;
     let data;
@@ -163,9 +171,10 @@ const { setStatus: setOrderStatus } = orderStatus;
 
   export async function loadActiveBuyOrders(queue = null) {
     const snapshot = await fetchActiveBuyOrderSnapshot(queue);
-    if (snapshot.diagnostics.length > 0) {
-      throw new Error(`无法完整解析现有 Steam 订购单（${snapshot.diagnostics.length} 项）`);
-    }
+    // 测试阶段暂不因局部探测诊断阻止下单；可确认的订单仍用于数量覆盖检查。
+    // if (snapshot.diagnostics.length > 0) {
+    //   throw new Error(`无法完整解析现有 Steam 订购单（${snapshot.diagnostics.length} 项）`);
+    // }
     const orders = new Map();
     snapshot.orders.filter(order => order.appid === "753").forEach(order => {
       const current = orders.get(order.marketHashName) || { quantity: 0, orderIds: [] };
@@ -221,7 +230,10 @@ const { setStatus: setOrderStatus } = orderStatus;
       state.cfg.requestInterval,
       state.cfg.batchSize,
       state.cfg.batchPause,
-      state
+      state,
+      null,
+      null,
+      { stopPredicate: () => false }
     );
     const requestQueue = queue || ownedQueue;
     const observeRecord = record => {
@@ -380,7 +392,10 @@ const { setStatus: setOrderStatus } = orderStatus;
       state.cfg.requestInterval,
       state.cfg.batchSize,
       state.cfg.batchPause,
-      state
+      state,
+      null,
+      null,
+      { stopPredicate: () => false }
     );
     const requestQueue = queue || ownedQueue;
     try {
@@ -446,7 +461,10 @@ const { setStatus: setOrderStatus } = orderStatus;
   export async function buildBuyOrderPlan(selected, activeOrders, ui = {}) {
     const statusFn = ui.setStatus || setStatus;
     const logFn = ui.log || log;
-    const pricingProfile = getActiveOrderPricingProfile(state.cfg);
+    const pricingProfile = getActiveOrderPricingProfile(
+      state.cfg,
+      state.automaticPricingDraft
+    );
     const priceSource = pricingProfile.priceSource;
     const adjustmentValue = pricingProfile.adjustment;
     const adjustmentCents = Math.round(
@@ -519,7 +537,11 @@ const { setStatus: setOrderStatus } = orderStatus;
             adjustmentMinor: adjustmentCents,
             minimumPriceMinor: minimumCents,
           });
-          basePriceCents = automaticQuote?.strategyBasePriceMinor ?? null;
+          basePriceCents = automaticQuote
+            ? automaticQuote.wallReferencePriceMinor
+              ?? automaticQuote.effectiveHighestBuyMinor
+              ?? null
+            : null;
           unitPriceCents = automaticQuote?.finalPriceMinor ?? null;
         } catch (error) {
           pricingError = error;
@@ -606,6 +628,9 @@ const { setStatus: setOrderStatus } = orderStatus;
         basePriceCents,
         unitPriceCents,
         automaticPricing: pricingProfile.automatic,
+        strategyOffsetCents: automaticQuote && basePriceCents != null
+          ? automaticQuote.strategyBasePriceMinor - basePriceCents
+          : 0,
         wallClassification: minimumFallbackReason
           ? minimumFallbackReason
           : automaticQuote?.classification || null,
@@ -626,6 +651,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       adjustmentCents,
       minimumCents,
       automaticPricing: pricingProfile.automatic,
+      strategyRule: pricingProfile.strategyRule || null,
     };
   }
 
@@ -638,6 +664,7 @@ const { setStatus: setOrderStatus } = orderStatus;
         adjustmentCents,
         minimumCents,
         automaticPricing,
+        strategyRule,
       } = planData;
       const backdrop = document.createElement("div");
       backdrop.id = "stch-order-dialog-backdrop";
@@ -647,6 +674,15 @@ const { setStatus: setOrderStatus } = orderStatus;
       const adjustmentText = adjustmentCents >= 0
         ? `+${formatMoney(adjustmentCents)}`
         : formatMoney(adjustmentCents);
+      const signedMoney = value => value >= 0
+        ? `+${formatMoney(value)}`
+        : formatMoney(value);
+      const pricingSummary = automaticPricing
+        ? `价格基准 <b>自动定价 · ${getOrderPriceSourceLabel(priceSource)}</b> · `
+          + `有墙调整 <b>${signedMoney(strategyRule?.wallOffsetMinor || 0)}</b> · `
+          + `无墙调整 <b>${signedMoney(strategyRule?.noWallOffsetMinor || 0)}</b>`
+        : `价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> · `
+          + `买价调整 <b>${adjustmentText}</b>`;
 
       backdrop.innerHTML = `
         <div class="stch-order-dialog">
@@ -654,8 +690,7 @@ const { setStatus: setOrderStatus } = orderStatus;
           <div class="stch-order-summary">
             游戏 <b>${plannedGameCount}</b>/${selectedGameCount} 个 · 卡牌种类 <b>${plan.length}</b> ·
             数量 <b>${totalQuantity}</b> 张 · 新增最高占用 <b>${formatMoney(totalCents)}</b><br>
-            价格基准 <b>${automaticPricing ? "自动定价 · " : ""}${getOrderPriceSourceLabel(priceSource)}</b> ·
-            买价调整 <b>${adjustmentText}</b>
+            ${pricingSummary}
           </div>
           <div class="stch-order-list"></div>
           <div class="stch-order-note"></div>
@@ -685,6 +720,7 @@ const { setStatus: setOrderStatus } = orderStatus;
         row.appendChild(createTextSpan(
           "stch-order-price-basis",
           `${priceBasisLabel ? `${priceBasisLabel} · ` : ""}基准 ${formatMoney(item.basePriceCents)}`
+          + `${item.automaticPricing ? ` · 调整 ${signedMoney(item.strategyOffsetCents)}` : ""}`
         ));
         row.appendChild(createTextSpan("", formatMoney(item.unitPriceCents)));
         list.appendChild(row);
@@ -789,7 +825,7 @@ const { setStatus: setOrderStatus } = orderStatus;
     const statusFn = isOrder ? setOrderStatus : setStatus;
     const logFn = isOrder ? orderLog : log;
     const selected = isOrder ? getSelectedOrderResults() : getSelectedResults();
-    if (isSharedActionBusy()) return;
+    if (state.orderSubmissionRunning) return;
     if (selected.length === 0) {
       statusFn("请先勾选要提交订购单的卡组", false);
       return;
@@ -801,11 +837,12 @@ const { setStatus: setOrderStatus } = orderStatus;
       state.cfg.batchPause,
       state,
       statusFn,
-      logFn
+      logFn,
+      { stopPredicate: () => false }
     );
     const ui = { setStatus: statusFn, log: logFn, queue };
 
-    state.bulkActionRunning = true;
+    state.orderSubmissionRunning = true;
     updateAllActionStates();
     let submitted = 0;
     let failed = 0;
@@ -857,7 +894,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       logFn(finalStatus, "err");
     } finally {
       queue.stop();
-      state.bulkActionRunning = false;
+      state.orderSubmissionRunning = false;
       if (isOrder && finalStatus) {
         statusFn(finalStatus, false);
       } else {

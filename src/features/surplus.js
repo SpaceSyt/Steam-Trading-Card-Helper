@@ -22,7 +22,12 @@ import { getSurplusReservePolicy } from "../services/surplus-policy.js";
 
 import { findInventoryCardForBadgeCard, selectSurplusAssets, summarizeAssetIds } from "../parsers/inventory.js";
 
-import { isSharedActionBusy, updateAllActionStates, updateSurplusActionState } from "../ui/action-state.js";
+import {
+  isPriceOverviewProbeBlocked,
+  isSharedActionBusy,
+  updateAllActionStates,
+  updateSurplusActionState,
+} from "../ui/action-state.js";
 
 import { surplusStatus } from "../status-controllers.js";
 import { enableTileDragSelection } from "../ui/checkbox-drag.js";
@@ -305,7 +310,7 @@ export { getSurplusReservePolicy } from "../services/surplus-policy.js";
   }
 
   export async function startSurplusScan() {
-    if (isSharedActionBusy()) return;
+    if (isPriceOverviewProbeBlocked(state.surplusScanning || state.grindScanning)) return;
 
     if (location.hostname !== "steamcommunity.com") {
       surplusLog("请在 Steam 社区徽章页或库存页使用多余物品处理", "warn");
@@ -336,7 +341,8 @@ export { getSurplusReservePolicy } from "../services/surplus-policy.js";
       cfg.batchPause,
       state,
       setSurplusStatus,
-      surplusLog
+      surplusLog,
+      { stopPredicate: currentState => Boolean(currentState?.surplusStopRequested) }
     );
     state.surplusQueue = queue;
     const marketRecords = [];

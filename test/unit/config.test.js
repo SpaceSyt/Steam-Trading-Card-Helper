@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import {
   CONFIG_SCHEMA_VERSION,
   DEFAULT_CONFIG,
+  createAutomaticPricingDraft,
   getActiveOrderPricingProfile,
   normalizeConfig,
 } from "../../src/config.js";
@@ -30,19 +31,18 @@ test("v2.0 config migration preserves every blacklist field", () => {
   assert.equal(migrated.blacklistPriceData, "{}");
 });
 
-test("automatic pricing keeps an independent strategy and adjustment profile", () => {
+test("automatic pricing uses strategy offsets without a second persisted adjustment", () => {
   const cfg = normalizeConfig({
     orderPriceSource: "median",
     priceAdjustment: -0.02,
     automaticPricingEnabled: true,
     automaticPriceStrategy: "aggressive",
-    automaticPriceAdjustment: 0.03,
   });
 
   assert.deepEqual(getActiveOrderPricingProfile(cfg), {
     automatic: true,
     priceSource: "aggressive",
-    adjustment: 0.03,
+    adjustment: 0,
     strategyRule: {
       wallAnchor: "top",
       wallOffsetMinor: 1,
@@ -63,20 +63,52 @@ test("new ordering, sidebar, advanced, and blacklist settings normalize safely",
   assert.equal(defaults.sidebarDisabled, false);
   assert.equal(defaults.showAdvancedSettings, false);
   assert.equal(defaults.blacklistExpiryDays, 7);
+  assert.equal(defaults.showScanCompletionColumn, true);
+  assert.equal(defaults.showScanSellSetColumn, true);
 
   const optedOut = normalizeConfig({
     minimumPriceFallback: false,
     sidebarDisabled: true,
     showAdvancedSettings: true,
     blacklistExpiryDays: 3.9,
+    showScanCompletionColumn: false,
+    showScanSellSetColumn: false,
   });
   assert.equal(optedOut.minimumPriceFallback, false);
   assert.equal(optedOut.sidebarDisabled, true);
   assert.equal(optedOut.showAdvancedSettings, true);
   assert.equal(optedOut.blacklistExpiryDays, 3);
+  assert.equal(optedOut.showScanCompletionColumn, false);
+  assert.equal(optedOut.showScanSellSetColumn, false);
 
   assert.equal(normalizeConfig({ blacklistExpiryDays: 0 }).blacklistExpiryDays, 1);
   assert.equal(normalizeConfig({ blacklistExpiryDays: "invalid" }).blacklistExpiryDays, 7);
+});
+
+test("an automatic pricing draft can temporarily override both strategy offsets", () => {
+  const cfg = normalizeConfig({
+    automaticPricingEnabled: true,
+    automaticPriceStrategy: "conservative",
+    automaticConservativeWallOffset: 0.01,
+    automaticConservativeNoWallOffset: -0.03,
+  });
+  const draft = createAutomaticPricingDraft(cfg, "conservative");
+  assert.deepEqual(draft, {
+    strategy: "conservative",
+    wallAnchor: "bottom",
+    wallOffsetMinor: 1,
+    noWallOffsetMinor: -3,
+  });
+
+  draft.wallOffsetMinor = 2;
+  draft.noWallOffsetMinor = -4;
+  assert.deepEqual(getActiveOrderPricingProfile(cfg, draft).strategyRule, {
+    wallAnchor: "bottom",
+    wallOffsetMinor: 2,
+    noWallOffsetMinor: -4,
+  });
+  assert.equal(cfg.automaticConservativeWallOffset, 0.01);
+  assert.equal(cfg.automaticConservativeNoWallOffset, -0.03);
 });
 
 test("automatic strategy rules normalize anchors and currency offsets", () => {

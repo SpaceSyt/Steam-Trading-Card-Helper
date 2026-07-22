@@ -26,7 +26,12 @@ import { addToBlacklist } from "./blacklist.js";
 
 import { renderGameRow, setSummary, setSummaryVisibility, updateSummary } from "../ui/render.js";
 
-import { updateAllActionStates, updateSurplusActionState, updateGrindActionState, isSharedActionBusy } from "../ui/action-state.js";
+import {
+  isPriceOverviewProbeBlocked,
+  updateAllActionStates,
+  updateGrindActionState,
+  updateSurplusActionState,
+} from "../ui/action-state.js";
 
 import { scanStatus } from "../status-controllers.js";
 
@@ -53,7 +58,10 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
   export function updateResultColumns() {
     const showDrops = state.cfg.includeDrops
       && state.results.some(info => Number(info.dropsRemaining) > 0);
-    document.getElementById("stch-list")?.classList.toggle("stch-show-drops", showDrops);
+    const list = document.getElementById("stch-list");
+    list?.classList.toggle("stch-show-drops", showDrops);
+    list?.classList.toggle("stch-show-completion", state.cfg.showScanCompletionColumn !== false);
+    list?.classList.toggle("stch-show-sell-set", state.cfg.showScanSellSetColumn !== false);
   }
 
   export function applyScanModeTheme() {
@@ -83,7 +91,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
   }
 
   export async function startScan() {
-    if (isSharedActionBusy()) return;
+    if (isPriceOverviewProbeBlocked(state.scanning)) return;
     if (_stopTimeout) { clearTimeout(_stopTimeout); _stopTimeout = null; }
     state.scanning = true;
     state.stopRequested = false;
@@ -113,7 +121,8 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
       cfg.batchPause,
       state,
       setStatus,
-      log
+      log,
+      { stopPredicate: currentState => Boolean(currentState?.stopRequested) }
     );
 
 

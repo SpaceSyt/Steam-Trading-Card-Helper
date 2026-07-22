@@ -48,6 +48,18 @@ test("aggregates duplicate item orders and preserves exact order ids", async () 
   assert.deepEqual(group.orders.map(order => order.orderId), ["10001", "10002"]);
 });
 
+test("buy-order rows are independent of sell-listing pagination metadata", async () => {
+  const data = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  data.pagesize = 1;
+  data.total_count = 44;
+  const snapshot = parseActiveBuyOrdersResponse(data);
+
+  assert.equal(snapshot.pageSize, 1);
+  assert.equal(snapshot.sellListingCount, 44);
+  assert.equal(snapshot.detectedRowCount, 4);
+  assert.equal(snapshot.orders.length, 3);
+});
+
 test("rejects unsuccessful mylistings responses", () => {
   assert.throws(
     () => parseActiveBuyOrdersResponse({ success: false, results_html: "" }),

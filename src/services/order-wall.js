@@ -108,6 +108,14 @@ export function detectIsolatedHighBuyOrder(input, options = {}) {
     effectiveLevels: levels,
   };
   if (levels.length < 3 || originalBestPriceMinor === null) return emptyResult;
+  const minimumPriceMinor = normalizePositiveInteger(settings.minimumPriceMinor);
+  if (minimumPriceMinor !== null && originalBestPriceMinor <= minimumPriceMinor) {
+    return {
+      ...emptyResult,
+      minimumPriceProtected: true,
+      minimumPriceMinor,
+    };
+  }
 
   const lookaheadLevels = Math.max(
     2,
@@ -321,10 +329,15 @@ export function calculateAutomaticBuyPrice(depth, options = {}) {
     depth?.highestBuyMinor ?? depth?.amtMaxBuyOrder
   );
   if (highestBuyMinor === null) return null;
+  const minimumPriceMinor = normalizePositiveInteger(options.minimumPriceMinor) ?? 1;
 
   const detection = detectBuyOrderWalls(
     depth?.buyLevels ?? depth?.rgCompactBuyOrders ?? [],
-    { ...options.wallOptions, bestPriceMinor: highestBuyMinor }
+    {
+      ...options.wallOptions,
+      bestPriceMinor: highestBuyMinor,
+      minimumPriceMinor,
+    }
   );
   const cluster = detection.nearestCluster;
   const effectiveHighestBuyMinor = detection.bestPriceMinor ?? highestBuyMinor;
@@ -341,7 +354,6 @@ export function calculateAutomaticBuyPrice(depth, options = {}) {
   const adjustmentMinor = Number.isSafeInteger(Number(options.adjustmentMinor))
     ? Number(options.adjustmentMinor)
     : 0;
-  const minimumPriceMinor = normalizePositiveInteger(options.minimumPriceMinor) ?? 1;
   const lowestSellMinor = normalizePositiveInteger(
     depth?.lowestSellMinor ?? depth?.amtMinSellOrder
   );

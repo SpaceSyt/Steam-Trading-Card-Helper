@@ -21,7 +21,12 @@ import { applyItemRecommendation } from "../services/item-recommendation.js";
 
 import { summarizeAssetIds } from "../parsers/inventory.js";
 
-import { isSharedActionBusy, updateAllActionStates, updateGrindActionState } from "../ui/action-state.js";
+import {
+  isPriceOverviewProbeBlocked,
+  isSharedActionBusy,
+  updateAllActionStates,
+  updateGrindActionState,
+} from "../ui/action-state.js";
 
 import { grindStatus } from "../status-controllers.js";
 import { enableTileDragSelection } from "../ui/checkbox-drag.js";
@@ -519,7 +524,7 @@ export { updateGrindActionState };
   }
 
   export async function startGrindScan() {
-    if (isSharedActionBusy()) return;
+    if (isPriceOverviewProbeBlocked(state.surplusScanning || state.grindScanning)) return;
 
     if (location.hostname !== "steamcommunity.com") {
       grindLog("请在 Steam 社区徽章页或库存页使用多余物品处理", "warn");
@@ -549,7 +554,8 @@ export { updateGrindActionState };
       cfg.batchPause,
       state,
       setGrindStatus,
-      grindLog
+      grindLog,
+      { stopPredicate: currentState => Boolean(currentState?.grindStopRequested) }
     );
     state.grindQueue = queue;
     const marketRecords = [];

@@ -13,7 +13,11 @@ import { getBadgeTargetLevel, getBadgeModeLabel, getGameCardsUrl } from "../util
 import { createTextSpan, createCheckboxHit } from "../utils/dom.js";
 import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
 
-import { isSharedActionBusy, updateAllActionStates, updateCraftActionState } from "../ui/action-state.js";
+import {
+  isIndependentProbeBlocked,
+  updateAllActionStates,
+  updateCraftActionState,
+} from "../ui/action-state.js";
 
 import { craftStatus } from "../status-controllers.js";
 
@@ -239,18 +243,7 @@ export { updateCraftActionState };
   }
 
   export function setAllCraftCounts(mode) {
-    if (
-      state.craftScanning
-      || state.craftActionRunning
-      || state.scanning
-      || state.bulkActionRunning
-      || state.orderActionRunning
-      || state.surplusActionRunning
-      || state.surplusScanning
-      || state.grindScanning
-    ) {
-      return;
-    }
+    if (isIndependentProbeBlocked(state.craftScanning || state.craftActionRunning)) return;
     if (mode === "one" && state.cfg.craftMode === "max") return;
 
     state.craftResults.forEach(result => {
@@ -266,7 +259,7 @@ export { updateCraftActionState };
   }
 
   export async function startCraftScan() {
-    if (isSharedActionBusy()) return;
+    if (isIndependentProbeBlocked(state.craftScanning)) return;
 
     const profileUrl = getProfileUrl();
     if (!profileUrl) {
@@ -290,7 +283,8 @@ export { updateCraftActionState };
       cfg.batchPause,
       state,
       null,
-      craftLog
+      craftLog,
+      { stopPredicate: currentState => Boolean(currentState?.craftStopRequested) }
     );
     state.craftQueue = queue;
 
@@ -557,7 +551,7 @@ export { updateCraftActionState };
   }
 
   export async function submitCraftPlan() {
-    if (isSharedActionBusy()) return;
+    if (isIndependentProbeBlocked(state.craftScanning || state.craftActionRunning)) return;
 
     const plan = getCraftPlan();
     if (plan.length === 0) return;

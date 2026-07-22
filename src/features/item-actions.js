@@ -72,7 +72,8 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
       cfg.batchPause,
       state,
       ui.setStatus,
-      ui.log
+      ui.log,
+      { stopPredicate: () => false }
     );
   }
 

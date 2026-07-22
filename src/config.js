@@ -1,6 +1,6 @@
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 25;
+  export const CONFIG_SCHEMA_VERSION = 27;
 
   export const AUTOMATIC_PRICE_STRATEGY_CONFIG = Object.freeze({
     conservative: Object.freeze({
@@ -32,6 +32,8 @@
     sidebarDisabled: false,
     includeDrops: false,
     foilScanMode: false,
+    showScanCompletionColumn: true,
+    showScanSellSetColumn: true,
     orderCacheDays: 3,
     skipCachedOrderResults: false,
     maxBadgePages: 1,
@@ -49,7 +51,6 @@
     priceAdjustment: 0,
     automaticPricingEnabled: false,
     automaticPriceStrategy: "balanced",
-    automaticPriceAdjustment: 0,
     automaticConservativeWallAnchor: "bottom",
     automaticConservativeWallOffset: 0,
     automaticConservativeNoWallOffset: -0.02,
@@ -105,6 +106,8 @@
     merged.automaticPricingEnabled = merged.automaticPricingEnabled === true;
     merged.showAdvancedSettings = merged.showAdvancedSettings === true;
     merged.sidebarDisabled = merged.sidebarDisabled === true;
+    merged.showScanCompletionColumn = merged.showScanCompletionColumn !== false;
+    merged.showScanSellSetColumn = merged.showScanSellSetColumn !== false;
     merged.minimumPriceFallback = minimumPriceFallback;
     merged.surplusOnlyRecommended = legacyOnlyRecommended;
     const blacklistExpiryDays = Number(merged.blacklistExpiryDays);
@@ -117,7 +120,6 @@
       : defaults.automaticPriceStrategy;
     for (const key of [
       "priceAdjustment",
-      "automaticPriceAdjustment",
       ...Object.values(AUTOMATIC_PRICE_STRATEGY_CONFIG).flatMap(rule => [
         rule.wallOffsetKey,
         rule.noWallOffsetKey,
@@ -135,18 +137,36 @@
     return merged;
   }
 
-  export function getActiveOrderPricingProfile(cfg = DEFAULT_CONFIG) {
+  export function createAutomaticPricingDraft(cfg = DEFAULT_CONFIG, strategy = "balanced") {
+    const normalizedStrategy = Object.hasOwn(AUTOMATIC_PRICE_STRATEGY_CONFIG, strategy)
+      ? strategy
+      : DEFAULT_CONFIG.automaticPriceStrategy;
+    return {
+      strategy: normalizedStrategy,
+      ...getAutomaticPriceStrategyRule(cfg, normalizedStrategy),
+    };
+  }
+
+  export function getActiveOrderPricingProfile(cfg = DEFAULT_CONFIG, automaticDraft = null) {
     if (cfg?.automaticPricingEnabled) {
+      const priceSource = ["conservative", "balanced", "aggressive"]
+        .includes(cfg.automaticPriceStrategy)
+        ? cfg.automaticPriceStrategy
+        : DEFAULT_CONFIG.automaticPriceStrategy;
+      const draftRule = automaticDraft?.strategy === priceSource
+        ? automaticDraft
+        : null;
       return {
         automatic: true,
-        priceSource: ["conservative", "balanced", "aggressive"]
-          .includes(cfg.automaticPriceStrategy)
-          ? cfg.automaticPriceStrategy
-          : DEFAULT_CONFIG.automaticPriceStrategy,
-        adjustment: Number.isFinite(Number(cfg.automaticPriceAdjustment))
-          ? Number(cfg.automaticPriceAdjustment)
-          : DEFAULT_CONFIG.automaticPriceAdjustment,
-        strategyRule: getAutomaticPriceStrategyRule(cfg, cfg.automaticPriceStrategy),
+        priceSource,
+        adjustment: 0,
+        strategyRule: draftRule
+          ? {
+            wallAnchor: draftRule.wallAnchor,
+            wallOffsetMinor: draftRule.wallOffsetMinor,
+            noWallOffsetMinor: draftRule.noWallOffsetMinor,
+          }
+          : getAutomaticPriceStrategyRule(cfg, priceSource),
       };
     }
     return {

@@ -14,7 +14,12 @@ import {
 import { formatMoney } from "../utils/format.js";
 import { getMarketMinimumPriceCents, getSessionId } from "../utils/steam.js";
 import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
-import { isSharedActionBusy, updateAllActionStates } from "../ui/action-state.js";
+import {
+  isIndependentProbeBlocked,
+  isPriceOverviewProbeBlocked,
+  isSharedActionBusy,
+  updateAllActionStates,
+} from "../ui/action-state.js";
 import { priceCard } from "../parsers/price.js";
 
 const LOWEST_SELL_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -52,7 +57,7 @@ function getSmartComparison(group) {
   const profile = getActiveOrderPricingProfile({
     ...state.cfg,
     automaticPricingEnabled: true,
-  });
+  }, state.cfg.automaticPricingEnabled ? state.automaticPricingDraft : null);
   const adjustment = Number(profile.adjustment);
   const quote = calculateAutomaticBuyPrice(depth, {
     strategy: profile.priceSource,
@@ -202,7 +207,11 @@ function renderOrderRow(group) {
   row.appendChild(lowest);
 
   const quantity = createElement("div", "stch-active-order-metric");
-  quantity.appendChild(createElement("span", "stch-active-order-value", String(group.remainingQuantity)));
+  quantity.appendChild(createElement(
+    "span",
+    "stch-active-order-value",
+    String(group.remainingQuantity)
+  ));
   row.appendChild(quantity);
 
   const frozen = createElement("div", "stch-active-order-metric");
@@ -279,7 +288,9 @@ export function renderActiveBuyOrders() {
 }
 
 export async function refreshActiveBuyOrders() {
-  if (isSharedActionBusy()) return;
+  if (isIndependentProbeBlocked(
+    state.activeOrdersLoading || state.activeOrderPriceQueryRunning
+  )) return;
   state.activeOrdersLoading = true;
   updateAllActionStates();
   setStatus("正在读取 Steam 市场订购单…");
@@ -287,7 +298,10 @@ export async function refreshActiveBuyOrders() {
     state.cfg.requestInterval,
     state.cfg.batchSize,
     state.cfg.batchPause,
-    state
+    state,
+    null,
+    null,
+    { stopPredicate: () => false }
   );
   try {
     const snapshot = await fetchActiveBuyOrderSnapshot(queue);
@@ -317,13 +331,15 @@ export async function refreshActiveBuyOrders() {
 }
 
 async function querySelectedLowestSellPrices() {
-  if (isSharedActionBusy()) return;
+  if (isPriceOverviewProbeBlocked(
+    state.activeOrdersLoading || state.activeOrderPriceQueryRunning
+  )) return;
   const groups = state.activeBuyOrderGroups.filter(group => (
     state.selectedActiveBuyOrderGroups.has(group.key)
   ));
   if (groups.length === 0) return;
 
-  state.activeOrdersLoading = true;
+  state.activeOrderPriceQueryRunning = true;
   groups.forEach(group => { group.lowestSellState = "loading"; });
   renderActiveBuyOrders();
   updateAllActionStates();
@@ -332,7 +348,9 @@ async function querySelectedLowestSellPrices() {
     state.cfg.batchSize,
     state.cfg.batchPause,
     state,
-    text => setStatus(text || "正在查询最低售价")
+    text => setStatus(text || "正在查询最低售价"),
+    null,
+    { stopPredicate: () => false }
   );
   let found = 0;
   let missing = 0;
@@ -372,7 +390,7 @@ async function querySelectedLowestSellPrices() {
     groups.forEach(group => {
       if (group.lowestSellState === "loading") group.lowestSellState = "failed";
     });
-    state.activeOrdersLoading = false;
+    state.activeOrderPriceQueryRunning = false;
     renderActiveBuyOrders();
     updateAllActionStates();
   }
@@ -488,6 +506,7 @@ export function resetActiveBuyOrdersRuntime() {
   state.activeBuyOrderGroups = [];
   state.selectedActiveBuyOrderGroups = new Set();
   state.activeOrdersLoading = false;
+  state.activeOrderPriceQueryRunning = false;
   state.activeOrdersCancelling = false;
   state.activeOrdersLoadedAt = 0;
   state.activeOrdersGameFilter = "all";

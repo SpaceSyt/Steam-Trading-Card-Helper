@@ -111,6 +111,23 @@ function assertStoppedAndClean(queue) {
   assert.equal(queue.queue.length, 0);
 }
 
+test("a scoped stop predicate ignores another feature's stop flag", async () => {
+  const state = {
+    stopRequested: false,
+    craftStopRequested: true,
+    cfg: {},
+  };
+  const queue = createQueue({
+    state,
+    fetchImpl: async () => response(200),
+    stopPredicate: currentState => currentState.stopRequested,
+  });
+
+  const result = await queue.fetch(ORDINARY_URL);
+  assert.equal(result.status, 200);
+  queue.stop();
+});
+
 test("stop interrupts proactive cooldown without later status writes", async () => {
   const timers = new ManualTimers();
   const statuses = [];

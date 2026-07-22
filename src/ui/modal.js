@@ -1,6 +1,10 @@
 import { state } from "../state.js";
 
-import { saveConfig, DEFAULT_CONFIG } from "../config.js";
+import {
+  createAutomaticPricingDraft,
+  saveConfig,
+  DEFAULT_CONFIG,
+} from "../config.js";
 
 import { ONBOARDING_SEEN_KEY } from "../constants.js";
 
@@ -96,6 +100,23 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     return options.map(([value, label]) => (
       `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`
     )).join("");
+  }
+
+  function getAutomaticPricingDraft(strategy, reset = false) {
+    const normalizedStrategy = ["conservative", "balanced", "aggressive"].includes(strategy)
+      ? strategy
+      : DEFAULT_CONFIG.automaticPriceStrategy;
+    if (
+      reset
+      || !state.automaticPricingDraft
+      || state.automaticPricingDraft.strategy !== normalizedStrategy
+    ) {
+      state.automaticPricingDraft = createAutomaticPricingDraft(
+        state.cfg,
+        normalizedStrategy
+      );
+    }
+    return state.automaticPricingDraft;
   }
 
   function resetCurrencyBoundState() {
@@ -225,9 +246,13 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     const activePriceSource = automaticPricingEnabled
       ? state.cfg.automaticPriceStrategy
       : state.cfg.orderPriceSource;
+    const automaticPricingDraft = automaticPricingEnabled
+      ? getAutomaticPricingDraft(activePriceSource)
+      : null;
     const activePriceAdjustment = automaticPricingEnabled
-      ? state.cfg.automaticPriceAdjustment
+      ? automaticPricingDraft.noWallOffsetMinor / 100
       : state.cfg.priceAdjustment;
+    const activeWallPriceAdjustment = automaticPricingDraft?.wallOffsetMinor / 100 || 0;
     const initialPriceOptions = getOrderPriceOptionsHtml(
       automaticPricingEnabled,
       activePriceSource
@@ -293,7 +318,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             </div>
             <div class="stch-onboarding-step">
               <b>4. 管理已下订购单</b>
-              “已下订购单”页显示当前剩余量；Steam 不提供原始数量、已成交量或创建时间。最低售价只在选择后手动查询并保留 10 分钟，智能价差只使用本次会话已有订单簿缓存。
+              “已下订购单”页显示 Steam 返回的当前剩余量。最低售价只在选择后手动查询并保留 10 分钟，智能价差只使用本次会话已有订单簿缓存。
             </div>
             <div class="stch-onboarding-step">
               <b>5. 批量合成徽章</b>
@@ -315,13 +340,13 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
               <option value="buy5" ${state.cfg.buyMode === "buy5" ? "selected" : ""}>购买五套</option>
             </select></label>
             <label>最大徽章页数 <input id="stch-max-pages" class="stch-input" type="number" min="1" max="20" value="${state.cfg.maxBadgePages}"></label>
-            <label>
-              <input id="stch-include-drops" type="checkbox" ${state.cfg.includeDrops ? "checked" : ""}>
-              包含掉落
-            </label>
             <label class="stch-foil-mode-label ${state.cfg.foilScanMode ? "active" : ""}" id="stch-foil-mode-label">
               <input id="stch-foil-scan-mode" type="checkbox" ${state.cfg.foilScanMode ? "checked" : ""}>
               闪卡模式
+            </label>
+            <label>
+              <input id="stch-include-drops" type="checkbox" ${state.cfg.includeDrops ? "checked" : ""}>
+              包含掉落
             </label>
           </div>
           <div class="stch-toolbar">
@@ -330,7 +355,8 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
                 ${initialPriceOptions}
               </select>
             </label>
-            <label id="stch-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}">买价调整 ${currencySymbol} <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
+            <label id="stch-price-wall-adjustment-label" class="stch-primary-label ${automaticPricingClass}" ${automaticPricingEnabled ? "" : "style=\"display:none\""}>有墙调整 ${currencySymbol} <input id="stch-price-wall-adjustment" class="stch-input" type="number" step="0.01" value="${activeWallPriceAdjustment}" style="width:68px"></label>
+            <label id="stch-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}"><span id="stch-price-adjustment-text">${automaticPricingEnabled ? "无墙调整" : "买价调整"}</span> ${currencySymbol} <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
             <label class="stch-auto-pricing-toggle ${automaticPricingClass}">
               <input id="stch-auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}>
               自动定价模式
@@ -406,7 +432,8 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
                 ${initialPriceOptions}
               </select>
             </label>
-            <label id="stch-order-page-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}">买价调整 ${currencySymbol} <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
+            <label id="stch-order-page-price-wall-adjustment-label" class="stch-primary-label ${automaticPricingClass}" ${automaticPricingEnabled ? "" : "style=\"display:none\""}>有墙调整 ${currencySymbol} <input id="stch-order-page-price-wall-adjustment" class="stch-input" type="number" step="0.01" value="${activeWallPriceAdjustment}" style="width:68px"></label>
+            <label id="stch-order-page-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}"><span id="stch-order-page-price-adjustment-text">${automaticPricingEnabled ? "无墙调整" : "买价调整"}</span> ${currencySymbol} <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
             <label class="stch-auto-pricing-toggle ${automaticPricingClass}">
               <input id="stch-order-page-auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}>
               自动定价模式
@@ -604,6 +631,10 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             </label>
             <label><input id="stch-skip-cached-orders" type="checkbox" ${state.cfg.skipCachedOrderResults ? "checked" : ""}> 扫描时跳过缓存内结果</label>
           </div>
+          <div class="stch-toolbar stch-advanced-setting">
+            <label><input id="stch-show-scan-completion-column" type="checkbox" ${state.cfg.showScanCompletionColumn ? "checked" : ""}> 单套补全显示</label>
+            <label><input id="stch-show-scan-sell-set-column" type="checkbox" ${state.cfg.showScanSellSetColumn ? "checked" : ""}> 单套在售显示</label>
+          </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">游戏/AppID 黑名单</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
@@ -639,7 +670,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.4.1 · 当前币种：${currencyStatus}</span>
+        <span class="stch-label">V2.4.2 · 当前币种：${currencyStatus}</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -693,6 +724,8 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       );
       state.cfg.includeDrops = !!document.getElementById("stch-include-drops")?.checked;
       state.cfg.foilScanMode = !!document.getElementById("stch-foil-scan-mode")?.checked;
+      state.cfg.showScanCompletionColumn = !!document.getElementById("stch-show-scan-completion-column")?.checked;
+      state.cfg.showScanSellSetColumn = !!document.getElementById("stch-show-scan-sell-set-column")?.checked;
       state.cfg.batchSize = readNumberInput(
         "stch-batch-size",
         state.cfg.batchSize ?? DEFAULT_CONFIG.batchSize,
@@ -766,6 +799,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       const craftMaxPages = document.getElementById("stch-craft-max-pages");
       if (craftMaxPages) craftMaxPages.value = String(state.cfg.maxBadgePages);
       updateResultColumns();
+      updateOrderResultColumns();
       applyScanModeTheme();
       if (changedId === "stch-order-cache-days") {
         pruneOrderCache(true);
@@ -807,6 +841,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     const cfgIds = ["stch-threshold", "stch-req-interval",
       "stch-max-pages", "stch-include-drops",
       "stch-foil-scan-mode",
+      "stch-show-scan-completion-column", "stch-show-scan-sell-set-column",
       "stch-batch-size", "stch-batch-pause", "stch-show-no-result-logs", "stch-show-advanced-settings", "stch-sidebar-disabled", "stch-buy-mode",
       "stch-early-price-prediction", "stch-minimum-price-fallback", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
       "stch-skip-cached-orders", "stch-craft-interval",
@@ -835,11 +870,17 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       "stch-price-adjustment",
       "stch-order-page-price-adjustment",
     ];
+    const automaticWallAdjustmentIds = [
+      "stch-price-wall-adjustment",
+      "stch-order-page-price-wall-adjustment",
+    ];
     const automaticPricingIds = [
       "stch-auto-pricing",
       "stch-order-page-auto-pricing",
     ];
     const refreshPricingSummaries = () => {
+      renderResults();
+      renderOrderResults();
       updateSummary();
       updateOrderSummary();
     };
@@ -848,9 +889,11 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       const source = automatic
         ? state.cfg.automaticPriceStrategy || DEFAULT_CONFIG.automaticPriceStrategy
         : state.cfg.orderPriceSource || DEFAULT_CONFIG.orderPriceSource;
+      const draft = automatic ? getAutomaticPricingDraft(source) : null;
       const adjustment = automatic
-        ? state.cfg.automaticPriceAdjustment ?? DEFAULT_CONFIG.automaticPriceAdjustment
+        ? draft.noWallOffsetMinor / 100
         : state.cfg.priceAdjustment ?? DEFAULT_CONFIG.priceAdjustment;
+      const wallAdjustment = draft?.wallOffsetMinor / 100 || 0;
       orderPriceSourceIds.forEach(id => {
         const input = document.getElementById(id);
         if (!input) return;
@@ -862,14 +905,31 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         const input = document.getElementById(id);
         if (input) input.value = String(adjustment);
       });
+      automaticWallAdjustmentIds.forEach(id => {
+        if (id !== exceptId) {
+          const input = document.getElementById(id);
+          if (input) input.value = String(wallAdjustment);
+        }
+        const label = document.getElementById(`${id}-label`);
+        if (label) label.style.display = automatic ? "" : "none";
+      });
+      [
+        "stch-price-adjustment-text",
+        "stch-order-page-price-adjustment-text",
+      ].forEach(id => {
+        const text = document.getElementById(id);
+        if (text) text.textContent = automatic ? "无墙调整" : "买价调整";
+      });
       automaticPricingIds.forEach(id => {
         const input = document.getElementById(id);
         if (input) input.checked = automatic;
       });
       [
         "stch-order-price-label",
+        "stch-price-wall-adjustment-label",
         "stch-price-adjustment-label",
         "stch-order-page-price-label",
+        "stch-order-page-price-wall-adjustment-label",
         "stch-order-page-price-adjustment-label",
       ].forEach(id => {
         document.getElementById(id)?.classList.toggle("stch-auto-pricing-active", automatic);
@@ -882,6 +942,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       document.getElementById(id)?.addEventListener("change", event => {
         if (state.cfg.automaticPricingEnabled) {
           state.cfg.automaticPriceStrategy = event.currentTarget.value;
+          getAutomaticPricingDraft(state.cfg.automaticPriceStrategy, true);
         } else {
           state.cfg.orderPriceSource = event.currentTarget.value;
         }
@@ -894,12 +955,13 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       const parsed = parseFloat(event.currentTarget.value);
       const value = Number.isFinite(parsed) ? parsed : 0;
       if (state.cfg.automaticPricingEnabled) {
-        state.cfg.automaticPriceAdjustment = value;
+        const draft = getAutomaticPricingDraft(state.cfg.automaticPriceStrategy);
+        draft.noWallOffsetMinor = Math.round(value * 100);
       } else {
         state.cfg.priceAdjustment = value;
       }
       renderOrderPricingControls(normalizeSource ? "" : event.currentTarget.id);
-      saveConfig(state.cfg);
+      if (!state.cfg.automaticPricingEnabled) saveConfig(state.cfg);
       refreshPricingSummaries();
     };
     orderPriceAdjustmentIds.forEach(id => {
@@ -907,9 +969,25 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       input?.addEventListener("input", event => syncOrderPriceAdjustment(event, false));
       input?.addEventListener("change", event => syncOrderPriceAdjustment(event, true));
     });
+    const syncAutomaticWallAdjustment = (event, normalizeSource = false) => {
+      const parsed = parseFloat(event.currentTarget.value);
+      const value = Number.isFinite(parsed) ? parsed : 0;
+      const draft = getAutomaticPricingDraft(state.cfg.automaticPriceStrategy);
+      draft.wallOffsetMinor = Math.round(value * 100);
+      renderOrderPricingControls(normalizeSource ? "" : event.currentTarget.id);
+      refreshPricingSummaries();
+    };
+    automaticWallAdjustmentIds.forEach(id => {
+      const input = document.getElementById(id);
+      input?.addEventListener("input", event => syncAutomaticWallAdjustment(event, false));
+      input?.addEventListener("change", event => syncAutomaticWallAdjustment(event, true));
+    });
     automaticPricingIds.forEach(id => {
       document.getElementById(id)?.addEventListener("change", event => {
         state.cfg.automaticPricingEnabled = event.currentTarget.checked;
+        if (state.cfg.automaticPricingEnabled) {
+          getAutomaticPricingDraft(state.cfg.automaticPriceStrategy, true);
+        }
         renderOrderPricingControls();
         saveConfig(state.cfg);
         refreshPricingSummaries();

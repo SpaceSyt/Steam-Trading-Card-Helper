@@ -3,7 +3,7 @@ import { state } from "../state.js";
 import { priceCard } from "../parsers/price.js";
 import { RequestQueue } from "../request/queue.js";
 import { fetchHighestBuyPrice } from "./orders.js";
-import { isSharedActionBusy, updateAllActionStates } from "../ui/action-state.js";
+import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action-state.js";
 
 import { formatMoney } from "../utils/format.js";
 import {
@@ -495,7 +495,7 @@ function mergeMetadata(previous, next) {
 
 async function refreshAllPrices() {
   if (state.historyRefreshing) return;
-  if (isSharedActionBusy()) {
+  if (isPriceOverviewProbeBlocked(state.historyRefreshing)) {
     setHistoryStatus("请先停止当前操作，再刷新价格", "warn");
     return;
   }
@@ -519,7 +519,9 @@ async function refreshAllPrices() {
     state.cfg.batchSize,
     state.cfg.batchPause,
     state,
-    text => setHistoryStatus(text || "正在刷新全部价格")
+    text => setHistoryStatus(text || "正在刷新全部价格"),
+    null,
+    { stopPredicate: () => false }
   );
   currentRefreshQueue = queue;
   const observations = [];

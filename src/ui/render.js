@@ -82,7 +82,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
       <span class="stch-level stch-sortable" data-sort="level">等级<span class="stch-sort-arrow">${sortArrow("level", source)}</span></span>
       <span class="stch-cards stch-sortable" data-sort="cards">卡牌<span class="stch-sort-arrow">${sortArrow("cards", source)}</span></span>
       <span class="stch-cost stch-sortable" data-sort="cost">单套补全<span class="stch-sort-arrow">${sortArrow("cost", source)}</span></span>
-      <span class="stch-full stch-sortable" data-sort="full">单套最低<span class="stch-sort-arrow">${sortArrow("full", source)}</span></span>
+      <span class="stch-full stch-sortable" data-sort="full">单套在售<span class="stch-sort-arrow">${sortArrow("full", source)}</span></span>
       <span class="stch-lv5 stch-sortable" data-sort="lv5">满级估算 <span class="stch-sort-arrow">${sortArrow("lv5", source)}</span><span style="cursor:help;color:#8f98a0;font-size:11px;" title="绿色:近期成交>1，参考性较强&#10;黄色:近期成交=1，参考性不强&#10;红色:近期成交=0，参考性较弱&#10;灰色:信息不全；缺价时显示 -">?</span></span>
       <span class="stch-drops stch-sortable" data-sort="drops">掉落<span class="stch-sort-arrow">${sortArrow("drops", source)}</span></span>
       ${cacheHeader}
@@ -254,6 +254,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     const displayedLevel = info.hasIncompletePricing ? "-" : formatMoney(info.level5CostCents);
     row.appendChild(createTextSpan("stch-cost", displayedCompletion));
     row.appendChild(createTextSpan("stch-full", displayedFull));
+    // 单套订购暂不显示：priceoverview 不含最高买价，不能据此计算固定的最高订购价之和。
     const lv5 = createTextSpan("stch-lv5", displayedLevel);
     lv5.style.cssText = lv5Color;
     lv5.title = lv5Title;
@@ -334,7 +335,10 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
   }
 
   export function getRealtimePricingTotals(info) {
-    const profile = getActiveOrderPricingProfile(state.cfg);
+    const profile = getActiveOrderPricingProfile(
+      state.cfg,
+      state.automaticPricingDraft
+    );
     const adjustmentCents = Math.round((Number(profile.adjustment) || 0) * 100);
     const minimumCents = getMarketMinimumPriceCents();
     const currencyId = Number(state.currencyContext?.currencyId || state.cfg.currencyId) || 23;
@@ -366,9 +370,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
         }
         const highestBuy = getHighestBuy(card);
         if (highestBuy == null) return null;
-        const strategyOffset = profile.priceSource === "conservative"
-          ? -1
-          : profile.priceSource === "aggressive" ? 1 : 0;
+        const strategyOffset = Number(profile.strategyRule?.noWallOffsetMinor) || 0;
         return Math.max(minimumCents, highestBuy + strategyOffset + adjustmentCents);
       }
       : null;
@@ -439,5 +441,8 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
 
   export function updateOrderResultColumns() {
     const showDrops = state.orderResults.some(info => Number(info.dropsRemaining) > 0);
-    document.getElementById("stch-order-list")?.classList.toggle("stch-show-drops", showDrops);
+    const list = document.getElementById("stch-order-list");
+    list?.classList.toggle("stch-show-drops", showDrops);
+    list?.classList.toggle("stch-show-completion", state.cfg.showScanCompletionColumn !== false);
+    list?.classList.toggle("stch-show-sell-set", state.cfg.showScanSellSetColumn !== false);
   }

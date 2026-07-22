@@ -66,7 +66,10 @@ import { priceCard } from "../parsers/price.js";
       state.cfg.requestInterval,
       state.cfg.batchSize,
       state.cfg.batchPause,
-      state
+      state,
+      null,
+      null,
+      { stopPredicate: () => false }
     );
     const requestQueue = queue || ownedQueue;
     try {

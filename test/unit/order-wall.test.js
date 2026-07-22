@@ -115,6 +115,30 @@ test("labeled current samples separate isolated highs from normal pre-wall order
   assert.equal(anarchist.classification, "normal");
 });
 
+test("the active currency minimum is never removed as an isolated high price", () => {
+  const levels = [
+    21, 1, 19, 4, 18, 5, 17, 6, 16, 20,
+  ];
+  assert.equal(detectIsolatedHighBuyOrder(levels).classification, "isolated-high");
+
+  const protectedResult = detectIsolatedHighBuyOrder(levels, {
+    minimumPriceMinor: 21,
+  });
+  assert.equal(protectedResult.classification, "normal");
+  assert.equal(protectedResult.minimumPriceProtected, true);
+
+  const quote = calculateAutomaticBuyPrice({
+    highestBuyMinor: 21,
+    lowestSellMinor: 30,
+    buyLevels: normalizeBuyOrderLevels(levels),
+  }, {
+    strategy: "balanced",
+    minimumPriceMinor: 21,
+  });
+  assert.equal(quote.detection.isolation.classification, "normal");
+  assert.equal(quote.finalPriceMinor, 21);
+});
+
 test("wall detection uses only preceding orders and does not require a post-wall drop", () => {
   const tailWall = detectBuyOrderWalls([
     100, 2,

@@ -12,7 +12,7 @@ import { formatMoney } from "../utils/format.js";
 
 import { renderResults, renderOrderResults, updateSummary } from "../ui/render.js";
 
-import { updateAllActionStates, isSharedActionBusy } from "../ui/action-state.js";
+import { isPriceOverviewGroupBusy, updateAllActionStates } from "../ui/action-state.js";
 
 import { scanStatus, orderStatus, orderLog } from "../status-controllers.js";
 
@@ -23,14 +23,14 @@ const { setStatus: setOrderStatus } = orderStatus;
   export async function recalculateResultSelection(source = "scan") {
     const isOrder = source === "order";
     const selected = isOrder ? getSelectedOrderResults() : getSelectedResults();
-    if (selected.length === 0 || isSharedActionBusy()) return;
+    if (selected.length === 0 || isPriceOverviewGroupBusy()) return;
 
     const statusFn = isOrder ? setOrderStatus : setStatus;
     const logFn = isOrder ? orderLog : log;
     const selectedSet = isOrder ? state.selectedOrderResults : state.selectedResults;
     const targetResults = isOrder ? state.orderResults : state.results;
 
-    state.bulkActionRunning = true;
+    state.recalculationRunning = true;
     updateAllActionStates();
     const cfg = state.cfg;
     const queue = new RequestQueue(
@@ -39,7 +39,8 @@ const { setStatus: setOrderStatus } = orderStatus;
       cfg.batchPause,
       state,
       statusFn,
-      logFn
+      logFn,
+      { stopPredicate: () => false }
     );
 
     let refreshed = 0;
@@ -87,7 +88,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       }
     } finally {
       queue.stop();
-      state.bulkActionRunning = false;
+      state.recalculationRunning = false;
       statusFn(null);
       if (isOrder) {
         saveOrderCache();
