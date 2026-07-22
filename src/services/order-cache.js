@@ -57,18 +57,37 @@ export function normalizeOrderResult(info, cachedAt = Date.now(), currencyId = n
   );
   copy.cards = Array.isArray(copy.cards) ? copy.cards : [];
   copy.cardPrices = Array.isArray(copy.cardPrices) ? copy.cardPrices : [];
-  copy.cheapestSetCostCents = Number(copy.cheapestSetCostCents) || 0;
-  copy.fullSetCostCents = Number(copy.fullSetCostCents) || 0;
-  copy.level5CostCents = Number(copy.level5CostCents) || 0;
+  copy.hasIncompletePricing = copy.hasIncompletePricing === true;
+  copy.cheapestSetCostCents = copy.hasIncompletePricing
+    ? null
+    : Number(copy.cheapestSetCostCents) || 0;
+  copy.fullSetCostCents = copy.hasIncompletePricing
+    ? null
+    : Number(copy.fullSetCostCents) || 0;
+  copy.level5CostCents = copy.hasIncompletePricing
+    ? null
+    : Number(copy.level5CostCents) || 0;
   const currencyContext = getCurrencyContextById(copy.currencyId);
   copy.currencyCode = copy.currencyCode || currencyContext.code;
-  copy.cheapestSetFormatted = formatMinorAmount(copy.cheapestSetCostCents, currencyContext);
-  copy.fullSetFormatted = formatMinorAmount(copy.fullSetCostCents, currencyContext);
-  copy.level5Formatted = formatMinorAmount(copy.level5CostCents, currencyContext);
+  copy.cheapestSetFormatted = copy.hasIncompletePricing
+    ? "-"
+    : formatMinorAmount(copy.cheapestSetCostCents, currencyContext);
+  copy.fullSetFormatted = copy.hasIncompletePricing
+    ? "-"
+    : formatMinorAmount(copy.fullSetCostCents, currencyContext);
+  copy.level5Formatted = copy.hasIncompletePricing
+    ? "-"
+    : formatMinorAmount(copy.level5CostCents, currencyContext);
   // Keep the v2.0 formatted aliases readable while callers migrate to generic money formatting.
-  copy.cheapestSetCNY = copy.cheapestSetCNY || formatCNY(copy.cheapestSetCostCents);
-  copy.fullSetCNY = copy.fullSetCNY || formatCNY(copy.fullSetCostCents);
-  copy.level5CNY = copy.level5CNY || formatCNY(copy.level5CostCents);
+  copy.cheapestSetCNY = copy.hasIncompletePricing
+    ? "-"
+    : copy.cheapestSetCNY || formatCNY(copy.cheapestSetCostCents);
+  copy.fullSetCNY = copy.hasIncompletePricing
+    ? "-"
+    : copy.fullSetCNY || formatCNY(copy.fullSetCostCents);
+  copy.level5CNY = copy.hasIncompletePricing
+    ? "-"
+    : copy.level5CNY || formatCNY(copy.level5CostCents);
   normalizedOrderResults.add(copy);
   return copy.appid ? copy : null;
 }

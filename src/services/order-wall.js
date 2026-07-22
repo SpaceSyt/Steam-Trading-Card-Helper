@@ -275,6 +275,39 @@ export const AUTOMATIC_BUY_PRICE_STRATEGIES = Object.freeze([
   "aggressive",
 ]);
 
+export const DEFAULT_AUTOMATIC_BUY_PRICE_RULES = Object.freeze({
+  conservative: Object.freeze({
+    wallAnchor: "bottom",
+    wallOffsetMinor: 0,
+    noWallOffsetMinor: -2,
+  }),
+  balanced: Object.freeze({
+    wallAnchor: "top",
+    wallOffsetMinor: 0,
+    noWallOffsetMinor: -1,
+  }),
+  aggressive: Object.freeze({
+    wallAnchor: "top",
+    wallOffsetMinor: 1,
+    noWallOffsetMinor: 1,
+  }),
+});
+
+function normalizeStrategyRule(strategy, input) {
+  const fallback = DEFAULT_AUTOMATIC_BUY_PRICE_RULES[strategy];
+  const rule = input && typeof input === "object" ? input : {};
+  const integerOrFallback = (value, fallbackValue) => (
+    Number.isSafeInteger(Number(value)) ? Number(value) : fallbackValue
+  );
+  return {
+    wallAnchor: ["top", "bottom"].includes(rule.wallAnchor)
+      ? rule.wallAnchor
+      : fallback.wallAnchor,
+    wallOffsetMinor: integerOrFallback(rule.wallOffsetMinor, fallback.wallOffsetMinor),
+    noWallOffsetMinor: integerOrFallback(rule.noWallOffsetMinor, fallback.noWallOffsetMinor),
+  };
+}
+
 /**
  * Choose an automatic buy-order price from validated buy depth.
  * The adjustment is applied after the strategy, then Steam's minimum and the
@@ -295,18 +328,15 @@ export function calculateAutomaticBuyPrice(depth, options = {}) {
   );
   const cluster = detection.nearestCluster;
   const effectiveHighestBuyMinor = detection.bestPriceMinor ?? highestBuyMinor;
-  let strategyBasePriceMinor;
-  if (strategy === "aggressive") {
-    strategyBasePriceMinor = effectiveHighestBuyMinor + 1;
-  } else if (strategy === "conservative") {
-    strategyBasePriceMinor = cluster
+  const strategyRule = normalizeStrategyRule(strategy, options.strategyRule);
+  const wallReferencePriceMinor = cluster
+    ? strategyRule.wallAnchor === "bottom"
       ? cluster.bottomPriceMinor
-      : effectiveHighestBuyMinor - 1;
-  } else {
-    strategyBasePriceMinor = cluster
-      ? cluster.topPriceMinor
-      : effectiveHighestBuyMinor;
-  }
+      : cluster.topPriceMinor
+    : null;
+  const strategyBasePriceMinor = cluster
+    ? wallReferencePriceMinor + strategyRule.wallOffsetMinor
+    : effectiveHighestBuyMinor + strategyRule.noWallOffsetMinor;
 
   const adjustmentMinor = Number.isSafeInteger(Number(options.adjustmentMinor))
     ? Number(options.adjustmentMinor)
@@ -325,9 +355,11 @@ export function calculateAutomaticBuyPrice(depth, options = {}) {
 
   return {
     strategy,
+    strategyRule,
     classification: detection.classification,
     highestBuyMinor,
     effectiveHighestBuyMinor,
+    wallReferencePriceMinor,
     strategyBasePriceMinor,
     adjustmentMinor,
     adjustedPriceMinor,

@@ -6,7 +6,7 @@ import { getGameCardsUrl, getBadgeTargetLevel } from "../utils/badge.js";
 
 import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
-import { priceCard, estimateMissingLevel5Cost } from "../parsers/price.js";
+import { priceCard } from "../parsers/price.js";
 
 import { persistMarketObservations } from "./market-observations.js";
 
@@ -61,8 +61,9 @@ import { persistMarketObservations } from "./market-observations.js";
         const pk = await priceCard(card.marketHashName, queue, { persistMarketCache: false });
         if (pk?.record) marketRecords.push(pk.record);
         if (!pk) {
+          card.priceSource = "failed";
+          card.currencyId = info.currencyId;
           failedPriceCount++;
-          info.hasEstimated = true;
           continue;
         }
         if (pk.noPriceData) {
@@ -70,7 +71,6 @@ import { persistMarketObservations } from "./market-observations.js";
           card.currencyId = pk.currencyId;
           card.marketRecord = pk.record;
           noPriceCards.push(card);
-          info.hasEstimated = true;
           continue;
         }
 
@@ -109,26 +109,12 @@ import { persistMarketObservations } from "./market-observations.js";
       persistMarketObservations(marketRecords);
     }
 
-    if (info.cardPrices.length === 0) {
-      throw new Error("Steam 未返回任何可用价格");
-    }
-
-    if (noPriceCards.length / info.totalInSet >= 0.5) {
-      const formulaEstimate = estimateMissingLevel5Cost(noPriceCards, info.cardPrices, setsToTarget);
-      if (formulaEstimate) {
-        level5CostCents += formulaEstimate.estimatedCostCents;
-        info.hasEstimated = true;
-        info.hasFormulaEstimate = true;
-        info.formulaEstimatedCards = noPriceCards.length;
-        info.formulaEstimateUnitCents = formulaEstimate.estimatedUnitCents;
-      }
-    }
-
     info.noPriceDataCount = noPriceCards.length;
     info.failedPriceCount = failedPriceCount;
-    info.cheapestSetCostCents = setCostCents;
-    info.fullSetCostCents = fullSetCostCents;
-    info.level5CostCents = level5CostCents;
+    info.hasIncompletePricing = noPriceCards.length + failedPriceCount > 0;
+    info.cheapestSetCostCents = info.hasIncompletePricing ? null : setCostCents;
+    info.fullSetCostCents = info.hasIncompletePricing ? null : fullSetCostCents;
+    info.level5CostCents = info.hasIncompletePricing ? null : level5CostCents;
     info.minVolume = minVolume === Infinity ? 0 : minVolume;
     return info;
   }

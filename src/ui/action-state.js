@@ -79,8 +79,8 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
     if (craftMaxPages) craftMaxPages.disabled = craftBusy || otherBusy;
   }
 
-  export function updateSurplusActionState() {
-    const surplusBusy = state.surplusScanning;
+  function updateSurplusDetectionControls() {
+    const detectionBusy = state.surplusScanning || state.grindScanning;
     const otherBusy = state.scanning
       || state.bulkActionRunning
       || state.orderActionRunning
@@ -89,51 +89,28 @@ import { getExpiredOrderCacheCount } from "../services/order-cache.js";
       || state.historyRefreshing
       || state.craftScanning
       || state.craftActionRunning
-      || state.surplusActionRunning
-      || state.grindScanning;
+      || state.surplusActionRunning;
     document.getElementById("stch-surplus-scan-btn")?.classList.toggle(
       "disabled",
-      surplusBusy || otherBusy
+      detectionBusy || otherBusy
     );
     document.getElementById("stch-surplus-stop-btn")?.classList.toggle(
       "disabled",
-      !surplusBusy
+      !detectionBusy
     );
-    const onlyMaxed = document.getElementById("stch-surplus-only-maxed");
-    if (onlyMaxed) onlyMaxed.disabled = surplusBusy || otherBusy;
-    const compareGems = document.getElementById("stch-surplus-compare-gems");
-    if (compareGems) compareGems.disabled = surplusBusy || otherBusy;
-    const onlyTradable = document.getElementById("stch-surplus-only-tradable");
-    if (onlyTradable) onlyTradable.disabled = surplusBusy || otherBusy;
-    const itemMode = document.getElementById("stch-surplus-item-mode");
-    if (itemMode) itemMode.disabled = surplusBusy || otherBusy;
+    ["stch-surplus-only-tradable", "stch-surplus-only-recommended", "stch-grind-include-surplus-cards", "stch-grind-reserve-copies", "stch-grind-include-points-shop", "stch-surplus-item-mode"].forEach(id => {
+      const element = document.getElementById(id);
+      if (element) element.disabled = detectionBusy || otherBusy;
+    });
+  }
+
+  export function updateSurplusActionState() {
+    updateSurplusDetectionControls();
     updateSurplusProcessingActionState();
   }
 
   export function updateGrindActionState() {
-    const grindBusy = state.grindScanning;
-    const otherBusy = state.scanning
-      || state.bulkActionRunning
-      || state.orderActionRunning
-      || state.activeOrdersLoading
-      || state.activeOrdersCancelling
-      || state.historyRefreshing
-      || state.craftScanning
-      || state.craftActionRunning
-      || state.surplusActionRunning
-      || state.surplusScanning;
-    document.getElementById("stch-grind-scan-btn")?.classList.toggle(
-      "disabled",
-      grindBusy || otherBusy
-    );
-    document.getElementById("stch-grind-stop-btn")?.classList.toggle(
-      "disabled",
-      !grindBusy
-    );
-    ["stch-grind-only-recommended", "stch-grind-include-surplus-cards", "stch-grind-reserve-copies", "stch-grind-include-points-shop", "stch-surplus-item-mode"].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.disabled = grindBusy || otherBusy;
-    });
+    updateSurplusDetectionControls();
     updateSurplusProcessingActionState();
   }
 

@@ -12,7 +12,7 @@ import { scanBadgePages } from "../services/badge-pages.js";
 
 import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
-import { priceCard, predictFullSetLowerBound, estimateMissingLevel5Cost } from "../parsers/price.js";
+import { priceCard, predictFullSetLowerBound } from "../parsers/price.js";
 
 import { formatMoney } from "../utils/format.js";
 
@@ -289,8 +289,9 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
             if (pk?.record) marketRecords.push(pk.record);
             if (!pk) {
               log(`  ⚠ 卡牌 "${card.name}" (market: ${card.marketHashName}) 查价失败, 跳过此卡`, "warn");
+              card.priceSource = "failed";
+              card.currencyId = info.currencyId;
               failedPriceCount++;
-              info.hasEstimated = true;
               continue;
             }
             if (pk.noPriceData) {
@@ -299,7 +300,6 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               card.currencyId = pk.currencyId;
               card.marketRecord = pk.record;
               noPriceCards.push(card);
-              info.hasEstimated = true;
               continue;
             }
 
@@ -408,42 +408,16 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
             continue;
           }
 
-          if (info.cardPrices.length === 0) {
-            log(`  → Steam 未返回任何可用价格，无法估算，跳过`, "warn");
-            skipped++;
-            continue;
-          }
-
-          const noPriceRatio = noPriceCards.length / info.totalInSet;
-          if (noPriceCards.length > 0 && noPriceRatio >= 0.5) {
-            const formulaEstimate = estimateMissingLevel5Cost(
-              noPriceCards,
-              info.cardPrices,
-              setsToTarget
-            );
-            if (formulaEstimate) {
-              level5CostCents += formulaEstimate.estimatedCostCents;
-              info.hasEstimated = true;
-              info.hasFormulaEstimate = true;
-              info.formulaEstimatedCards = noPriceCards.length;
-              info.formulaEstimateUnitCents = formulaEstimate.estimatedUnitCents;
-              log(
-                `  → ${noPriceCards.length}/${info.totalInSet}张无价格，` +
-                `按已知卡牌几何均价 ${formatMoney(formulaEstimate.estimatedUnitCents)} ` +
-                `补充满级估算 ${formatMoney(formulaEstimate.estimatedCostCents)}`,
-                "warn"
-              );
-            }
-          }
           info.noPriceDataCount = noPriceCards.length;
           info.failedPriceCount = failedPriceCount;
+          info.hasIncompletePricing = noPriceCards.length + failedPriceCount > 0;
 
-          info.cheapestSetCostCents = setCostCents;
-          info.fullSetCostCents = fullSetCostCents;
-          info.level5CostCents = level5CostCents;
+          info.cheapestSetCostCents = info.hasIncompletePricing ? null : setCostCents;
+          info.fullSetCostCents = info.hasIncompletePricing ? null : fullSetCostCents;
+          info.level5CostCents = info.hasIncompletePricing ? null : level5CostCents;
           info.minVolume = minVolume === Infinity ? 0 : minVolume;
           const autoBlCents = Math.round((state.cfg.autoBlackThreshold || 0) * 100);
-          if (state.cfg.autoBlackEnabled && autoBlCents > 0 && fullSetCostCents > autoBlCents) {
+          if (!info.hasIncompletePricing && state.cfg.autoBlackEnabled && autoBlCents > 0 && fullSetCostCents > autoBlCents) {
             addToBlacklist(b.appid, info.gameName || b.gameName || "", 1, 0, {
               priceMinor: fullSetCostCents,
               currencyId: info.cardPrices[0]?.currencyId || state.cfg.currencyId,
@@ -465,13 +439,21 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
 
           state.results.push(info);
           renderGameRow(info);
-          log(
-            `  ✓ [${b.appid}] ${info.gameName}: ` +
-            `补全 ${formatMoney(setCostCents)} | ` +
-            `全套 ${formatMoney(fullSetCostCents)} | ` +
-            `满级 ${formatMoney(level5CostCents)}`,
-            "ok"
-          );
+          if (info.hasIncompletePricing) {
+            log(
+              `  ✓ [${b.appid}] ${info.gameName}: 已保留条目，` +
+              `${noPriceCards.length + failedPriceCount}/${info.totalInSet} 张缺少价格；补全 - | 全套 - | 满级 -`,
+              "warn"
+            );
+          } else {
+            log(
+              `  ✓ [${b.appid}] ${info.gameName}: ` +
+              `补全 ${formatMoney(setCostCents)} | ` +
+              `全套 ${formatMoney(fullSetCostCents)} | ` +
+              `满级 ${formatMoney(level5CostCents)}`,
+              "ok"
+            );
+          }
 
         } catch (e) {
           log(`[${b.appid}] ${b.gameName || ""}: 出错 ${e?.error || e?.status || JSON.stringify(e)}`, "err");

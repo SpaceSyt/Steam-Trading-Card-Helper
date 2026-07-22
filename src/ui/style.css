@@ -269,6 +269,35 @@
     #stch-tab-settings:not(.stch-show-advanced) .stch-advanced-setting {
       display: none !important;
     }
+    .stch-auto-strategy-settings {
+      display: grid;
+      gap: 7px;
+    }
+    .stch-auto-strategy-row {
+      display: grid;
+      grid-template-columns: 48px auto auto auto;
+      align-items: center;
+      justify-content: start;
+      gap: 10px;
+    }
+    .stch-auto-strategy-row label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .stch-auto-strategy-name {
+      color: #fff;
+      font-weight: bold;
+    }
+    .stch-auto-wall-anchor { width: 104px; }
+    .stch-auto-offset { width: 64px; }
+    .stch-auto-strategy-hint {
+      color: #697887;
+      font-size: 12px;
+      line-height: 1.45;
+      margin-top: 2px;
+    }
     .stch-input {
       background: #0e1621;
       color: #fff;
@@ -631,8 +660,7 @@
       text-shadow: 0 1px 3px #000;
       pointer-events: none;
     }
-    .stch-inv-tile.stch-volume-zero::after,
-    .stch-inv-tile.stch-gem-better::after {
+    .stch-inv-tile.stch-volume-zero::after {
       content: "";
       position: absolute;
       inset: 0;
@@ -642,10 +670,6 @@
     .stch-inv-tile.stch-volume-zero::after {
       background: rgba(217, 166, 24, 0.28);
       box-shadow: inset 0 0 0 2px rgba(255, 201, 2, 0.68);
-    }
-    .stch-inv-tile.stch-gem-better::after {
-      background: rgba(60, 153, 72, 0.30);
-      box-shadow: inset 0 0 0 2px rgba(117, 176, 34, 0.76);
     }
     .stch-inv-tile img {
       width: 100%;

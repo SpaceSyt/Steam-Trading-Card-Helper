@@ -96,6 +96,23 @@ test("replacing a USD partition preserves the CNY order results", () => {
   assert.deepEqual(cnyEnvelope, cnySnapshot);
 });
 
+test("incomplete prices remain unavailable after order-cache normalization", () => {
+  const normalized = makeOrderResult("456", {
+    hasIncompletePricing: true,
+    cheapestSetCostCents: null,
+    fullSetCostCents: 50,
+    level5CostCents: 100,
+  });
+
+  assert.equal(normalized.hasIncompletePricing, true);
+  assert.equal(normalized.cheapestSetCostCents, null);
+  assert.equal(normalized.fullSetCostCents, null);
+  assert.equal(normalized.level5CostCents, null);
+  assert.equal(normalized.cheapestSetFormatted, "-");
+  assert.equal(normalized.fullSetFormatted, "-");
+  assert.equal(normalized.level5Formatted, "-");
+});
+
 test("corrupt cache is diagnosed without treating it as a migration", () => {
   const raw = "{not-json";
   const decoded = decodeOrderCache(raw);

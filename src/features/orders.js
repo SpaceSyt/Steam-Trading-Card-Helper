@@ -102,10 +102,10 @@ const { setStatus: setOrderStatus } = orderStatus;
       if (input) input.value = "";
       orderLog(
         `[${appid}] ${info.gameName || ""}: 已加入订购缓存，` +
-        `补全 ${formatMoney(info.cheapestSetCostCents)} | ` +
-        `全套 ${formatMoney(info.fullSetCostCents)} | ` +
-        `满级 ${formatMoney(info.level5CostCents)}`,
-        "ok"
+        `补全 ${info.hasIncompletePricing ? "-" : formatMoney(info.cheapestSetCostCents)} | ` +
+        `全套 ${info.hasIncompletePricing ? "-" : formatMoney(info.fullSetCostCents)} | ` +
+        `满级 ${info.hasIncompletePricing ? "-" : formatMoney(info.level5CostCents)}`,
+        info.hasIncompletePricing ? "warn" : "ok"
       );
     } catch (error) {
       orderLog(`[${appid}] 加入失败: ${error?.message || error}`, "err");
@@ -461,7 +461,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       clamped: 0,
       minimumClamped: 0,
       sellGuardClamped: 0,
-      noBuyMinimumFallback: 0,
+      minimumPriceFallback: 0,
     };
     const candidates = [];
     const marketRecords = [];
@@ -505,7 +505,8 @@ const { setStatus: setOrderStatus } = orderStatus;
       let basePriceCents = null;
       let unitPriceCents = null;
       let automaticQuote = null;
-      let noBuyMinimumFallback = false;
+      let pricingError = null;
+      let minimumFallbackReason = null;
       if (pricingProfile.automatic) {
         statusFn(`自动定价 ${index + 1}/${candidates.length}: ${card.name}`);
         try {
@@ -514,26 +515,14 @@ const { setStatus: setOrderStatus } = orderStatus;
           });
           automaticQuote = calculateAutomaticBuyPrice(depth, {
             strategy: priceSource,
+            strategyRule: pricingProfile.strategyRule,
             adjustmentMinor: adjustmentCents,
             minimumPriceMinor: minimumCents,
           });
           basePriceCents = automaticQuote?.strategyBasePriceMinor ?? null;
           unitPriceCents = automaticQuote?.finalPriceMinor ?? null;
         } catch (error) {
-          if (state.cfg.noBuyOrderMinimumFallback && isNoBuyOrdersError(error)) {
-            basePriceCents = minimumCents;
-            noBuyMinimumFallback = true;
-            skipped.noBuyMinimumFallback++;
-            logFn(
-              `  ${info.gameName} · ${card.name}: 当前无买单，使用市场最低价 ${formatMoney(minimumCents)}`,
-              "info"
-            );
-          } else {
-            logFn(
-              `  ${info.gameName} · ${card.name}: ${error?.message || error}，已跳过`,
-              "warn"
-            );
-          }
+          pricingError = error;
         }
       } else if (
         priceSource === "lowest"
@@ -556,25 +545,37 @@ const { setStatus: setOrderStatus } = orderStatus;
             onRecord: record => marketRecords.push(record),
           });
         } catch (error) {
-          if (state.cfg.noBuyOrderMinimumFallback && isNoBuyOrdersError(error)) {
-            basePriceCents = minimumCents;
-            noBuyMinimumFallback = true;
-            skipped.noBuyMinimumFallback++;
-            logFn(
-              `  ${info.gameName} · ${card.name}: 当前无买单，使用市场最低价 ${formatMoney(minimumCents)}`,
-              "info"
-            );
-          } else {
-            logFn(
-              `  ${info.gameName} · ${card.name}: ${error?.message || error}，已跳过`,
-              "warn"
-            );
-          }
+          pricingError = error;
         }
       }
       if (basePriceCents == null) {
-        skipped.missingPrice++;
-        continue;
+        if (state.cfg.minimumPriceFallback) {
+          basePriceCents = minimumCents;
+          minimumFallbackReason = isNoBuyOrdersError(pricingError)
+            ? "no-buy-orders"
+            : pricingError
+              ? "pricing-request-failed"
+              : "missing-price";
+          skipped.minimumPriceFallback++;
+          const reasonLabel = minimumFallbackReason === "no-buy-orders"
+            ? "当前无买单"
+            : minimumFallbackReason === "pricing-request-failed"
+              ? `查价失败（${pricingError?.message || pricingError}）`
+              : "缺少所选价格";
+          logFn(
+            `  ${info.gameName} · ${card.name}: ${reasonLabel}，使用市场最低价 ${formatMoney(minimumCents)}`,
+            "warn"
+          );
+        } else {
+          if (pricingError) {
+            logFn(
+              `  ${info.gameName} · ${card.name}: ${pricingError?.message || pricingError}，已跳过`,
+              "warn"
+            );
+          }
+          skipped.missingPrice++;
+          continue;
+        }
       }
 
       if (unitPriceCents == null) {
@@ -605,13 +606,14 @@ const { setStatus: setOrderStatus } = orderStatus;
         basePriceCents,
         unitPriceCents,
         automaticPricing: pricingProfile.automatic,
-        wallClassification: noBuyMinimumFallback
-          ? "no-buy-orders"
+        wallClassification: minimumFallbackReason
+          ? minimumFallbackReason
           : automaticQuote?.classification || null,
         isolatedHighPrice: automaticQuote?.detection?.isolation?.classification === "isolated-high",
         originalHighestBuyCents: automaticQuote?.highestBuyMinor ?? null,
         effectiveHighestBuyCents: automaticQuote?.effectiveHighestBuyMinor ?? null,
-        noBuyMinimumFallback,
+        minimumPriceFallback: minimumFallbackReason !== null,
+        minimumFallbackReason,
         totalPriceCents: unitPriceCents * quantity,
       });
     }
@@ -671,8 +673,12 @@ const { setStatus: setOrderStatus } = orderStatus;
         row.title = `${item.gameName} · ${item.marketHashName}`;
         row.appendChild(createTextSpan("", `${item.gameName} · ${item.cardName}`));
         row.appendChild(createTextSpan("", `${item.quantity} 张`));
-        const priceBasisLabel = item.noBuyMinimumFallback
-          ? "无买单"
+        const priceBasisLabel = item.minimumPriceFallback
+          ? item.minimumFallbackReason === "no-buy-orders"
+            ? "无买单 · 最低价回退"
+            : item.minimumFallbackReason === "pricing-request-failed"
+              ? "查价失败 · 最低价回退"
+              : "缺价 · 最低价回退"
           : item.automaticPricing
             ? `${item.isolatedHighPrice ? "孤立价已排除 · " : ""}${item.wallClassification === "near-wall" ? "有墙" : "无墙"}`
             : "";
@@ -688,8 +694,8 @@ const { setStatus: setOrderStatus } = orderStatus;
       if (skipped.covered) notes.push(`${skipped.covered} 种卡牌已被现有订购单覆盖`);
       if (skipped.missingPrice) notes.push(`${skipped.missingPrice} 种卡牌缺少所选价格，已跳过`);
       if (skipped.missingHash) notes.push(`${skipped.missingHash} 种卡牌缺少市场标识，已跳过`);
-      if (skipped.noBuyMinimumFallback) notes.push(
-        `${skipped.noBuyMinimumFallback} 种卡牌当前无买单，已使用市场最低价 ${formatMoney(minimumCents)}`
+      if (skipped.minimumPriceFallback) notes.push(
+        `${skipped.minimumPriceFallback} 种卡牌缺少可用价格，已使用市场最低价 ${formatMoney(minimumCents)}`
       );
       const isolatedHighPriceCount = plan.reduce(
         (count, item) => count + Number(item.isolatedHighPrice),

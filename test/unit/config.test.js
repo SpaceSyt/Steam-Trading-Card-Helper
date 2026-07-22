@@ -43,6 +43,11 @@ test("automatic pricing keeps an independent strategy and adjustment profile", (
     automatic: true,
     priceSource: "aggressive",
     adjustment: 0.03,
+    strategyRule: {
+      wallAnchor: "top",
+      wallOffsetMinor: 1,
+      noWallOffsetMinor: 1,
+    },
   });
   cfg.automaticPricingEnabled = false;
   assert.deepEqual(getActiveOrderPricingProfile(cfg), {
@@ -54,24 +59,50 @@ test("automatic pricing keeps an independent strategy and adjustment profile", (
 
 test("new ordering, sidebar, advanced, and blacklist settings normalize safely", () => {
   const defaults = normalizeConfig({});
-  assert.equal(defaults.noBuyOrderMinimumFallback, true);
+  assert.equal(defaults.minimumPriceFallback, true);
   assert.equal(defaults.sidebarDisabled, false);
   assert.equal(defaults.showAdvancedSettings, false);
   assert.equal(defaults.blacklistExpiryDays, 7);
 
   const optedOut = normalizeConfig({
-    noBuyOrderMinimumFallback: false,
+    minimumPriceFallback: false,
     sidebarDisabled: true,
     showAdvancedSettings: true,
     blacklistExpiryDays: 3.9,
   });
-  assert.equal(optedOut.noBuyOrderMinimumFallback, false);
+  assert.equal(optedOut.minimumPriceFallback, false);
   assert.equal(optedOut.sidebarDisabled, true);
   assert.equal(optedOut.showAdvancedSettings, true);
   assert.equal(optedOut.blacklistExpiryDays, 3);
 
   assert.equal(normalizeConfig({ blacklistExpiryDays: 0 }).blacklistExpiryDays, 1);
   assert.equal(normalizeConfig({ blacklistExpiryDays: "invalid" }).blacklistExpiryDays, 7);
+});
+
+test("automatic strategy rules normalize anchors and currency offsets", () => {
+  const cfg = normalizeConfig({
+    automaticPricingEnabled: true,
+    automaticPriceStrategy: "balanced",
+    automaticBalancedWallAnchor: "bottom",
+    automaticBalancedWallOffset: -0.03,
+    automaticBalancedNoWallOffset: 0.02,
+  });
+
+  assert.deepEqual(getActiveOrderPricingProfile(cfg).strategyRule, {
+    wallAnchor: "bottom",
+    wallOffsetMinor: -3,
+    noWallOffsetMinor: 2,
+  });
+  assert.equal(
+    normalizeConfig({ automaticBalancedWallAnchor: "invalid" }).automaticBalancedWallAnchor,
+    "top"
+  );
+});
+
+test("legacy no-buy fallback migrates to the general minimum-price fallback", () => {
+  const migrated = normalizeConfig({ noBuyOrderMinimumFallback: false });
+  assert.equal(migrated.minimumPriceFallback, false);
+  assert.equal("noBuyOrderMinimumFallback" in migrated, false);
 });
 
 test("config normalization removes obsolete keys and rejects invalid currency ids", () => {
@@ -87,4 +118,17 @@ test("config normalization removes obsolete keys and rejects invalid currency id
   assert.equal("removedSetting" in migrated, false);
   assert.equal("seasonalTargetLevel" in migrated, false);
   assert.equal("seasonalInterval" in migrated, false);
+});
+
+test("surplus recommendation filter migrates from the former background setting", () => {
+  const migrated = normalizeConfig({
+    grindOnlyRecommended: false,
+    surplusOnlyMaxed: true,
+    surplusCompareGems: false,
+  });
+
+  assert.equal(migrated.surplusOnlyRecommended, false);
+  assert.equal("grindOnlyRecommended" in migrated, false);
+  assert.equal("surplusOnlyMaxed" in migrated, false);
+  assert.equal("surplusCompareGems" in migrated, false);
 });

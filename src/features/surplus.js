@@ -4,7 +4,7 @@ import { RequestQueue } from "../request/queue.js";
 
 import { parseGameCardsHtml } from "../parsers/gamecards.js";
 
-import { getBadgeTargetLevel, getGameCardsUrl } from "../utils/badge.js";
+import { getGameCardsUrl } from "../utils/badge.js";
 
 import { getProfileUrl, getSteamId } from "../utils/steam.js";
 
@@ -15,9 +15,10 @@ import { loadSidebarGemPrice } from "../sidebar/gems.js";
 import { priceCard } from "../parsers/price.js";
 import { persistMarketObservations } from "../services/market-observations.js";
 
-import { getGemValueSellerNetCents, getSellerReceiveForBuyerPrice } from "../utils/market-fees.js";
-
 import { formatMoney } from "../utils/format.js";
+
+import { applyItemRecommendation } from "../services/item-recommendation.js";
+import { getSurplusReservePolicy } from "../services/surplus-policy.js";
 
 import { findInventoryCardForBadgeCard, selectSurplusAssets, summarizeAssetIds } from "../parsers/inventory.js";
 
@@ -29,43 +30,14 @@ import { enableTileDragSelection } from "../ui/checkbox-drag.js";
 const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusProgress, hideProgress: hideSurplusProgress } = surplusStatus;
 
 export { updateSurplusActionState };
-
-  export function getSurplusReservePolicy(info) {
-    const targetLevel = getBadgeTargetLevel(info);
-    const level = Math.max(0, Number(info?.level) || 0);
-    if (info?.isUnlimitedLevelBadge) {
-      const eligible = level >= 1;
-      return {
-        targetLevel,
-        level,
-        eligible,
-        badgeMaxed: eligible,
-        reservePerCard: 0,
-      };
-    }
-    return {
-      targetLevel,
-      level,
-      eligible: true,
-      badgeMaxed: level >= targetLevel,
-      reservePerCard: Math.max(0, targetLevel - level),
-    };
-  }
+export { getSurplusReservePolicy } from "../services/surplus-policy.js";
 
   function applySurplusMarketInfo(result, price, gemSackPriceCents) {
     result.priceCents = price && !price.noPriceData ? price.lowestSellCents || 0 : 0;
     result.medianCents = price && !price.noPriceData ? price.medianCents || 0 : 0;
     result.volume = price ? price.volume : null;
     result.priceSource = price?.priceSource || (price?.noPriceData ? "none" : "failed");
-    result.marketNetCents = result.priceCents
-      ? getSellerReceiveForBuyerPrice(result.priceCents)
-      : 0;
-    result.gemValueNetCents = getGemValueSellerNetCents(
-      result.gemValue,
-      gemSackPriceCents
-    );
-    result.gemBetter = result.marketNetCents > 0
-      && result.gemValueNetCents > result.marketNetCents;
+    applyItemRecommendation(result, gemSackPriceCents);
   }
 
   export async function resolveSurplusForBadge(group, profileUrl, queue) {
@@ -138,7 +110,7 @@ export { updateSurplusActionState };
 
   export function getVisibleSurplusResults() {
     return (state.surplusResults || []).filter(result => {
-      if (state.cfg.surplusOnlyMaxed && !result.badgeMaxed) return false;
+      if (state.cfg.surplusOnlyRecommended && result.recommendationKey !== "grind") return false;
       if (state.cfg.surplusOnlyTradable && result.tradableCount <= 0) return false;
       return true;
     });
@@ -181,6 +153,19 @@ export { updateSurplusActionState };
     for (const key of [...selected]) {
       if (!visibleKeys.has(key)) selected.delete(key);
     }
+  }
+
+  function sortSurplusResults() {
+    state.surplusResults.sort((left, right) => {
+      const recommendationCompare = Number(right.recommendationKey === "grind")
+        - Number(left.recommendationKey === "grind");
+      if (recommendationCompare) return recommendationCompare;
+      const gameCompare = (left.gameName || "").localeCompare(right.gameName || "", "zh-CN");
+      if (gameCompare) return gameCompare;
+      if (left.appid !== right.appid) return Number(left.appid) - Number(right.appid);
+      if (left.isFoil !== right.isFoil) return Number(left.isFoil) - Number(right.isFoil);
+      return (left.cardName || "").localeCompare(right.cardName || "", "zh-CN");
+    });
   }
 
   export function updateSurplusSummary() {
@@ -254,10 +239,6 @@ export { updateSurplusActionState };
       tile.className = "stch-inv-tile";
       const volumeZero = result.volume === 0;
       tile.classList.toggle("stch-volume-zero", volumeZero);
-      tile.classList.toggle(
-        "stch-gem-better",
-        state.cfg.surplusCompareGems && result.gemBetter
-      );
       tile.dataset.key = key;
       tile.classList.toggle("selected", state.selectedSurplusResults?.has(key));
       tile.title = [
@@ -278,8 +259,8 @@ export { updateSurplusActionState };
         result.gemValueNetCents
           ? `${result.gemValue} 宝石/张，税后折算约 ${formatMoney(result.gemValueNetCents)}`
           : "",
-        state.cfg.surplusCompareGems && result.gemBetter
-          ? "宝石价值高于出售税后到手价"
+        result.recommendationReason
+          ? `建议：${result.recommendationLabel || "—"}，${result.recommendationReason}`
           : "",
         "按住并拖动可连续选择或取消",
         result.assetTitle ? `资产ID:\n${result.assetTitle}` : "",
@@ -305,12 +286,11 @@ export { updateSurplusActionState };
       count.title = "多余数量";
       tile.appendChild(count);
 
-      if (result.marketableCount > 0) {
-        const market = document.createElement("span");
-        market.className = "stch-inv-badge stch-inv-badge-left";
-        market.textContent = `可售 ${result.marketableCount}`;
-        tile.appendChild(market);
-      }
+      const action = document.createElement("span");
+      action.className = `stch-inv-badge stch-inv-badge-left ${result.recommendationClass || ""}`.trim();
+      action.textContent = result.recommendationLabel || "—";
+      action.title = result.recommendationReason || "";
+      tile.appendChild(action);
 
       const name = document.createElement("div");
       name.className = "stch-inv-name";
@@ -423,13 +403,7 @@ export { updateSurplusActionState };
         }
       }
 
-      state.surplusResults.sort((left, right) => {
-        const gameCompare = (left.gameName || "").localeCompare(right.gameName || "", "zh-CN");
-        if (gameCompare) return gameCompare;
-        if (left.appid !== right.appid) return Number(left.appid) - Number(right.appid);
-        if (left.isFoil !== right.isFoil) return Number(left.isFoil) - Number(right.isFoil);
-        return (left.cardName || "").localeCompare(right.cardName || "", "zh-CN");
-      });
+      sortSurplusResults();
       renderSurplusResults();
 
       let priceFailed = 0;
@@ -478,6 +452,9 @@ export { updateSurplusActionState };
           if (result.volume === 0) zeroVolume++;
           renderSurplusResults();
         }
+
+        sortSurplusResults();
+        renderSurplusResults();
 
         if (!state.surplusStopRequested) {
           surplusLog(

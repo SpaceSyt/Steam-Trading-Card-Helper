@@ -83,7 +83,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
       <span class="stch-cards stch-sortable" data-sort="cards">卡牌<span class="stch-sort-arrow">${sortArrow("cards", source)}</span></span>
       <span class="stch-cost stch-sortable" data-sort="cost">单套补全<span class="stch-sort-arrow">${sortArrow("cost", source)}</span></span>
       <span class="stch-full stch-sortable" data-sort="full">单套最低<span class="stch-sort-arrow">${sortArrow("full", source)}</span></span>
-      <span class="stch-lv5 stch-sortable" data-sort="lv5">满级估算 <span class="stch-sort-arrow">${sortArrow("lv5", source)}</span><span style="cursor:help;color:#8f98a0;font-size:11px;" title="绿色:近期成交>1，参考性较强&#10;黄色:近期成交=1，参考性不强&#10;红色:近期成交=0，参考性较弱&#10;灰色:信息不全，采用估计">?</span></span>
+      <span class="stch-lv5 stch-sortable" data-sort="lv5">满级估算 <span class="stch-sort-arrow">${sortArrow("lv5", source)}</span><span style="cursor:help;color:#8f98a0;font-size:11px;" title="绿色:近期成交>1，参考性较强&#10;黄色:近期成交=1，参考性不强&#10;红色:近期成交=0，参考性较弱&#10;灰色:信息不全；缺价时显示 -">?</span></span>
       <span class="stch-drops stch-sortable" data-sort="drops">掉落<span class="stch-sort-arrow">${sortArrow("drops", source)}</span></span>
       ${cacheHeader}
       <span class="stch-buy">手动购买</span>
@@ -129,9 +129,9 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
         case "level": va = a.level; vb = b.level; break;
         case "cards": va = a.cards.reduce((s, c) => s + Math.min(c.owned, 1), 0);
                       vb = b.cards.reduce((s, c) => s + Math.min(c.owned, 1), 0); break;
-        case "cost": va = a.cheapestSetCostCents; vb = b.cheapestSetCostCents; break;
-        case "full": va = a.fullSetCostCents; vb = b.fullSetCostCents; break;
-        case "lv5": va = a.level5CostCents; vb = b.level5CostCents; break;
+        case "cost": va = a.hasIncompletePricing ? null : a.cheapestSetCostCents; vb = b.hasIncompletePricing ? null : b.cheapestSetCostCents; break;
+        case "full": va = a.hasIncompletePricing ? null : a.fullSetCostCents; vb = b.hasIncompletePricing ? null : b.fullSetCostCents; break;
+        case "lv5": va = a.hasIncompletePricing ? null : a.level5CostCents; vb = b.hasIncompletePricing ? null : b.level5CostCents; break;
         case "drops": va = a.dropsRemaining; vb = b.dropsRemaining; break;
         case "cached": va = a.cachedAt || 0; vb = b.cachedAt || 0; break;
         default: return 0;
@@ -140,6 +140,9 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
         const cmp = va.localeCompare(vb, "zh");
         return sortAsc ? cmp : -cmp;
       }
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
       return sortAsc ? va - vb : vb - va;
     });
   }
@@ -232,8 +235,10 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     const targetLevel = getBadgeTargetLevel(info);
     const ownedCards = info.cards.reduce((sum, c) => sum + Math.min(c.owned, 1), 0);
     const minVol = info.minVolume || 0;
-    const lv5Color = info.hasEstimated ? "color:#888" : minVol > 1 ? "color:#4caf50" : minVol === 1 ? "color:#c9a02c" : "";
-    const lv5Title = info.hasEstimated
+    const lv5Color = info.hasIncompletePricing || info.hasEstimated ? "color:#888" : minVol > 1 ? "color:#4caf50" : minVol === 1 ? "color:#c9a02c" : "";
+    const lv5Title = info.hasIncompletePricing
+      ? "价格请求不完整"
+      : info.hasEstimated
       ? "信息不全，采用估计"
       : minVol > 1
         ? "近期成交>1，参考性较强"
@@ -244,9 +249,12 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     row.appendChild(createTextSpan("stch-name", info.gameName || "(未知)"));
     row.appendChild(createTextSpan("stch-level", `Lv${info.level}/${targetLevel}`));
     row.appendChild(createTextSpan("stch-cards", `${ownedCards}/${info.totalInSet}`));
-    row.appendChild(createTextSpan("stch-cost", formatMoney(info.cheapestSetCostCents)));
-    row.appendChild(createTextSpan("stch-full", formatMoney(info.fullSetCostCents)));
-    const lv5 = createTextSpan("stch-lv5", formatMoney(info.level5CostCents));
+    const displayedCompletion = info.hasIncompletePricing ? "-" : formatMoney(info.cheapestSetCostCents);
+    const displayedFull = info.hasIncompletePricing ? "-" : formatMoney(info.fullSetCostCents);
+    const displayedLevel = info.hasIncompletePricing ? "-" : formatMoney(info.level5CostCents);
+    row.appendChild(createTextSpan("stch-cost", displayedCompletion));
+    row.appendChild(createTextSpan("stch-full", displayedFull));
+    const lv5 = createTextSpan("stch-lv5", displayedLevel);
     lv5.style.cssText = lv5Color;
     lv5.title = lv5Title;
     row.appendChild(lv5);
@@ -351,6 +359,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
         if (depth) {
           return calculateAutomaticBuyPrice(depth, {
             strategy: profile.priceSource,
+            strategyRule: profile.strategyRule,
             adjustmentMinor: adjustmentCents,
             minimumPriceMinor: minimumCents,
           })?.finalPriceMinor ?? null;
@@ -385,13 +394,18 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     const thresholdCents = Math.round((Number(state.cfg.threshold) || 0) * 100);
     const totals = state.results.reduce((sum, result) => {
       const value = getRealtimePricingTotals(result);
+      if (value.completionCents == null || value.fullCents == null || value.levelCents == null) {
+        sum.incomplete = true;
+        return sum;
+      }
       sum.completion += value.completionCents;
       sum.full += value.fullCents;
       sum.level += value.levelCents;
       return sum;
-    }, { completion: 0, full: 0, level: 0 });
+    }, { completion: 0, full: 0, level: 0, incomplete: false });
+    const totalText = value => totals.incomplete ? "-" : formatMoney(value);
     summary.innerHTML = `
-      共 <b>${count}</b> 个${modeLabel} ≤ ${formatMoney(thresholdCents)} (单套卡牌价格上限)，补全总价 <b>${formatMoney(totals.completion)}</b>，全套总价 ${formatMoney(totals.full)}，满级总价 ${formatMoney(totals.level)}
+      共 <b>${count}</b> 个${modeLabel} ≤ ${formatMoney(thresholdCents)} (单套卡牌价格上限)，补全总价 <b>${totalText(totals.completion)}</b>，全套总价 ${totalText(totals.full)}，满级总价 ${totalText(totals.level)}
     `;
   }
 
@@ -408,13 +422,18 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     const selectedCount = getSelectedOrderResults().length;
     const totals = state.orderResults.reduce((sum, result) => {
       const value = getRealtimePricingTotals(result);
+      if (value.completionCents == null || value.fullCents == null || value.levelCents == null) {
+        sum.incomplete = true;
+        return sum;
+      }
       sum.completion += value.completionCents;
       sum.full += value.fullCents;
       sum.level += value.levelCents;
       return sum;
-    }, { completion: 0, full: 0, level: 0 });
+    }, { completion: 0, full: 0, level: 0, incomplete: false });
+    const totalText = value => totals.incomplete ? "-" : formatMoney(value);
     summary.innerHTML = `
-      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>${formatMoney(totals.completion)}</b>，全套总价 ${formatMoney(totals.full)}，满级总价 ${formatMoney(totals.level)}
+      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>${totalText(totals.completion)}</b>，全套总价 ${totalText(totals.full)}，满级总价 ${totalText(totals.level)}
     `;
   }
 

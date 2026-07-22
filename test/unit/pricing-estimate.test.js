@@ -50,3 +50,17 @@ test("cached final strategy prices can drive automatic estimates", () => {
     levelCents: 986,
   });
 });
+
+test("incomplete card pricing keeps every displayed total unavailable", () => {
+  assert.deepEqual(calculateResultPricingTotals({
+    ...result,
+    hasIncompletePricing: true,
+  }, {
+    priceSource: "lowest",
+    minimumPriceMinor: 3,
+  }), {
+    completionCents: null,
+    fullCents: null,
+    levelCents: null,
+  });
+});

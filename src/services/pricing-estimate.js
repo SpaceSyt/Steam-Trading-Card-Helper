@@ -9,6 +9,13 @@ function quantity(value) {
 
 /** Recalculate the three displayed totals from already available card data. */
 export function calculateResultPricingTotals(info, options = {}) {
+  if (info?.hasIncompletePricing) {
+    return {
+      completionCents: null,
+      fullCents: null,
+      levelCents: null,
+    };
+  }
   const original = {
     completion: Math.max(0, Number(info?.cheapestSetCostCents) || 0),
     full: Math.max(0, Number(info?.fullSetCostCents) || 0),

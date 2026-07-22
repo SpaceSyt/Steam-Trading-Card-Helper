@@ -68,7 +68,7 @@ test("automatic ordering uses the currency minimum when Steam confirms there are
     automaticPricingEnabled: true,
     automaticPriceStrategy: "balanced",
     automaticPriceAdjustment: 0,
-    noBuyOrderMinimumFallback: true,
+    minimumPriceFallback: true,
   });
 
   const result = await buildBuyOrderPlan(selected, new Map(), makeUi());
@@ -76,8 +76,9 @@ test("automatic ordering uses the currency minimum when Steam confirms there are
   assert.equal(result.plan.length, 1);
   assert.equal(result.plan[0].basePriceCents, 21);
   assert.equal(result.plan[0].unitPriceCents, 21);
-  assert.equal(result.plan[0].noBuyMinimumFallback, true);
-  assert.equal(result.skipped.noBuyMinimumFallback, 1);
+  assert.equal(result.plan[0].minimumPriceFallback, true);
+  assert.equal(result.plan[0].minimumFallbackReason, "no-buy-orders");
+  assert.equal(result.skipped.minimumPriceFallback, 1);
 });
 
 test("manual highest-buy ordering uses the same no-buy minimum fallback", async () => {
@@ -85,25 +86,58 @@ test("manual highest-buy ordering uses the same no-buy minimum fallback", async 
     automaticPricingEnabled: false,
     orderPriceSource: "highest",
     priceAdjustment: 0,
-    noBuyOrderMinimumFallback: true,
+    minimumPriceFallback: true,
   });
 
   const result = await buildBuyOrderPlan(selected, new Map(), makeUi());
 
   assert.equal(result.plan.length, 1);
   assert.equal(result.plan[0].unitPriceCents, 21);
-  assert.equal(result.plan[0].noBuyMinimumFallback, true);
+  assert.equal(result.plan[0].minimumPriceFallback, true);
 });
 
 test("disabling the no-buy fallback preserves fail-closed ordering", async () => {
   Object.assign(state.cfg, {
     automaticPricingEnabled: true,
-    noBuyOrderMinimumFallback: false,
+    minimumPriceFallback: false,
   });
 
   const result = await buildBuyOrderPlan(selected, new Map(), makeUi());
 
   assert.equal(result.plan.length, 0);
   assert.equal(result.skipped.missingPrice, 1);
-  assert.equal(result.skipped.noBuyMinimumFallback, 0);
+  assert.equal(result.skipped.minimumPriceFallback, 0);
+});
+
+test("manual ordering uses the market minimum when the scanned price is missing", async () => {
+  Object.assign(state.cfg, {
+    automaticPricingEnabled: false,
+    orderPriceSource: "lowest",
+    priceAdjustment: 0,
+    minimumPriceFallback: true,
+  });
+
+  const result = await buildBuyOrderPlan(selected, new Map(), makeUi());
+
+  assert.equal(result.plan.length, 1);
+  assert.equal(result.plan[0].unitPriceCents, 21);
+  assert.equal(result.plan[0].minimumFallbackReason, "missing-price");
+});
+
+test("automatic ordering uses the market minimum when the pricing request fails", async () => {
+  Object.assign(state.cfg, {
+    automaticPricingEnabled: true,
+    automaticPriceStrategy: "balanced",
+    automaticPriceAdjustment: 0,
+    minimumPriceFallback: true,
+  });
+  state.marketOrderDepths.clear();
+  const ui = makeUi();
+  ui.queue.fetch = async () => ({ status: 500, text: "", data: null });
+
+  const result = await buildBuyOrderPlan(selected, new Map(), ui);
+
+  assert.equal(result.plan.length, 1);
+  assert.equal(result.plan[0].unitPriceCents, 21);
+  assert.equal(result.plan[0].minimumFallbackReason, "pricing-request-failed");
 });

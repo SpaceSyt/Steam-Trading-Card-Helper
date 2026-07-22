@@ -15,7 +15,9 @@ import { persistMarketObservations } from "../services/market-observations.js";
 
 import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, isTradingCardDescription, isFoilCardDescription, getCardGameName, getCommunityItemType, getCommunityItemCategory, getDescriptionImageUrl, getDescriptionColor, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, normalizeInventoryText, addInventoryCard, getDescriptionKey, isPointsShopCommunityItemDescription } from "../parsers/inventory.js";
 
-import { getGemValueSellerNetCents, getGemBreakEvenBuyerPrice, getGemSackSellerNetCents, getSellerReceiveForBuyerPrice } from "../utils/market-fees.js";
+import { getGemBreakEvenBuyerPrice, getGemSackSellerNetCents } from "../utils/market-fees.js";
+
+import { applyItemRecommendation } from "../services/item-recommendation.js";
 
 import { summarizeAssetIds } from "../parsers/inventory.js";
 
@@ -320,45 +322,12 @@ export { updateGrindActionState };
   }
 
   export function applyGrindRecommendation(item, gemSackPriceCents) {
-    item.gemSackPriceCents = gemSackPriceCents || 0;
-    item.gemValueNetCents = getGemValueSellerNetCents(item.totalGems, gemSackPriceCents);
-    item.unitGemValueNetCents = getGemValueSellerNetCents(item.gemValue, gemSackPriceCents);
-    item.breakEvenPriceCents = getGemBreakEvenBuyerPrice(item.gemValue, gemSackPriceCents);
-    item.marketNetCents = item.priceCents ? getSellerReceiveForBuyerPrice(item.priceCents) : 0;
-
-    if (!gemSackPriceCents) {
-      item.recommendationKey = "unknown";
-      item.recommendationLabel = "缺宝石价";
-      item.recommendationClass = "warn";
-    } else if (!item.marketHashName || item.marketableCount <= 0) {
-      item.recommendationKey = "grind";
-      item.recommendationLabel = "分解";
-      item.recommendationClass = "ok";
-      item.recommendationReason = "不可出售或缺少市场标识";
-    } else if (!item.priceCents) {
-      item.recommendationKey = "grind";
-      item.recommendationLabel = "分解";
-      item.recommendationClass = "ok";
-      item.recommendationReason = "市场暂无可用价格";
-    } else if (item.marketNetCents <= item.unitGemValueNetCents) {
-      item.recommendationKey = "grind";
-      item.recommendationLabel = "分解";
-      item.recommendationClass = "ok";
-      item.recommendationReason =
-        `卖出税后约 ${formatMoney(item.marketNetCents)}，低于分解宝石税后约 ${formatMoney(item.unitGemValueNetCents)}`;
-    } else {
-      item.recommendationKey = "sell";
-      item.recommendationLabel = "卖出";
-      item.recommendationClass = "info";
-      item.recommendationReason =
-        `卖出税后约 ${formatMoney(item.marketNetCents)}，高于分解宝石税后约 ${formatMoney(item.unitGemValueNetCents)}`;
-    }
-    return item;
+    return applyItemRecommendation(item, gemSackPriceCents);
   }
 
   export function getVisibleGrindResults() {
     return (state.grindResults || []).filter(item => {
-      if (state.cfg.grindOnlyRecommended && item.recommendationKey !== "grind") return false;
+      if (state.cfg.surplusOnlyRecommended && item.recommendationKey !== "grind") return false;
       if (state.cfg.surplusOnlyTradable && item.tradableCount <= 0) return false;
       return true;
     });

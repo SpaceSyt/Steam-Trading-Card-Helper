@@ -67,11 +67,14 @@ const { setStatus: setOrderStatus } = orderStatus;
               upsertOrderResult(next, { render: false });
             }
             refreshed++;
+            const completion = next.hasIncompletePricing
+              ? "-"
+              : formatMoney(next.cheapestSetCostCents);
+            const level = next.hasIncompletePricing ? "-" : formatMoney(next.level5CostCents);
             logFn(
               `[${existing.appid}] ${existing.gameName}: 重算完成，` +
-              `补全 ${formatMoney(next.cheapestSetCostCents)} | ` +
-              `满级 ${formatMoney(next.level5CostCents)}`,
-              "ok"
+              `补全 ${completion} | 满级 ${level}`,
+              next.hasIncompletePricing ? "warn" : "ok"
             );
           }
         } catch (error) {

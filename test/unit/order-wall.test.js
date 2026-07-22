@@ -147,16 +147,16 @@ test("automatic strategies price from the effective best after removing one isol
 
   assert.equal(calculateAutomaticBuyPrice(depth, {
     strategy: "conservative",
-  }).finalPriceMinor, 59);
+  }).finalPriceMinor, 58);
   assert.equal(calculateAutomaticBuyPrice(depth, {
     strategy: "balanced",
-  }).finalPriceMinor, 60);
+  }).finalPriceMinor, 59);
   assert.equal(calculateAutomaticBuyPrice(depth, {
     strategy: "aggressive",
   }).finalPriceMinor, 61);
 });
 
-test("automatic wall pricing maps Gems to conservative 4.27, balanced 4.28, and aggressive 4.31", async () => {
+test("automatic wall pricing maps Gems to bottom, top, and top-plus-one defaults", async () => {
   const fixture = await readFixture("orderbook-wall-gems.json");
   const depth = {
     highestBuyMinor: fixture.state.data.amtMaxBuyOrder,
@@ -172,10 +172,10 @@ test("automatic wall pricing maps Gems to conservative 4.27, balanced 4.28, and 
   }).finalPriceMinor, 428);
   assert.equal(calculateAutomaticBuyPrice(depth, {
     strategy: "aggressive",
-  }).finalPriceMinor, 431);
+  }).finalPriceMinor, 429);
 });
 
-test("automatic no-wall pricing uses best minus one, best, and best plus one", async () => {
+test("automatic no-wall pricing defaults to best minus two, minus one, and plus one", async () => {
   const fixture = await readFixture("orderbook-balanced-songbird.json");
   const depth = {
     highestBuyMinor: fixture.state.data.amtMaxBuyOrder,
@@ -185,13 +185,48 @@ test("automatic no-wall pricing uses best minus one, best, and best plus one", a
 
   assert.equal(calculateAutomaticBuyPrice(depth, {
     strategy: "conservative",
-  }).finalPriceMinor, 26);
+  }).finalPriceMinor, 25);
   assert.equal(calculateAutomaticBuyPrice(depth, {
     strategy: "balanced",
-  }).finalPriceMinor, 27);
+  }).finalPriceMinor, 26);
   assert.equal(calculateAutomaticBuyPrice(depth, {
     strategy: "aggressive",
   }).finalPriceMinor, 28);
+});
+
+test("automatic strategy rules customize wall anchor and both offsets", async () => {
+  const wallFixture = await readFixture("orderbook-wall-gems.json");
+  const wallDepth = {
+    highestBuyMinor: wallFixture.state.data.amtMaxBuyOrder,
+    lowestSellMinor: wallFixture.state.data.amtMinSellOrder,
+    buyLevels: parseCompactBuyOrderLevels(wallFixture.state.data.rgCompactBuyOrders),
+  };
+  const wallQuote = calculateAutomaticBuyPrice(wallDepth, {
+    strategy: "balanced",
+    strategyRule: {
+      wallAnchor: "bottom",
+      wallOffsetMinor: -2,
+      noWallOffsetMinor: 3,
+    },
+  });
+  assert.equal(wallQuote.wallReferencePriceMinor, 427);
+  assert.equal(wallQuote.finalPriceMinor, 425);
+
+  const noWallFixture = await readFixture("orderbook-balanced-songbird.json");
+  const noWallQuote = calculateAutomaticBuyPrice({
+    highestBuyMinor: noWallFixture.state.data.amtMaxBuyOrder,
+    lowestSellMinor: noWallFixture.state.data.amtMinSellOrder,
+    buyLevels: parseCompactBuyOrderLevels(noWallFixture.state.data.rgCompactBuyOrders),
+  }, {
+    strategy: "balanced",
+    strategyRule: {
+      wallAnchor: "bottom",
+      wallOffsetMinor: -2,
+      noWallOffsetMinor: 3,
+    },
+  });
+  assert.equal(noWallQuote.wallReferencePriceMinor, null);
+  assert.equal(noWallQuote.finalPriceMinor, 30);
 });
 
 test("automatic pricing applies adjustment and then guards below the lowest sell", () => {

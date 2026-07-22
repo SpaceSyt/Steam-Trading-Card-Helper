@@ -5,6 +5,7 @@ import {
   isCancelBuyOrderResponseSuccessful,
 } from "../services/active-buy-orders.js";
 import { calculateAutomaticBuyPrice } from "../services/order-wall.js";
+import { getActiveOrderPricingProfile } from "../config.js";
 import {
   fetchActiveBuyOrderSnapshot,
   getCurrencyMarketKey,
@@ -48,9 +49,14 @@ function getSmartComparison(group) {
   }
   const depth = state.marketOrderDepths.get(getCurrencyMarketKey(group.marketHashName))?.depth;
   if (!depth) return { available: false, label: "暂无智能定价缓存", className: "unavailable" };
-  const adjustment = Number(state.cfg.automaticPriceAdjustment);
+  const profile = getActiveOrderPricingProfile({
+    ...state.cfg,
+    automaticPricingEnabled: true,
+  });
+  const adjustment = Number(profile.adjustment);
   const quote = calculateAutomaticBuyPrice(depth, {
-    strategy: state.cfg.automaticPriceStrategy,
+    strategy: profile.priceSource,
+    strategyRule: profile.strategyRule,
     adjustmentMinor: Math.round((Number.isFinite(adjustment) ? adjustment : 0) * 100),
     minimumPriceMinor: getMarketMinimumPriceCents(getOrderCurrencyContext()),
   });

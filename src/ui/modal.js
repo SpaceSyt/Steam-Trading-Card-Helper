@@ -68,6 +68,29 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     ["balanced", "平衡"],
     ["aggressive", "抢单"],
   ];
+  const AUTOMATIC_STRATEGY_SETTING_ROWS = [
+    {
+      id: "conservative",
+      label: "保守",
+      anchorKey: "automaticConservativeWallAnchor",
+      wallOffsetKey: "automaticConservativeWallOffset",
+      noWallOffsetKey: "automaticConservativeNoWallOffset",
+    },
+    {
+      id: "balanced",
+      label: "平衡",
+      anchorKey: "automaticBalancedWallAnchor",
+      wallOffsetKey: "automaticBalancedWallOffset",
+      noWallOffsetKey: "automaticBalancedNoWallOffset",
+    },
+    {
+      id: "aggressive",
+      label: "抢单",
+      anchorKey: "automaticAggressiveWallAnchor",
+      wallOffsetKey: "automaticAggressiveWallOffset",
+      noWallOffsetKey: "automaticAggressiveNoWallOffset",
+    },
+  ];
   function getOrderPriceOptionsHtml(automatic, selected) {
     const options = automatic ? AUTOMATIC_ORDER_PRICE_OPTIONS : MANUAL_ORDER_PRICE_OPTIONS;
     return options.map(([value, label]) => (
@@ -210,6 +233,23 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       activePriceSource
     );
     const automaticPricingClass = automaticPricingEnabled ? "stch-auto-pricing-active" : "";
+    const automaticStrategySettingsHtml = AUTOMATIC_STRATEGY_SETTING_ROWS.map(rule => `
+      <div class="stch-auto-strategy-row">
+        <span class="stch-auto-strategy-name">${rule.label}</span>
+        <label>有订单墙时
+          <select id="stch-auto-${rule.id}-wall-anchor" class="stch-input stch-auto-wall-anchor">
+            <option value="top" ${state.cfg[rule.anchorKey] === "top" ? "selected" : ""}>订单墙顶</option>
+            <option value="bottom" ${state.cfg[rule.anchorKey] === "bottom" ? "selected" : ""}>订单墙底</option>
+          </select>
+        </label>
+        <label>偏移 ${currencySymbol}
+          <input id="stch-auto-${rule.id}-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.wallOffsetKey]}">
+        </label>
+        <label>无订单墙时 ${currencySymbol}
+          <input id="stch-auto-${rule.id}-no-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.noWallOffsetKey]}">
+        </label>
+      </div>
+    `).join("");
     const backdrop = document.createElement("div");
     backdrop.id = "stch-backdrop";
     backdrop.style.display = "block";
@@ -464,20 +504,12 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
                 <option value="emoticon" ${state.cfg.surplusItemMode === "emoticon" ? "selected" : ""}>表情</option>
               </select>
             </label>
-            <label class="stch-card-only-control">
-              <input id="stch-surplus-only-maxed" type="checkbox" ${state.cfg.surplusOnlyMaxed ? "checked" : ""}>
-              只显示当前已满级徽章
-            </label>
             <label>
               <input id="stch-surplus-only-tradable" type="checkbox" ${state.cfg.surplusOnlyTradable ? "checked" : ""}>
               只显示可交易
             </label>
-            <label class="stch-card-only-control" title="按宝石袋税后价值与卡牌出售税后到手价比较；分解更值时以绿色覆盖">
-              <input id="stch-surplus-compare-gems" type="checkbox" ${state.cfg.surplusCompareGems ? "checked" : ""}>
-              宝石比较
-            </label>
-            <label class="stch-grind-only-control">
-              <input id="stch-grind-only-recommended" type="checkbox" ${state.cfg.grindOnlyRecommended ? "checked" : ""}>
+            <label>
+              <input id="stch-surplus-only-recommended" type="checkbox" ${state.cfg.surplusOnlyRecommended ? "checked" : ""}>
               只显示建议分解
             </label>
             <label class="stch-primary-label">出售价格
@@ -490,10 +522,8 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             <label class="stch-primary-label">售价调整 ${currencySymbol} <input id="stch-surplus-sell-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.surplusSellPriceAdjustment}" style="width:68px"></label>
           </div>
           <div class="stch-scan-actions stch-surplus-action-row">
-            <div class="stch-btn stch-card-scan-action" id="stch-surplus-scan-btn">开始检测</div>
-            <div class="stch-btn alt disabled stch-card-scan-action" id="stch-surplus-stop-btn">停止</div>
-            <div class="stch-btn stch-grind-scan-action" id="stch-grind-scan-btn">扫描可分解物品</div>
-            <div class="stch-btn alt disabled stch-grind-scan-action" id="stch-grind-stop-btn">停止</div>
+            <div class="stch-btn" id="stch-surplus-scan-btn">开始检测</div>
+            <div class="stch-btn alt disabled" id="stch-surplus-stop-btn">停止</div>
             <div class="stch-surplus-action-spacer"></div>
             <span class="stch-selected-count stch-processing-selected-count" id="stch-surplus-selected-count">选择 0 项</span>
             <div class="stch-btn alt disabled" id="stch-surplus-select-all-btn">全选</div>
@@ -557,14 +587,20 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
               关闭侧边栏
             </label>
           </div>
+          <div class="stch-advanced-setting" style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">购买价格</div>
+          <div class="stch-advanced-setting" style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+          <div class="stch-auto-strategy-settings stch-advanced-setting">
+            ${automaticStrategySettingsHtml}
+            <div class="stch-auto-strategy-hint">* 订单墙是靠近有效最高买价、订单数量相对前面邻近价位显著增加的连续区域；墙顶是该区域最高价，墙底是最低价。</div>
+          </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">卡牌价格扫描</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
             <label>订购卡牌缓存 <input id="stch-order-cache-days" class="stch-input" type="number" min="0" step="1" value="${state.cfg.orderCacheDays}" style="width:55px"> 天</label>
             <label><input id="stch-early-price-prediction" type="checkbox" ${state.cfg.earlyPricePrediction ? "checked" : ""}> 价格预测提早跳过</label>
-            <label title="仅在 Steam 明确返回没有买单时使用当前币种的市场最低价；请求或解析失败仍会跳过">
-              <input id="stch-no-buy-minimum-fallback" type="checkbox" ${state.cfg.noBuyOrderMinimumFallback ? "checked" : ""}>
-              无买单时使用市场最低价
+            <label title="扫描缺价、Steam 无买单或下单查价失败时，使用当前币种的市场最低价">
+              <input id="stch-minimum-price-fallback" type="checkbox" ${state.cfg.minimumPriceFallback ? "checked" : ""}>
+              无价格时使用市场最低价
             </label>
             <label><input id="stch-skip-cached-orders" type="checkbox" ${state.cfg.skipCachedOrderResults ? "checked" : ""}> 扫描时跳过缓存内结果</label>
           </div>
@@ -633,24 +669,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       const grindPanel = document.getElementById("stch-surplus-grind-panel");
       cardPanel?.classList.toggle("active", mode === "card");
       grindPanel?.classList.toggle("active", mode !== "card");
-      modal.querySelectorAll(".stch-card-only-control").forEach(element => {
-        element.style.display = mode === "card" ? "" : "none";
-      });
-      modal.querySelectorAll(".stch-grind-only-control").forEach(element => {
-        element.style.display = mode === "card" ? "none" : "";
-      });
-      modal.querySelectorAll(".stch-card-scan-action").forEach(element => {
-        element.style.display = mode === "card" ? "" : "none";
-      });
-      modal.querySelectorAll(".stch-grind-scan-action").forEach(element => {
-        element.style.display = mode === "card" ? "none" : "";
-      });
-      const grindButton = document.getElementById("stch-grind-scan-btn");
-      if (grindButton) {
-        grindButton.textContent = mode === "emoticon"
-          ? "扫描可分解表情"
-          : "扫描可分解背景";
-      }
       renderSurplusResults();
       renderGrindResults();
       updateSurplusActionState();
@@ -696,7 +714,21 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         if (buyModeEl) delete buyModeEl.dataset.normalValue;
       }
       state.cfg.earlyPricePrediction = !!document.getElementById("stch-early-price-prediction")?.checked;
-      state.cfg.noBuyOrderMinimumFallback = !!document.getElementById("stch-no-buy-minimum-fallback")?.checked;
+      state.cfg.minimumPriceFallback = !!document.getElementById("stch-minimum-price-fallback")?.checked;
+      AUTOMATIC_STRATEGY_SETTING_ROWS.forEach(rule => {
+        const anchor = document.getElementById(`stch-auto-${rule.id}-wall-anchor`)?.value;
+        state.cfg[rule.anchorKey] = ["top", "bottom"].includes(anchor)
+          ? anchor
+          : state.cfg[rule.anchorKey];
+        state.cfg[rule.wallOffsetKey] = readNumberInput(
+          `stch-auto-${rule.id}-wall-offset`,
+          state.cfg[rule.wallOffsetKey] ?? DEFAULT_CONFIG[rule.wallOffsetKey]
+        );
+        state.cfg[rule.noWallOffsetKey] = readNumberInput(
+          `stch-auto-${rule.id}-no-wall-offset`,
+          state.cfg[rule.noWallOffsetKey] ?? DEFAULT_CONFIG[rule.noWallOffsetKey]
+        );
+      });
       state.cfg.earlyPredictionAutoBlacklist = !!document.getElementById("stch-settings-early-prediction-auto-blacklist")?.checked;
       state.cfg.orderCacheDays = readNumberInput(
         "stch-order-cache-days",
@@ -704,9 +736,8 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         { integer: true, min: 0 }
       );
       state.cfg.skipCachedOrderResults = !!document.getElementById("stch-skip-cached-orders")?.checked;
-      state.cfg.surplusOnlyMaxed = !!document.getElementById("stch-surplus-only-maxed")?.checked;
       state.cfg.surplusOnlyTradable = !!document.getElementById("stch-surplus-only-tradable")?.checked;
-      state.cfg.surplusCompareGems = !!document.getElementById("stch-surplus-compare-gems")?.checked;
+      state.cfg.surplusOnlyRecommended = !!document.getElementById("stch-surplus-only-recommended")?.checked;
       state.cfg.surplusItemMode = getSurplusItemMode();
       state.cfg.surplusSellPriceSource = document.getElementById("stch-surplus-sell-price-source")?.value
         || state.cfg.surplusSellPriceSource
@@ -715,7 +746,6 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         "stch-surplus-sell-adjustment",
         state.cfg.surplusSellPriceAdjustment ?? DEFAULT_CONFIG.surplusSellPriceAdjustment
       );
-      state.cfg.grindOnlyRecommended = !!document.getElementById("stch-grind-only-recommended")?.checked;
       state.cfg.grindReserveCopies = readNumberInput(
         "stch-grind-reserve-copies",
         state.cfg.grindReserveCopies ?? DEFAULT_CONFIG.grindReserveCopies,
@@ -751,7 +781,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
           state.cfg.showAdvancedSettings
         );
       }
-      if (["stch-surplus-only-maxed", "stch-surplus-only-tradable", "stch-surplus-compare-gems"].includes(changedId)) {
+      if (["stch-surplus-only-tradable", "stch-surplus-only-recommended"].includes(changedId)) {
         renderSurplusResults();
         renderGrindResults();
       }
@@ -769,18 +799,27 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
         state.grindGemPrice = null;
       }
       if (changedId?.startsWith("stch-grind-")) renderGrindResults();
+      if (changedId?.startsWith("stch-auto-") && changedId !== "stch-auto-pricing") {
+        updateSummary();
+        updateOrderSummary();
+      }
     };
     const cfgIds = ["stch-threshold", "stch-req-interval",
       "stch-max-pages", "stch-include-drops",
       "stch-foil-scan-mode",
       "stch-batch-size", "stch-batch-pause", "stch-show-no-result-logs", "stch-show-advanced-settings", "stch-sidebar-disabled", "stch-buy-mode",
-      "stch-early-price-prediction", "stch-no-buy-minimum-fallback", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
+      "stch-early-price-prediction", "stch-minimum-price-fallback", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
       "stch-skip-cached-orders", "stch-craft-interval",
       "stch-craft-mode", "stch-surplus-item-mode",
-      "stch-surplus-only-maxed", "stch-surplus-only-tradable", "stch-surplus-compare-gems", "stch-surplus-sell-price-source",
-      "stch-surplus-sell-adjustment", "stch-grind-only-recommended",
+      "stch-surplus-only-tradable", "stch-surplus-only-recommended", "stch-surplus-sell-price-source",
+      "stch-surplus-sell-adjustment",
       "stch-grind-include-surplus-cards", "stch-grind-reserve-copies",
-      "stch-grind-include-points-shop"];
+      "stch-grind-include-points-shop",
+      ...AUTOMATIC_STRATEGY_SETTING_ROWS.flatMap(rule => [
+        `stch-auto-${rule.id}-wall-anchor`,
+        `stch-auto-${rule.id}-wall-offset`,
+        `stch-auto-${rule.id}-no-wall-offset`,
+      ])];
     cfgIds.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -1019,10 +1058,16 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     document.getElementById("stch-craft-max-btn").addEventListener("click", () => setAllCraftCounts("max"));
     document.getElementById("stch-craft-clear-btn").addEventListener("click", () => setAllCraftCounts("clear"));
     document.getElementById("stch-craft-submit-btn").addEventListener("click", submitCraftPlan);
-    document.getElementById("stch-surplus-scan-btn").addEventListener("click", startSurplusScan);
-    document.getElementById("stch-surplus-stop-btn").addEventListener("click", requestSurplusStop);
-    document.getElementById("stch-grind-scan-btn").addEventListener("click", startGrindScan);
-    document.getElementById("stch-grind-stop-btn").addEventListener("click", requestGrindStop);
+    document.getElementById("stch-surplus-scan-btn").addEventListener("click", event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      if (getSurplusItemMode() === "card") startSurplusScan();
+      else startGrindScan();
+    });
+    document.getElementById("stch-surplus-stop-btn").addEventListener("click", event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      if (state.surplusScanning) requestSurplusStop();
+      else if (state.grindScanning) requestGrindStop();
+    });
     document.getElementById("stch-surplus-select-all-btn").addEventListener("click", event => {
       if (event.currentTarget.classList.contains("disabled")) return;
       const mode = getSurplusItemMode();
