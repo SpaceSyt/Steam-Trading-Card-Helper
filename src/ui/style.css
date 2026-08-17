@@ -808,6 +808,11 @@
       color: #697887;
       font-size: 12px;
     }
+    .stch-request-cycle-estimate {
+      color: #697887;
+      font-size: 11px;
+      white-space: nowrap;
+    }
     .stch-checkbox-dragging,
     .stch-checkbox-dragging * {
       user-select: none !important;
