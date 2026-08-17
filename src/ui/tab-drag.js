@@ -43,67 +43,69 @@ export function applyTabColors(container, value) {
 export function enableTabDragReordering(container, onOrderChange) {
   if (!container || container.dataset.dragReordering === "1") return;
   container.dataset.dragReordering = "1";
-  let pointerDrag = null;
+  let mouseDrag = null;
   let suppressClickUntil = 0;
 
-  container.addEventListener("pointerdown", event => {
-    if (event.button !== 0 || event.pointerType === "touch") return;
-    const tab = event.target instanceof Element
-      ? event.target.closest(".stch-tab[data-tab]")
-      : null;
-    if (!tab || !container.contains(tab)) return;
-    pointerDrag = {
-      tab,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      initialOrder: readTabOrder(container).join(","),
-      active: false,
-    };
-    try { tab.setPointerCapture?.(event.pointerId); } catch (_) {}
-  });
-  container.addEventListener("pointermove", event => {
-    if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return;
-    if (!pointerDrag.active) {
+  const finish = () => {
+    if (!mouseDrag) return;
+    const { tab, initialOrder, active } = mouseDrag;
+    mouseDrag = null;
+    document.removeEventListener("mousemove", move);
+    document.removeEventListener("mouseup", finish);
+    window.removeEventListener("blur", finish);
+    tab.classList.remove("stch-tab-dragging");
+    container.classList.remove("stch-tabs-dragging");
+    if (!active) return;
+    suppressClickUntil = Date.now() + 250;
+    const order = readTabOrder(container);
+    syncSettingsSpacer(container);
+    if (order.join(",") !== initialOrder) onOrderChange?.(order);
+  };
+
+  const move = event => {
+    if (!mouseDrag) return;
+    if (!mouseDrag.active) {
       const distance = Math.hypot(
-        event.clientX - pointerDrag.startX,
-        event.clientY - pointerDrag.startY
+        event.clientX - mouseDrag.startX,
+        event.clientY - mouseDrag.startY
       );
       if (distance < 5) return;
-      pointerDrag.active = true;
-      pointerDrag.tab.classList.add("stch-tab-dragging");
+      mouseDrag.active = true;
+      mouseDrag.tab.classList.add("stch-tab-dragging");
+      container.classList.add("stch-tabs-dragging");
     }
     const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.(
       ".stch-tab[data-tab]"
     );
-    if (target && target !== pointerDrag.tab && container.contains(target)) {
+    if (target && target !== mouseDrag.tab && container.contains(target)) {
       const rect = target.getBoundingClientRect();
       const insertBefore = event.clientX < rect.left + rect.width / 2;
       container.insertBefore(
-        pointerDrag.tab,
+        mouseDrag.tab,
         insertBefore ? target : target.nextSibling
       );
       syncSettingsSpacer(container);
     }
     event.preventDefault();
-  }, { passive: false });
-
-  const finish = event => {
-    if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return;
-    const { tab, pointerId, initialOrder, active } = pointerDrag;
-    pointerDrag = null;
-    tab.classList.remove("stch-tab-dragging");
-    try { if (tab.hasPointerCapture?.(pointerId)) tab.releasePointerCapture(pointerId); } catch (_) {}
-    if (!active) return;
-    suppressClickUntil = Date.now() + 100;
-    const order = readTabOrder(container);
-    syncSettingsSpacer(container);
-    if (order.join(",") !== initialOrder) onOrderChange?.(order);
   };
-  container.addEventListener("pointerup", finish);
-  container.addEventListener("pointercancel", finish);
-  container.addEventListener("lostpointercapture", event => {
-    if (pointerDrag?.active) finish(event);
+
+  container.addEventListener("mousedown", event => {
+    if (event.button !== 0) return;
+    const tab = event.target instanceof Element
+      ? event.target.closest(".stch-tab[data-tab]")
+      : null;
+    if (!tab || !container.contains(tab)) return;
+    finish();
+    mouseDrag = {
+      tab,
+      startX: event.clientX,
+      startY: event.clientY,
+      initialOrder: readTabOrder(container).join(","),
+      active: false,
+    };
+    document.addEventListener("mousemove", move, { passive: false });
+    document.addEventListener("mouseup", finish);
+    window.addEventListener("blur", finish);
   });
   container.addEventListener("click", event => {
     if (Date.now() > suppressClickUntil) return;

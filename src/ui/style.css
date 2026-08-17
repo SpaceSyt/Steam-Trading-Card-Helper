@@ -925,7 +925,7 @@
       padding: 6px 16px;
       background: rgba(0,0,0,0.3);
       color: #8f98a0;
-      cursor: pointer;
+      cursor: grab;
       border-radius: 3px 3px 0 0;
       font-size: 14px;
       user-select: none;
@@ -936,7 +936,8 @@
     .stch-tab.stch-tab-custom-color,
     .stch-tab.stch-tab-custom-color:hover,
     .stch-tab.stch-tab-custom-color.active { color: var(--stch-tab-label-color); }
-    .stch-tab.stch-tab-dragging { opacity: 0.55; }
+    .stch-tab.stch-tab-dragging { opacity: 0.55; cursor: grabbing; }
+    .stch-tabs.stch-tabs-dragging { cursor: grabbing; }
     .stch-tab-right { margin-left: auto; }
     .stch-tab-content { display: none; position: relative; }
     .stch-tab-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
