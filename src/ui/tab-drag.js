@@ -1,4 +1,4 @@
-import { normalizeTabOrder } from "../services/tab-preferences.js";
+import { normalizeTabColors, normalizeTabOrder } from "../services/tab-preferences.js";
 
 export function readTabOrder(container) {
   return normalizeTabOrder(
@@ -29,51 +29,81 @@ export function applyTabOrder(container, value) {
   return readTabOrder(container);
 }
 
+export function applyTabColors(container, value) {
+  const colors = normalizeTabColors(value);
+  for (const tab of container?.querySelectorAll?.(".stch-tab[data-tab]") || []) {
+    const color = colors[tab.dataset.tab] || "";
+    tab.classList.toggle("stch-tab-custom-color", !!color);
+    if (color) tab.style.setProperty("--stch-tab-label-color", color);
+    else tab.style.removeProperty("--stch-tab-label-color");
+  }
+  return colors;
+}
+
 export function enableTabDragReordering(container, onOrderChange) {
   if (!container || container.dataset.dragReordering === "1") return;
   container.dataset.dragReordering = "1";
-  let dragged = null;
-  let initialOrder = "";
+  let pointerDrag = null;
   let suppressClickUntil = 0;
 
-  for (const tab of container.querySelectorAll(".stch-tab[data-tab]")) {
-    tab.draggable = true;
-    tab.addEventListener("dragstart", event => {
-      dragged = tab;
-      initialOrder = readTabOrder(container).join(",");
-      tab.classList.add("stch-tab-dragging");
-      event.dataTransfer?.setData("text/plain", tab.dataset.tab);
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
-    });
-    tab.addEventListener("dragend", () => {
-      if (!dragged) return;
-      dragged.classList.remove("stch-tab-dragging");
-      const order = readTabOrder(container);
-      syncSettingsSpacer(container);
-      suppressClickUntil = Date.now() + 100;
-      if (order.join(",") !== initialOrder) {
-        onOrderChange?.(order);
-      }
-      dragged = null;
-      initialOrder = "";
-    });
-  }
-
-  container.addEventListener("dragover", event => {
-    if (!dragged) return;
-    const target = event.target instanceof Element
+  container.addEventListener("pointerdown", event => {
+    if (event.button !== 0 || event.pointerType === "touch") return;
+    const tab = event.target instanceof Element
       ? event.target.closest(".stch-tab[data-tab]")
       : null;
-    if (!target || target === dragged || !container.contains(target)) return;
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    const rect = target.getBoundingClientRect();
-    const insertBefore = event.clientX < rect.left + rect.width / 2;
-    container.insertBefore(dragged, insertBefore ? target : target.nextSibling);
-    syncSettingsSpacer(container);
+    if (!tab || !container.contains(tab)) return;
+    pointerDrag = {
+      tab,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      initialOrder: readTabOrder(container).join(","),
+      active: false,
+    };
+    try { tab.setPointerCapture?.(event.pointerId); } catch (_) {}
   });
-  container.addEventListener("drop", event => {
-    if (dragged) event.preventDefault();
+  container.addEventListener("pointermove", event => {
+    if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return;
+    if (!pointerDrag.active) {
+      const distance = Math.hypot(
+        event.clientX - pointerDrag.startX,
+        event.clientY - pointerDrag.startY
+      );
+      if (distance < 5) return;
+      pointerDrag.active = true;
+      pointerDrag.tab.classList.add("stch-tab-dragging");
+    }
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.(
+      ".stch-tab[data-tab]"
+    );
+    if (target && target !== pointerDrag.tab && container.contains(target)) {
+      const rect = target.getBoundingClientRect();
+      const insertBefore = event.clientX < rect.left + rect.width / 2;
+      container.insertBefore(
+        pointerDrag.tab,
+        insertBefore ? target : target.nextSibling
+      );
+      syncSettingsSpacer(container);
+    }
+    event.preventDefault();
+  }, { passive: false });
+
+  const finish = event => {
+    if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return;
+    const { tab, pointerId, initialOrder, active } = pointerDrag;
+    pointerDrag = null;
+    tab.classList.remove("stch-tab-dragging");
+    try { if (tab.hasPointerCapture?.(pointerId)) tab.releasePointerCapture(pointerId); } catch (_) {}
+    if (!active) return;
+    suppressClickUntil = Date.now() + 100;
+    const order = readTabOrder(container);
+    syncSettingsSpacer(container);
+    if (order.join(",") !== initialOrder) onOrderChange?.(order);
+  };
+  container.addEventListener("pointerup", finish);
+  container.addEventListener("pointercancel", finish);
+  container.addEventListener("lostpointercapture", event => {
+    if (pointerDrag?.active) finish(event);
   });
   container.addEventListener("click", event => {
     if (Date.now() > suppressClickUntil) return;

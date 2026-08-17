@@ -7,7 +7,7 @@ import {
   DEFAULT_CONFIG,
 } from "../config.js";
 
-import { ONBOARDING_SEEN_KEY } from "../constants.js";
+import { ONBOARDING_SEEN_KEY, TAB_DEFINITIONS } from "../constants.js";
 
 import {
   createCurrencyContext,
@@ -65,7 +65,8 @@ import {
   calculatePriceOverviewCycleTiming,
   formatTimingSeconds,
 } from "../services/request-timing.js";
-import { applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
+import { applyTabColors, applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
+import { normalizeHexColor, normalizeTabColors } from "../services/tab-preferences.js";
 
   let modalEl = null;
 
@@ -295,6 +296,24 @@ import { applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
         <label>无订单墙时 ${currencySymbol}
           <input id="stch-auto-${rule.id}-no-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.noWallOffsetKey]}">
         </label>
+      </div>
+    `).join("");
+    const tabLabels = new Map(TAB_DEFINITIONS.map(tab => [tab.id, tab.label]));
+    const tabColorRows = [
+      ["scan", "orders", "active-orders"],
+      ["surplus", "collection"],
+      ["history", "craft", "blacklist", "settings"],
+    ];
+    const tabColorSettingsHtml = tabColorRows.map(row => `
+      <div class="stch-tab-color-row stch-tab-color-cols-${row.length}">
+        ${row.map(id => `
+          <label class="stch-tab-color-field">
+            <span>${tabLabels.get(id)}</span>
+            <input class="stch-input stch-tab-color-input" data-tab-color="${id}"
+              type="text" maxlength="7" spellcheck="false" placeholder="#66C0F4"
+              value="${state.cfg.tabColors?.[id] || ""}">
+          </label>
+        `).join("")}
       </div>
     `).join("");
     const backdrop = document.createElement("div");
@@ -620,9 +639,16 @@ import { applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
           <div class="stch-game-list stch-collection-list" id="stch-collection-list"></div>
         </div>
         <div class="stch-tab-content ${activeClass("settings")} ${state.cfg.showAdvancedSettings ? "stch-show-advanced" : ""}" id="stch-tab-settings">
-          <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">全局设定</div>
-          <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
-          <div class="stch-toolbar">
+          <div class="stch-settings-layout">
+            <div class="stch-settings-nav">
+              <button class="stch-settings-nav-item active" type="button" data-settings-page="general">常规</button>
+              <button class="stch-settings-nav-item" type="button" data-settings-page="personalization">个性化</button>
+            </div>
+            <div class="stch-settings-main">
+              <div class="stch-settings-panel active" data-settings-panel="general">
+                <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">全局设定</div>
+                <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+                <div class="stch-toolbar">
             <label>无法自动识别币种时使用
               <select id="stch-currency-fallback" class="stch-input" style="width:138px">
                 <option value="23" ${Number(state.cfg.currencyId) === 23 ? "selected" : ""}>人民币 CNY (¥)</option>
@@ -694,6 +720,16 @@ import { applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
               重复物品计算包含点数商店物品
             </label>
           </div>
+              </div>
+              <div class="stch-settings-panel" data-settings-panel="personalization">
+                <div class="stch-settings-section-title">Tab 标签颜色</div>
+                <div class="stch-settings-section-rule"></div>
+                <div class="stch-tab-color-settings">${tabColorSettingsHtml}</div>
+                <div class="stch-tab-color-help">输入六位 HEX 色值，例如 #66C0F4；留空可恢复默认颜色。</div>
+                <div class="stch-footer-status" id="stch-personalization-status"></div>
+              </div>
+            </div>
+          </div>
           <div class="stch-settings-page-actions">
             <label class="stch-advanced-toggle"><input id="stch-show-advanced-settings" type="checkbox" ${state.cfg.showAdvancedSettings ? "checked" : ""}> 显示高级</label>
             <span class="stch-footer-status" id="stch-settings-action-status"></span>
@@ -710,6 +746,7 @@ import { applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
     document.body.appendChild(modal);
     const tabsContainer = modal.querySelector(".stch-tabs");
     state.cfg.tabOrder = applyTabOrder(tabsContainer, state.cfg.tabOrder);
+    state.cfg.tabColors = applyTabColors(tabsContainer, state.cfg.tabColors);
     enableTabDragReordering(tabsContainer, order => {
       state.cfg.tabOrder = order;
       saveConfig(state.cfg);
@@ -718,6 +755,51 @@ import { applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
     initLogResizers(modal);
 
     modal.querySelector(".stch-close").addEventListener("click", closeModal);
+
+    const activateSettingsPage = pageName => {
+      modal.querySelectorAll("[data-settings-page]").forEach(button => {
+        button.classList.toggle("active", button.dataset.settingsPage === pageName);
+      });
+      modal.querySelectorAll("[data-settings-panel]").forEach(panel => {
+        panel.classList.toggle("active", panel.dataset.settingsPanel === pageName);
+      });
+    };
+    modal.querySelectorAll("[data-settings-page]").forEach(button => {
+      button.addEventListener("click", () => activateSettingsPage(button.dataset.settingsPage));
+    });
+
+    const personalizationStatus = document.getElementById("stch-personalization-status");
+    const syncTabColorInput = (input, persist) => {
+      const id = input.dataset.tabColor;
+      const raw = input.value.trim();
+      const color = normalizeHexColor(raw);
+      const valid = raw === "" || !!color;
+      input.classList.toggle("invalid", !valid);
+      if (!valid) {
+        if (personalizationStatus) personalizationStatus.textContent = "请输入六位 HEX 色值";
+        return;
+      }
+      const next = { ...(state.cfg.tabColors || {}) };
+      if (color) next[id] = color;
+      else delete next[id];
+      state.cfg.tabColors = normalizeTabColors(next);
+      applyTabColors(tabsContainer, state.cfg.tabColors);
+      if (personalizationStatus) personalizationStatus.textContent = "";
+      if (persist) {
+        input.value = color;
+        saveConfig(state.cfg);
+        if (personalizationStatus) {
+          personalizationStatus.textContent = color ? "颜色已保存" : "已恢复默认颜色";
+        }
+      }
+    };
+    modal.querySelectorAll(".stch-tab-color-input[data-tab-color]").forEach(input => {
+      input.addEventListener("input", () => syncTabColorInput(input, false));
+      input.addEventListener("blur", () => syncTabColorInput(input, true));
+      input.addEventListener("keydown", event => {
+        if (event.key === "Enter") input.blur();
+      });
+    });
 
     const readNumberInput = (id, fallback, options = {}) => {
       const raw = document.getElementById(id)?.value;

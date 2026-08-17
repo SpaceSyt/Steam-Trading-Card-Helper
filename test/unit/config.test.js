@@ -12,6 +12,8 @@ import {
 import { DEFAULT_TAB_ORDER } from "../../src/constants.js";
 import {
   getOrderedTabDefinitions,
+  normalizeHexColor,
+  normalizeTabColors,
   normalizeTabOrder,
 } from "../../src/services/tab-preferences.js";
 
@@ -195,4 +197,23 @@ test("config normalizes malformed tab order without sharing the default array", 
   assert.deepEqual(first.tabOrder.slice(0, 2), ["collection", "scan"]);
   assert.deepEqual(second.tabOrder, DEFAULT_TAB_ORDER);
   assert.notEqual(second.tabOrder, DEFAULT_CONFIG.tabOrder);
+});
+
+test("tab colors accept six-digit hex values and discard unknown or malformed entries", () => {
+  assert.equal(normalizeHexColor("66c0f4"), "#66C0F4");
+  assert.equal(normalizeHexColor("#aBc123"), "#ABC123");
+  assert.equal(normalizeHexColor("#abc"), "");
+  assert.deepEqual(normalizeTabColors({
+    scan: "#112233",
+    collection: "abcdef",
+    settings: "invalid",
+    unknown: "#445566",
+  }), {
+    scan: "#112233",
+    collection: "#ABCDEF",
+  });
+
+  const cfg = normalizeConfig({ tabColors: { orders: "#123456", craft: "bad" } });
+  assert.deepEqual(cfg.tabColors, { orders: "#123456" });
+  assert.notEqual(cfg.tabColors, DEFAULT_CONFIG.tabColors);
 });
