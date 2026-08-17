@@ -26,6 +26,7 @@ import { fetchHighestBuyPrice, getOrderPriceSourceLabel } from "./orders.js";
 import { getSelectedSurplusResults, renderSurplusResults } from "./surplus.js";
 
 import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
+import { isItemCollectionHealthy } from "../services/item-collection.js";
 
   function getProcessingMode() {
     const value = document.getElementById("stch-surplus-item-mode")?.value
@@ -564,6 +565,10 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     const mode = getProcessingMode();
     const ui = getProcessingUi(mode);
     if (isPriceOverviewProbeBlocked(state.surplusActionRunning)) return;
+    if (!isItemCollectionHealthy()) {
+      ui.log("收藏数据已损坏，为保护物品已停止出售", "err");
+      return;
+    }
     if (getSelectedGroups(mode).length === 0) {
       ui.log(ui.emptySell, "warn");
       return;
@@ -629,6 +634,10 @@ import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
     const mode = getProcessingMode();
     const ui = getProcessingUi(mode);
     if (isSharedActionBusy()) return;
+    if (!isItemCollectionHealthy()) {
+      ui.log("收藏数据已损坏，为保护物品已停止分解", "err");
+      return;
+    }
     if (getSelectedGroups(mode).length === 0) {
       ui.log(ui.emptyGem, "warn");
       return;

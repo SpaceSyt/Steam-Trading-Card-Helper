@@ -23,6 +23,7 @@ import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, getCardG
 import { getGemBreakEvenBuyerPrice, getGemSackSellerNetCents } from "../utils/market-fees.js";
 
 import { applyItemRecommendation } from "../services/item-recommendation.js";
+import { isItemCollected } from "../services/item-collection.js";
 
 import { summarizeAssetIds } from "../parsers/inventory.js";
 
@@ -79,7 +80,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     }
   }
 
-  export function addGrindItem(groupMap, asset, description, amount, source, gemValue, pointsShop = false) {
+  export function addGrindItem(groupMap, asset, description, amount, source, gemValue, pointsShop = false, category = "") {
     if (!description || amount <= 0) return "skipped";
     if (isGemSackDescription(description) || isLooseGemDescription(description)) return "gem";
 
@@ -99,6 +100,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     let item = groupMap.get(key);
     if (!item) {
       item = {
+        category,
         appid,
         gameName: getCardGameName(description),
         type: getCommunityItemType(description),
@@ -114,10 +116,12 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         tradableCount: 0,
         pointsShopCount: 0,
         source,
+        descriptionKey: getDescriptionKey(description),
         assets: [],
       };
       groupMap.set(key, item);
     }
+    if (!item.category && category) item.category = category;
     if (!item.gameName) item.gameName = getCardGameName(description);
 
     const marketable = Number(description.marketable) === 1;
@@ -263,7 +267,8 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
           assetAmount,
           "item",
           gemValue,
-          pointsShop
+          pointsShop,
+          itemMode
         );
         if (result === "noGemValue") skipped.noGemValue += assetAmount;
         else if (result === "blacklisted") skipped.blacklisted += assetAmount;
@@ -305,6 +310,8 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
 
   export function getVisibleGrindResults() {
     return (state.grindResults || []).filter(item => {
+      const category = item.category || state.cfg.surplusItemMode;
+      if (isItemCollected(item, category)) return false;
       if (state.cfg.surplusOnlyRecommended && item.recommendationKey !== "grind") return false;
       if (state.cfg.surplusOnlyTradable && item.tradableCount <= 0) return false;
       return true;
@@ -329,6 +336,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     const selected = state.selectedGrindResults || new Set();
     return (state.grindResults || []).filter(item =>
       selected.has(getGrindResultKey(item))
+      && !isItemCollected(item, item.category || state.cfg.surplusItemMode)
     );
   }
 

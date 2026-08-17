@@ -33,6 +33,7 @@ import { getSelectedResults, getSelectedOrderResults } from "../services/result-
       disabled || isPriceOverviewGroupBusy()
     );
     document.getElementById("stch-surplus-gem-btn")?.classList.toggle("disabled", disabled);
+    document.getElementById("stch-surplus-collect-btn")?.classList.toggle("disabled", disabled);
     ["stch-surplus-sell-price-source", "stch-surplus-sell-adjustment"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = isSharedActionBusy();

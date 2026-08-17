@@ -594,6 +594,16 @@
       text-align: center;
       box-sizing: border-box;
     }
+    .stch-collection-actions { align-items: center; }
+    .stch-collection-list {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .stch-collection-tile .stch-inv-badge-left {
+      background: rgba(102, 192, 244, 0.9);
+      color: #0e1621;
+    }
     .stch-surplus-mode-panel {
       display: none;
       flex-direction: column;

@@ -23,6 +23,7 @@ import { formatMoney } from "../utils/format.js";
 
 import { applyItemRecommendation } from "../services/item-recommendation.js";
 import { getSurplusReservePolicy } from "../services/surplus-policy.js";
+import { isItemCollected } from "../services/item-collection.js";
 
 import { findInventoryCardForBadgeCard, selectSurplusAssets, summarizeAssetIds } from "../parsers/inventory.js";
 
@@ -89,6 +90,7 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
         0
       );
       results.push({
+        category: "card",
         appid: group.appid,
         isFoil: group.isFoil,
         gameName: info.gameName || group.gameName || "",
@@ -119,6 +121,7 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
 
   export function getVisibleSurplusResults() {
     return (state.surplusResults || []).filter(result => {
+      if (isItemCollected(result, "card")) return false;
       if (state.cfg.surplusOnlyRecommended && result.recommendationKey !== "grind") return false;
       if (state.cfg.surplusOnlyTradable && result.tradableCount <= 0) return false;
       return true;
@@ -141,7 +144,7 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
   export function getSelectedSurplusResults() {
     const selected = state.selectedSurplusResults || new Set();
     return (state.surplusResults || []).filter(result =>
-      selected.has(getSurplusResultKey(result))
+      selected.has(getSurplusResultKey(result)) && !isItemCollected(result, "card")
     );
   }
 

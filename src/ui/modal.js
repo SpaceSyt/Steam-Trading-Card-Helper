@@ -36,6 +36,13 @@ import { startSurplusScan, requestSurplusStop, renderSurplusResults, setAllVisib
 import { startGrindScan, requestGrindStop, renderGrindResults, setAllVisibleGrindSelection } from "../features/grind.js";
 
 import { submitSelectedProcessingSell, submitSelectedProcessingGems } from "../features/item-actions.js";
+import {
+  activateItemCollectionTab,
+  collectSelectedProcessingItems,
+  removeSelectedCollectionItems,
+  renderItemCollection,
+  setAllItemCollectionSelection,
+} from "../features/item-collection.js";
 
 import {
   addToBlacklist,
@@ -296,6 +303,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
           <span class="stch-tab" data-tab="craft">徽章合成</span>
           <span class="stch-tab" data-tab="blacklist">游戏/AppID黑名单</span>
           <span class="stch-tab" data-tab="surplus">多余物品处理</span>
+          <span class="stch-tab" data-tab="collection">物品收藏</span>
           <span class="stch-tab stch-tab-right ${activeClass("settings")}" data-tab="settings">设置</span>
         </div>
         <div class="stch-tab-content ${activeClass("scan")}" id="stch-tab-scan">
@@ -552,6 +560,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             <span class="stch-selected-count stch-processing-selected-count" id="stch-surplus-selected-count">选择 0 项</span>
             <div class="stch-btn alt disabled" id="stch-surplus-select-all-btn">全选</div>
             <div class="stch-surplus-action-buttons">
+              <div class="stch-btn alt disabled" id="stch-surplus-collect-btn">收藏选中</div>
               <div class="stch-btn alt disabled" id="stch-surplus-sell-btn">出售</div>
               <div class="stch-btn stch-btn-danger disabled" id="stch-surplus-gem-btn">转化宝石</div>
             </div>
@@ -582,6 +591,16 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
             <div class="stch-log-resizer" data-log="stch-grind-log" data-content="stch-grind-list"></div>
             <div id="stch-grind-log"></div>
           </div>
+        </div>
+        <div class="stch-tab-content" id="stch-tab-collection">
+          <div class="stch-scan-actions stch-collection-actions">
+            <span class="stch-summary-text" id="stch-collection-summary">已收藏 0 项 · 已选择 0 项</span>
+            <div class="stch-surplus-action-spacer"></div>
+            <div class="stch-btn alt disabled" id="stch-collection-select-all">全选</div>
+            <div class="stch-btn alt stch-btn-danger disabled" id="stch-collection-remove">移除选中</div>
+          </div>
+          <div class="stch-status-text" id="stch-collection-status" style="display:none"></div>
+          <div class="stch-game-list stch-collection-list" id="stch-collection-list"></div>
         </div>
         <div class="stch-tab-content ${activeClass("settings")} ${state.cfg.showAdvancedSettings ? "stch-show-advanced" : ""}" id="stch-tab-settings">
           <div style="color:#fff;font-weight:bold;font-size:16px;margin-bottom:4px;">全局设定</div>
@@ -1000,6 +1019,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       if (tabName === "active-orders") activateActiveBuyOrdersTab();
       if (tabName === "history") activatePriceHistoryTab();
       if (tabName === "surplus") applySurplusItemMode();
+      if (tabName === "collection") activateItemCollectionTab();
     };
     const showOnboarding = () => {
       GM_setValue(ONBOARDING_SEEN_KEY, true);
@@ -1160,10 +1180,24 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
       submitSelectedProcessingSell();
       updateAllActionStates();
     });
+    document.getElementById("stch-surplus-collect-btn").addEventListener("click", event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      collectSelectedProcessingItems();
+    });
     document.getElementById("stch-surplus-gem-btn").addEventListener("click", event => {
       if (event.currentTarget.classList.contains("disabled")) return;
       submitSelectedProcessingGems();
       updateAllActionStates();
+    });
+    document.getElementById("stch-collection-select-all").addEventListener("click", event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      const total = state.itemCollectionItems?.length || 0;
+      const selected = state.selectedItemCollection?.size || 0;
+      setAllItemCollectionSelection(!(total > 0 && selected === total));
+    });
+    document.getElementById("stch-collection-remove").addEventListener("click", event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      removeSelectedCollectionItems();
     });
     const syncCraftMaxPages = event => {
       state.cfg.maxBadgePages = Math.max(
@@ -1362,6 +1396,7 @@ import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
     applySurplusItemMode();
     renderSurplusResults();
     renderGrindResults();
+    renderItemCollection();
     pruneOrderCache(true);
     renderOrderResults();
     renderResults();

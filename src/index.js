@@ -4,6 +4,7 @@ import { $J } from "./globals.js";
 import { state } from "./state.js";
 import { initializeCurrencyContext } from "./services/currency.js";
 import { loadOrderCache, pruneOrderCache } from "./services/order-cache.js";
+import { loadItemCollection } from "./services/item-collection.js";
 import { observeEntryBtn } from "./ui/entry.js";
 import { injectSidebar } from "./sidebar/sidebar.js";
 import { initMultibuyAutoFill } from "./features/multibuy.js";
@@ -15,6 +16,7 @@ state.currencyContext = initializeCurrencyContext({
 });
 state.orderResults = loadOrderCache();
 pruneOrderCache(true);
+loadItemCollection();
 
 const pageUrl = window.location.href;
 const initWhenReady = callback => {
