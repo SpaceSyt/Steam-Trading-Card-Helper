@@ -877,6 +877,7 @@
     }
     .stch-tab:hover { color: #fff; background: rgba(103,193,245,0.1); }
     .stch-tab.active { color: #fff; background: #1b2838; border: 1px solid #45556b; border-bottom-color: #1b2838; }
+    .stch-tab.stch-tab-dragging { opacity: 0.55; }
     .stch-tab-right { margin-left: auto; }
     .stch-tab-content { display: none; position: relative; }
     .stch-tab-content.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }

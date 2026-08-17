@@ -65,6 +65,7 @@ import {
   calculatePriceOverviewCycleTiming,
   formatTimingSeconds,
 } from "../services/request-timing.js";
+import { applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
 
   let modalEl = null;
 
@@ -707,6 +708,12 @@ import {
       </div>
     `;
     document.body.appendChild(modal);
+    const tabsContainer = modal.querySelector(".stch-tabs");
+    state.cfg.tabOrder = applyTabOrder(tabsContainer, state.cfg.tabOrder);
+    enableTabDragReordering(tabsContainer, order => {
+      state.cfg.tabOrder = order;
+      saveConfig(state.cfg);
+    });
     modalEl = modal;
     initLogResizers(modal);
 

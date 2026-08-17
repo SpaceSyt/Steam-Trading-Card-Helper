@@ -1,6 +1,9 @@
+  import { DEFAULT_TAB_ORDER } from "./constants.js";
+  import { normalizeTabOrder } from "./services/tab-preferences.js";
+
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 27;
+  export const CONFIG_SCHEMA_VERSION = 28;
 
   export const AUTOMATIC_PRICE_STRATEGY_CONFIG = Object.freeze({
     conservative: Object.freeze({
@@ -72,6 +75,7 @@
     surplusSellPriceAdjustment: 0,
     grindReserveCopies: 1,
     grindIncludePointsShopItems: false,
+    tabOrder: [...DEFAULT_TAB_ORDER],
   };
 
   export function normalizeConfig(saved) {
@@ -109,6 +113,7 @@
     merged.showScanSellSetColumn = merged.showScanSellSetColumn !== false;
     merged.minimumPriceFallback = minimumPriceFallback;
     merged.surplusOnlyRecommended = legacyOnlyRecommended;
+    merged.tabOrder = normalizeTabOrder(merged.tabOrder);
     const blacklistExpiryDays = Number(merged.blacklistExpiryDays);
     merged.blacklistExpiryDays = Number.isFinite(blacklistExpiryDays)
       ? Math.max(1, Math.floor(blacklistExpiryDays))
@@ -200,7 +205,7 @@
   }
 
   export function loadConfig() {
-    const defaults = { ...DEFAULT_CONFIG };
+    const defaults = { ...DEFAULT_CONFIG, tabOrder: [...DEFAULT_TAB_ORDER] };
     try {
       const raw = GM_getValue(CONFIG_STORAGE_KEY, null);
       if (raw) {

@@ -9,6 +9,11 @@ import {
   getActiveOrderPricingProfile,
   normalizeConfig,
 } from "../../src/config.js";
+import { DEFAULT_TAB_ORDER } from "../../src/constants.js";
+import {
+  getOrderedTabDefinitions,
+  normalizeTabOrder,
+} from "../../src/services/tab-preferences.js";
 
 const legacyStorage = JSON.parse(readFileSync(
   new URL("../fixtures-public/cache/v2.0.5-storage.json", import.meta.url),
@@ -165,4 +170,29 @@ test("surplus recommendation filter migrates from the former background setting"
   assert.equal("grindOnlyRecommended" in migrated, false);
   assert.equal("surplusOnlyMaxed" in migrated, false);
   assert.equal("surplusCompareGems" in migrated, false);
+});
+
+test("tab order keeps valid user positions and appends every missing tab", () => {
+  const order = normalizeTabOrder([
+    "surplus",
+    "scan",
+    "surplus",
+    "unknown",
+    "settings",
+  ]);
+  assert.deepEqual(order.slice(0, 3), ["surplus", "scan", "settings"]);
+  assert.equal(new Set(order).size, DEFAULT_TAB_ORDER.length);
+  assert.deepEqual(new Set(order), new Set(DEFAULT_TAB_ORDER));
+  assert.deepEqual(
+    getOrderedTabDefinitions(order).map(tab => tab.id),
+    order
+  );
+});
+
+test("config normalizes malformed tab order without sharing the default array", () => {
+  const first = normalizeConfig({ tabOrder: ["collection", "scan"] });
+  const second = normalizeConfig({ tabOrder: "not-an-array" });
+  assert.deepEqual(first.tabOrder.slice(0, 2), ["collection", "scan"]);
+  assert.deepEqual(second.tabOrder, DEFAULT_TAB_ORDER);
+  assert.notEqual(second.tabOrder, DEFAULT_CONFIG.tabOrder);
 });

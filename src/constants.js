@@ -29,3 +29,17 @@
   export const MULTIBUY_DATA_TTL = 5 * 60 * 1000;
 
   export const MULTIBUY_FILL_TIMEOUT = 30000;
+
+  export const TAB_DEFINITIONS = Object.freeze([
+    Object.freeze({ id: "scan", label: "卡牌价格扫描" }),
+    Object.freeze({ id: "orders", label: "订购卡牌" }),
+    Object.freeze({ id: "active-orders", label: "已下订购单" }),
+    Object.freeze({ id: "history", label: "价格走势" }),
+    Object.freeze({ id: "craft", label: "徽章合成" }),
+    Object.freeze({ id: "blacklist", label: "游戏/AppID黑名单" }),
+    Object.freeze({ id: "surplus", label: "多余物品处理" }),
+    Object.freeze({ id: "collection", label: "物品收藏" }),
+    Object.freeze({ id: "settings", label: "设置" }),
+  ]);
+
+  export const DEFAULT_TAB_ORDER = Object.freeze(TAB_DEFINITIONS.map(tab => tab.id));
