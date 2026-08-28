@@ -67,6 +67,14 @@ import {
 } from "../services/request-timing.js";
 import { applyTabColors, applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
 import { normalizeHexColor, normalizeTabColors } from "../services/tab-preferences.js";
+import {
+  createDataBackup,
+  getDataBackupFileName,
+  getUtf8ByteLength,
+  parseDataBackup,
+  restoreDataBackup,
+  serializeDataBackup,
+} from "../services/data-backup.js";
 
   let modalEl = null;
 
@@ -734,13 +742,17 @@ import { normalizeHexColor, normalizeTabColors } from "../services/tab-preferenc
             <label class="stch-advanced-toggle"><input id="stch-show-advanced-settings" type="checkbox" ${state.cfg.showAdvancedSettings ? "checked" : ""}> 显示高级</label>
             <span class="stch-footer-status" id="stch-settings-action-status"></span>
             <div class="stch-btn alt" id="stch-onboarding-open">重新查看使用说明</div>
+            <div class="stch-btn alt" id="stch-settings-import-data">导入数据</div>
+            <div class="stch-btn alt" id="stch-settings-copy-data">复制数据</div>
+            <div class="stch-btn alt" id="stch-settings-export-data">导出文件</div>
+            <input id="stch-settings-import-file" type="file" accept="application/json,.json" hidden>
             <div class="stch-btn alt" id="stch-settings-clear-cache">清除缓存</div>
             <div class="stch-btn stch-btn-danger" id="stch-settings-reset">恢复默认设定</div>
           </div>
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.4.2 · 当前币种：${currencyStatus}</span>
+        <span class="stch-label">V2.4.3 · 当前币种：${currencyStatus}</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -1151,6 +1163,107 @@ import { normalizeHexColor, normalizeTabColors } from "../services/tab-preferenc
         ? setTimeout(() => { status.textContent = ""; }, 3500)
         : null;
     };
+    const createBackupText = () => serializeDataBackup(
+      createDataBackup((key, fallback) => GM_getValue(key, fallback))
+    );
+    const copyBackupText = async text => {
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch (_) {}
+      }
+      const input = document.createElement("textarea");
+      input.value = text;
+      input.setAttribute("readonly", "");
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      const copied = document.execCommand("copy");
+      input.remove();
+      return copied;
+    };
+    const copyBackupData = async event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      try {
+        const text = createBackupText();
+        const bytes = getUtf8ByteLength(text);
+        if (bytes > 1024 * 1024) {
+          setSettingsActionStatus("备份超过 1 MiB，请使用“导出文件”");
+          return;
+        }
+        const copied = await copyBackupText(text);
+        setSettingsActionStatus(copied
+          ? `已复制数据（${Math.max(1, Math.ceil(bytes / 1024))} KiB）`
+          : "复制失败，请使用“导出文件”");
+      } catch (error) {
+        setSettingsActionStatus(`导出失败：${error?.message || error}`);
+      }
+    };
+    const exportBackupFile = async event => {
+      if (event.currentTarget.classList.contains("disabled")) return;
+      try {
+        const text = createBackupText();
+        const fileName = getDataBackupFileName();
+        const picker = window.showSaveFilePicker;
+        if (typeof picker === "function") {
+          try {
+            const handle = await picker.call(window, {
+              suggestedName: fileName,
+              types: [{
+                description: "Steam 卡牌助手备份",
+                accept: { "application/json": [".json"] },
+              }],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(text);
+            await writable.close();
+            setSettingsActionStatus("备份文件已保存");
+            return;
+          } catch (error) {
+            if (error?.name === "AbortError") throw error;
+            console.warn("[STCH] File picker unavailable; falling back to download:", error);
+          }
+        }
+
+        const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setSettingsActionStatus("备份已下载，请移动到 OneDrive");
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          setSettingsActionStatus("已取消导出");
+          return;
+        }
+        setSettingsActionStatus(`导出失败：${error?.message || error}`);
+      }
+    };
+    const importBackupData = async event => {
+      const input = event.currentTarget;
+      const file = input.files?.[0];
+      input.value = "";
+      if (!file) return;
+      if (isSharedActionBusy() || state.sidebarPriceRefreshing) {
+        setSettingsActionStatus("请先停止当前操作，再导入数据");
+        return;
+      }
+      try {
+        const backup = parseDataBackup(await file.text());
+        const count = Object.keys(backup.storage).length;
+        if (!confirm(`将覆盖本机 ${count} 项设置与缓存，确定导入？`)) return;
+        const result = restoreDataBackup(backup, {
+          getValue: (key, fallback) => GM_getValue(key, fallback),
+          setValue: (key, value) => GM_setValue(key, value),
+        });
+        setSettingsActionStatus(`已导入 ${result.restored} 项数据，请刷新页面`);
+      } catch (error) {
+        setSettingsActionStatus(`导入失败：${error?.message || error}`);
+      }
+    };
     document.getElementById("stch-currency-fallback")?.addEventListener("change", event => {
       const input = event.currentTarget;
       const previousConfiguredId = Number(state.cfg.currencyId || DEFAULT_CONFIG.currencyId);
@@ -1248,6 +1361,12 @@ import { normalizeHexColor, normalizeTabColors } from "../services/tab-preferenc
 
     document.getElementById("stch-onboarding-close").addEventListener("click", closeOnboarding);
     document.getElementById("stch-onboarding-open")?.addEventListener("click", showOnboarding);
+    document.getElementById("stch-settings-import-data")?.addEventListener("click", () => {
+      document.getElementById("stch-settings-import-file")?.click();
+    });
+    document.getElementById("stch-settings-copy-data")?.addEventListener("click", copyBackupData);
+    document.getElementById("stch-settings-export-data")?.addEventListener("click", exportBackupFile);
+    document.getElementById("stch-settings-import-file")?.addEventListener("change", importBackupData);
     document.getElementById("stch-settings-clear-cache")?.addEventListener("click", clearCachedOrders);
     document.getElementById("stch-settings-reset")?.addEventListener("click", restoreDefaultSettings);
     document.getElementById("stch-scan-btn").addEventListener("click", startScan);

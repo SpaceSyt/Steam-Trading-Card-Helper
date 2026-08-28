@@ -245,6 +245,7 @@
       padding-top: 12px;
       border-top: 1px solid #45556b;
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: flex-end;
       gap: 6px;
