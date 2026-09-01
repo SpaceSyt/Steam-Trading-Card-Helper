@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { afterEach } from "node:test";
 
 import { RequestQueue } from "../../src/request/queue.js";
+import {
+  getPriceOverviewRateState,
+  reservePriceOverviewRequest,
+  resetPriceOverviewRateState,
+} from "../../src/request/price-overview-rate.js";
 
 const PRICE_URL = "https://steamcommunity.com/market/priceoverview/?fixture=1";
 const ORDINARY_URL = "https://steamcommunity.com/profiles/1/badges/?p=1";
@@ -78,16 +83,12 @@ function createQueue({
   fetchImpl,
   timers,
   interval = 0,
-  batchSize = 1,
-  batchPause = 60000,
   state = null,
   onStatus = null,
   stopPredicate = () => false,
 }) {
   return new RequestQueue(
     interval,
-    batchSize,
-    batchPause,
     state,
     onStatus,
     null,
@@ -103,13 +104,14 @@ function assertStoppedAndClean(queue) {
   assert.equal(queue.stopped, true);
   assert.equal(queue.running, false);
   assert.equal(queue.cooling, false);
-  assert.equal(queue._reqCount, 0);
   assert.equal(queue._consecutive429, 0);
   assert.equal(queue._currentJob, null);
   assert.equal(queue._currentController, null);
   assert.equal(queue._waiters.size, 0);
   assert.equal(queue.queue.length, 0);
 }
+
+afterEach(resetPriceOverviewRateState);
 
 test("a scoped stop predicate ignores another feature's stop flag", async () => {
   const state = {
@@ -128,23 +130,24 @@ test("a scoped stop predicate ignores another feature's stop flag", async () => 
   queue.stop();
 });
 
-test("stop interrupts proactive cooldown without later status writes", async () => {
+test("stop interrupts the shared priceoverview cooldown without later status writes", async () => {
   const timers = new ManualTimers();
   const statuses = [];
+  for (let index = 0; index < 20; index++) reservePriceOverviewRequest(timers.now());
   const queue = createQueue({
     timers,
     fetchImpl: async () => response(200),
     onStatus: text => statuses.push(text),
   });
 
-  const result = await queue.fetch(PRICE_URL);
-  assert.equal(result.status, 200);
+  const result = capture(queue.fetch(PRICE_URL));
   await flushUntil(() => queue.cooling, "proactive cooldown to begin");
   assert.match(statuses.at(-1), /^主动冷却中/);
   assert.equal(timers.pendingCount, 1);
 
   const statusCountAtStop = statuses.length;
   queue.stop();
+  await result;
   await flushUntil(() => !queue.running, "the stopped queue to become idle");
   timers.advanceBy(120000);
   await Promise.resolve();
@@ -267,8 +270,8 @@ test("ordinary requests do not count, cool down, or retry 429 responses", async 
     assert.equal(Object.hasOwn(options, "requestPolicy"), false);
     assert.equal(Object.hasOwn(options, "endpointPolicy"), false);
   }
-  assert.equal(queue._reqCount, 0);
   assert.equal(queue._consecutive429, 0);
+  assert.equal(getPriceOverviewRateState(timers.now()).count, 0);
   assert.equal(statuses.some(text => /冷却/.test(text)), false);
   assert.equal(timers.pendingCount, 0);
   queue.stop();
@@ -280,8 +283,6 @@ test("priceoverview retries 429 responses under its endpoint policy", async () =
   let fetchCalls = 0;
   const queue = createQueue({
     timers,
-    batchSize: 5,
-    batchPause: 0,
     fetchImpl: async () => {
       fetchCalls++;
       return fetchCalls === 1
@@ -290,18 +291,45 @@ test("priceoverview retries 429 responses under its endpoint policy", async () =
     },
   });
 
-  const result = await queue.fetch(PRICE_URL);
+  const pending = queue.fetch(PRICE_URL);
+  await flushUntil(() => queue.cooling, "429 cooldown to begin");
+  timers.advanceBy(60000);
+  const result = await pending;
   await flushUntil(() => !queue.running, "retried request to finish");
 
   assert.equal(result.data.retried, true);
   assert.equal(fetchCalls, 2);
   assert.equal(queue._consecutive429, 0);
-  assert.equal(queue._reqCount, 1);
+  assert.equal(getPriceOverviewRateState(timers.now()).count, 1);
   queue.stop();
   assertStoppedAndClean(queue);
 });
 
-test("a new queue starts normally after a previous queue was stopped", async () => {
+test("a one-shot priceoverview request can disable 429 retries", async () => {
+  const timers = new ManualTimers();
+  let fetchCalls = 0;
+  const queue = createQueue({
+    timers,
+    fetchImpl: async () => {
+      fetchCalls++;
+      return response(429);
+    },
+  });
+
+  const result = await capture(queue.fetch(PRICE_URL, {
+    requestPolicy: { base: "priceoverview", retry429: false },
+  }));
+  await flushUntil(() => !queue.running, "one-shot request to finish");
+
+  assert.equal(result.status, "rejected");
+  assert.equal(result.reason.status, 429);
+  assert.equal(fetchCalls, 1);
+  assert.equal(queue.cooling, false);
+  assert.equal(getPriceOverviewRateState(timers.now()).count, 1);
+  queue.stop();
+});
+
+test("new queues share the same priceoverview request count", async () => {
   const timers = new ManualTimers();
   const oldQueue = createQueue({
     timers,
@@ -309,7 +337,6 @@ test("a new queue starts normally after a previous queue was stopped", async () 
   });
 
   await oldQueue.fetch(PRICE_URL);
-  await flushUntil(() => oldQueue.cooling, "old queue cooldown to begin");
   oldQueue.stop();
   await flushUntil(() => !oldQueue.running, "old queue to stop");
   assertStoppedAndClean(oldQueue);
@@ -318,7 +345,6 @@ test("a new queue starts normally after a previous queue was stopped", async () 
   let newFetchCalls = 0;
   const newQueue = createQueue({
     timers,
-    batchSize: 2,
     fetchImpl: async () => {
       newFetchCalls++;
       return response(200, { success: true, queue: "new" });
@@ -331,7 +357,7 @@ test("a new queue starts normally after a previous queue was stopped", async () 
   assert.equal(newFetchCalls, 1);
   assert.equal(newQueue.stopped, false);
   assert.equal(newQueue.cooling, false);
-  assert.equal(newQueue._reqCount, 1);
+  assert.equal(getPriceOverviewRateState(timers.now()).count, 2);
   assert.equal(timers.pendingCount, 0);
 
   newQueue.stop();

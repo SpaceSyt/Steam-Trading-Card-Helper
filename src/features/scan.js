@@ -154,8 +154,6 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
     };
     const queue = new RequestQueue(
       cfg.requestInterval,
-      cfg.batchSize,
-      cfg.batchPause,
       state,
       setStatus,
       log,

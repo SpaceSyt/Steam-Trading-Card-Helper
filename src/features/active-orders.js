@@ -346,8 +346,6 @@ export async function refreshActiveBuyOrders() {
   setStatus("正在读取 Steam 市场订购单…");
   const queue = new RequestQueue(
     state.cfg.requestInterval,
-    state.cfg.batchSize,
-    state.cfg.batchPause,
     state,
     null,
     null,
@@ -395,8 +393,6 @@ async function querySelectedLowestSellPrices() {
   updateAllActionStates();
   const queue = new RequestQueue(
     state.cfg.requestInterval,
-    state.cfg.batchSize,
-    state.cfg.batchPause,
     state,
     text => setStatus(text || "正在查询最低售价"),
     null,

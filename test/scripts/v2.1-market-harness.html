@@ -108,12 +108,18 @@
         currencyModule,
         cacheModule,
         { RequestQueue },
+        rateModule,
       ] = await Promise.all([
         import("../../src/parsers/price.js"),
         import("../../src/services/currency.js"),
         import("../../src/services/market-cache.js"),
         import("../../src/request/queue.js"),
+        import("../../src/request/price-overview-rate.js"),
       ]);
+      const {
+        reservePriceOverviewRequest,
+        resetPriceOverviewRateState,
+      } = rateModule;
       const {
         clearActiveCurrencyContext,
         getActiveCurrencyContext,
@@ -140,19 +146,18 @@
 
       function createSyntheticQueue({
         responses,
-        batchSize = 20,
-        batchPause = 150,
+        autoAdvance = false,
+        limitBeforeRequest = false,
       }) {
         const calls = [];
         const statusHistory = [];
         const logHistory = [];
         let responseIndex = 0;
         let currentStatus = "";
+        let syntheticNow = Date.now();
         const state = {
           cfg: {
             requestInterval: 0,
-            batchSize,
-            batchPause,
           },
           stopRequested: false,
         };
@@ -173,14 +178,26 @@
           });
           return jsonResponse(response.status, response.data);
         };
+        if (limitBeforeRequest) {
+          for (let index = 0; index < 20; index++) {
+            reservePriceOverviewRequest(syntheticNow);
+          }
+        }
+        const dependencies = { fetch: fetchImpl };
+        if (autoAdvance) {
+          dependencies.now = () => syntheticNow;
+          dependencies.setTimeout = (callback, delay) => window.setTimeout(() => {
+            syntheticNow += Math.max(0, Number(delay) || 0);
+            callback();
+          }, 0);
+          dependencies.clearTimeout = id => window.clearTimeout(id);
+        }
         const queue = new RequestQueue(
           0,
-          batchSize,
-          batchPause,
           state,
           setStatus,
           (message, type) => logHistory.push({ message, type }),
-          { fetch: fetchImpl }
+          dependencies
         );
         return {
           queue,
@@ -221,6 +238,7 @@
 
       async function runScenario(name, operation) {
         try {
+          resetPriceOverviewRateState();
           const details = await operation();
           scenarios.push({ name, passed: true, details });
         } catch (error) {
@@ -374,7 +392,7 @@
         initializeActiveCurrency(1);
         const marketHashName = "570-v2.1 Retry Card";
         const runtime = createSyntheticQueue({
-          batchPause: 150,
+          autoAdvance: true,
           responses: [
             { status: 429, data: { success: false, synthetic: "rate-limit" } },
             {
@@ -414,8 +432,7 @@
       await runScenario("stop interrupts proactive cooldown", async () => {
         initializeActiveCurrency(23);
         const runtime = createSyntheticQueue({
-          batchSize: 1,
-          batchPause: 1500,
+          limitBeforeRequest: true,
           responses: [{
             status: 200,
             data: {

@@ -519,8 +519,6 @@ async function refreshAllPrices() {
   updateAllActionStates();
   const queue = new RequestQueue(
     state.cfg.requestInterval,
-    state.cfg.batchSize,
-    state.cfg.batchPause,
     state,
     text => setHistoryStatus(text || "正在刷新全部价格"),
     null,

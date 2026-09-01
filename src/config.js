@@ -3,7 +3,7 @@
 
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 30;
+  export const CONFIG_SCHEMA_VERSION = 31;
 
   export const AUTOMATIC_PRICE_STRATEGY_CONFIG = Object.freeze({
     conservative: Object.freeze({
@@ -28,8 +28,6 @@
     currencyId: 23,
     threshold: 5,
     requestInterval: 330,
-    batchSize: 20,
-    batchPause: 53000,
     showNoResultLogs: false,
     showAdvancedSettings: false,
     sidebarDisabled: false,

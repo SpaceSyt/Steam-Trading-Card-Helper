@@ -1,16 +1,19 @@
+import {
+  PRICE_OVERVIEW_WINDOW_MS,
+  reservePriceOverviewRequest,
+} from "./price-overview-rate.js";
+
 const CANCELLED = Symbol("request-queue-cancelled");
 
 const DEFAULT_POLICY = Object.freeze({
   name: "default",
   applyInterval: false,
-  applyBatchCooldown: false,
   retry429: false,
 });
 
 const PRICEOVERVIEW_POLICY = Object.freeze({
   name: "priceoverview",
   applyInterval: true,
-  applyBatchCooldown: true,
   retry429: true,
 });
 
@@ -25,16 +28,12 @@ function firstDefined(...values) {
 export class RequestQueue {
   constructor(
     interval = 330,
-    batchSize = 20,
-    batchPause = 53000,
     state = null,
     onStatus = null,
     onLog = null,
     dependencies = {}
   ) {
     this.interval = interval;
-    this.batchSize = batchSize;
-    this.batchPause = batchPause;
     this.state = state;
     this.onStatus = onStatus;
     this.onLog = onLog;
@@ -44,7 +43,6 @@ export class RequestQueue {
     this.stopped = false;
     this._consecutive429 = 0;
     this._429Warned = false;
-    this._reqCount = 0;
     this._currentJob = null;
     this._currentController = null;
     this._waiters = new Set();
@@ -121,14 +119,6 @@ export class RequestQueue {
     return this._cfgNumber("requestInterval", this.interval, 0);
   }
 
-  _batchSizeLimit() {
-    return Math.max(1, Math.floor(this._cfgNumber("batchSize", this.batchSize, 1)));
-  }
-
-  _batchPauseMs() {
-    return this._cfgNumber("batchPause", this.batchPause, 0);
-  }
-
   _urlText(url) {
     if (typeof url === "string") return url;
     if (url && typeof url.url === "string") return url.url;
@@ -176,12 +166,6 @@ export class RequestQueue {
       override.interval,
       override.pace
     );
-    const batchOption = firstDefined(
-      override.applyBatchCooldown,
-      override.batchCooldown,
-      override.proactiveCooldown,
-      override.countTowardBatch
-    );
     const retryOption = firstDefined(override.retry429, override.retryOn429);
     const numericInterval = typeof intervalOption === "number" && Number.isFinite(intervalOption)
       ? Math.max(0, intervalOption)
@@ -192,16 +176,8 @@ export class RequestQueue {
       applyInterval: intervalOption === undefined
         ? base.applyInterval
         : (numericInterval != null || Boolean(intervalOption)),
-      applyBatchCooldown: batchOption === undefined
-        ? base.applyBatchCooldown
-        : Boolean(batchOption),
       retry429: retryOption === undefined ? base.retry429 : Boolean(retryOption),
       intervalMs: numericInterval ?? this._optionalNumber(override.intervalMs, 0),
-      batchSize: this._optionalNumber(override.batchSize, 1, true),
-      batchPauseMs: this._optionalNumber(
-        firstDefined(override.batchPauseMs, override.batchPause),
-        0
-      ),
     };
   }
 
@@ -215,14 +191,6 @@ export class RequestQueue {
 
   _policyInterval(policy) {
     return policy.intervalMs == null ? this._priceInterval() : policy.intervalMs;
-  }
-
-  _policyBatchSize(policy) {
-    return policy.batchSize == null ? this._batchSizeLimit() : policy.batchSize;
-  }
-
-  _policyBatchPause(policy) {
-    return policy.batchPauseMs == null ? this._batchPauseMs() : policy.batchPauseMs;
   }
 
   _defaultStateStopRequested() {
@@ -414,6 +382,17 @@ export class RequestQueue {
 
     try {
       if (this.stopped) throw CANCELLED;
+      if (job.policy.name === "priceoverview") {
+        let waitMs = reservePriceOverviewRequest(this._now());
+        while (waitMs > 0) {
+          const completed = await this._sleepWithCountdown(
+            waitMs,
+            seconds => `主动冷却中 (${seconds}s)`
+          );
+          if (!completed) throw CANCELLED;
+          waitMs = reservePriceOverviewRequest(this._now());
+        }
+      }
       attempted = true;
       const response = await this._awaitActive(
         job,
@@ -423,8 +402,6 @@ export class RequestQueue {
 
       if (response.status === 429 && job.policy.retry429) {
         this._consecutive429++;
-        this._reqCount = 0;
-        const pauseMs = this._policyBatchPause(job.policy);
         if (this._consecutive429 >= 3 && !this._429Warned && this.onLog) {
           this._429Warned = true;
           this.onLog(
@@ -433,7 +410,7 @@ export class RequestQueue {
           );
         }
         const completed = await this._sleepWithCountdown(
-          pauseMs,
+          PRICE_OVERVIEW_WINDOW_MS,
           seconds => `429 限流冷却中 (第${this._consecutive429}次, ${seconds}s)`
         );
         if (!completed) {
@@ -502,20 +479,6 @@ export class RequestQueue {
     if (this.stopped) return;
     const policy = job.policy;
 
-    if (policy.applyBatchCooldown) {
-      this._reqCount++;
-      if (this._reqCount >= this._policyBatchSize(policy)) {
-        this._reqCount = 0;
-        if (this.stopped) return;
-        await this._sleepWithCountdown(
-          this._policyBatchPause(policy),
-          seconds => `主动冷却中 (${seconds}s)`
-        );
-        if (this._externalStopRequested() && !this.stopped) this.stop();
-        return;
-      }
-    }
-
     if (policy.applyInterval && !this.stopped) {
       const elapsed = this._now() - requestStartedAt;
       await this._sleep(Math.max(0, this._policyInterval(policy) - elapsed));
@@ -552,7 +515,6 @@ export class RequestQueue {
       this._currentJob = null;
       this._currentController = null;
       if (this.stopped) {
-        this._reqCount = 0;
         this._consecutive429 = 0;
         this._429Warned = false;
       }
@@ -565,7 +527,6 @@ export class RequestQueue {
   stop() {
     this.stopped = true;
     this.cooling = false;
-    this._reqCount = 0;
     this._consecutive429 = 0;
     this._429Warned = false;
 

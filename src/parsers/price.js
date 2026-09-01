@@ -161,7 +161,7 @@ export async function priceCard(marketHashName, queue, options = {}) {
     const url = `https://steamcommunity.com/market/priceoverview/?${params.toString()}`;
     const res = await queue.fetch(url, {
       ...(options.fetchOptions || {}),
-      requestPolicy: "priceoverview",
+      requestPolicy: options.requestPolicy || "priceoverview",
     });
     const responseStatus = Number(res?.status);
     if (

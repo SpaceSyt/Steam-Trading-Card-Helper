@@ -73,8 +73,6 @@ import { isItemCollectionHealthy } from "../services/item-collection.js";
     const cfg = state.cfg;
     return new RequestQueue(
       cfg.requestInterval,
-      cfg.batchSize,
-      cfg.batchPause,
       state,
       ui.setStatus,
       ui.log,

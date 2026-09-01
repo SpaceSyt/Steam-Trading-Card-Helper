@@ -275,8 +275,6 @@ const { log: craftLog, setStatus: setCraftStatus, setProgress: setCraftProgress,
     const cfg = state.cfg;
     const queue = new RequestQueue(
       cfg.requestInterval,
-      cfg.batchSize,
-      cfg.batchPause,
       state,
       null,
       craftLog,

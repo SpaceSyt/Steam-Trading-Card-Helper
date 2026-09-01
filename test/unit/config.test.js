@@ -161,6 +161,8 @@ test("config normalization removes obsolete keys and rejects invalid currency id
     grindIncludeSurplusCards: true,
     seasonalTargetLevel: 40,
     seasonalInterval: 200,
+    batchSize: 20,
+    batchPause: 53000,
   });
 
   assert.equal(migrated.currencyId, DEFAULT_CONFIG.currencyId);
@@ -168,6 +170,8 @@ test("config normalization removes obsolete keys and rejects invalid currency id
   assert.equal("grindIncludeSurplusCards" in migrated, false);
   assert.equal("seasonalTargetLevel" in migrated, false);
   assert.equal("seasonalInterval" in migrated, false);
+  assert.equal("batchSize" in migrated, false);
+  assert.equal("batchPause" in migrated, false);
 });
 
 test("surplus recommendation filter migrates from the former background setting", () => {

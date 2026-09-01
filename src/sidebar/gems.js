@@ -10,6 +10,8 @@ import { RequestQueue } from "../request/queue.js";
 
 import { isPriceCardPriced, priceCard } from "../parsers/price.js";
 
+  let sessionGemPricePromise = null;
+
   export async function loadSidebarGemInfo(steamId) {
     if (!steamId) throw new Error("未找到 SteamID，无法读取库存");
 
@@ -61,11 +63,9 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
     };
   }
 
-  export async function loadSidebarGemPrice(queue = null) {
+  async function loadSessionGemPrice(queue) {
     const ownedQueue = queue ? null : new RequestQueue(
       state.cfg.requestInterval,
-      state.cfg.batchSize,
-      state.cfg.batchPause,
       state,
       null,
       null,
@@ -73,7 +73,9 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
     );
     const requestQueue = queue || ownedQueue;
     try {
-      const price = await priceCard(SIDEBAR_GEM_SACK_HASH, requestQueue);
+      const price = await priceCard(SIDEBAR_GEM_SACK_HASH, requestQueue, {
+        requestPolicy: { base: "priceoverview", retry429: false },
+      });
       const priced = isPriceCardPriced(price);
       const priceCents = priced ? price.lowestSellCents || 0 : 0;
       return {
@@ -92,4 +94,13 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
     } finally {
       ownedQueue?.stop();
     }
+  }
+
+  export function loadSidebarGemPrice(queue = null) {
+    if (!sessionGemPricePromise) sessionGemPricePromise = loadSessionGemPrice(queue);
+    return sessionGemPricePromise;
+  }
+
+  export function resetSessionGemPrice() {
+    sessionGemPricePromise = null;
   }

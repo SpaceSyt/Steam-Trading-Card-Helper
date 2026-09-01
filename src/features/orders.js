@@ -93,8 +93,6 @@ const { setStatus: setOrderStatus } = orderStatus;
     const cfg = state.cfg;
     const queue = new RequestQueue(
       cfg.requestInterval,
-      cfg.batchSize,
-      cfg.batchPause,
       state,
       setOrderStatus,
       orderLog,
@@ -130,8 +128,6 @@ const { setStatus: setOrderStatus } = orderStatus;
   export async function fetchActiveBuyOrderSnapshot(queue = null) {
     const ownedQueue = queue ? null : new RequestQueue(
       state.cfg.requestInterval,
-      state.cfg.batchSize,
-      state.cfg.batchPause,
       state,
       null,
       null,
@@ -211,8 +207,6 @@ const { setStatus: setOrderStatus } = orderStatus;
 
     const ownedQueue = queue ? null : new RequestQueue(
       state.cfg.requestInterval,
-      state.cfg.batchSize,
-      state.cfg.batchPause,
       state,
       null,
       null,
@@ -311,8 +305,6 @@ const { setStatus: setOrderStatus } = orderStatus;
 
     const ownedQueue = queue ? null : new RequestQueue(
       state.cfg.requestInterval,
-      state.cfg.batchSize,
-      state.cfg.batchPause,
       state,
       null,
       null,
@@ -804,8 +796,6 @@ const { setStatus: setOrderStatus } = orderStatus;
 
     const queue = new RequestQueue(
       state.cfg.requestInterval,
-      state.cfg.batchSize,
-      state.cfg.batchPause,
       state,
       statusFn,
       logFn,

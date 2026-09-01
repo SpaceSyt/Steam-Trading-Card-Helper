@@ -532,8 +532,6 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     const cfg = state.cfg;
     const queue = new RequestQueue(
       cfg.requestInterval,
-      cfg.batchSize,
-      cfg.batchPause,
       state,
       setGrindStatus,
       grindLog,

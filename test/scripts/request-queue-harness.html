@@ -8,6 +8,7 @@
   <pre id="result">running</pre>
   <script type="module">
     import { RequestQueue } from "../../src/request/queue.js";
+    import { reservePriceOverviewRequest } from "../../src/request/price-overview-rate.js";
 
     const statusHistory = [];
     let currentStatus = "";
@@ -19,8 +20,6 @@
     const state = {
       cfg: {
         requestInterval: 0,
-        batchSize: 1,
-        batchPause: 600,
       },
       stopRequested: false,
     };
@@ -28,10 +27,14 @@
       currentStatus = text || "";
       statusHistory.push(currentStatus);
     };
-    const queue = new RequestQueue(0, 1, 600, state, setStatus);
+    for (let index = 0; index < 20; index++) reservePriceOverviewRequest();
+    const queue = new RequestQueue(0, state, setStatus);
 
-    await queue.fetch("https://steamcommunity.com/market/priceoverview/?fixture=1");
+    const request = queue.fetch("https://steamcommunity.com/market/priceoverview/?fixture=1")
+      .catch(() => null);
+    await new Promise(resolve => setTimeout(resolve, 50));
     queue.stop();
+    await request;
     setStatus(null);
     await new Promise(resolve => setTimeout(resolve, 850));
 

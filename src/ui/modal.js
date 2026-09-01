@@ -65,10 +65,6 @@ import { isSharedActionBusy, updateAllActionStates, updateSurplusActionState } f
 import { clearOrderCache, loadOrderCache, pruneOrderCache, readRawOrderCache } from "../services/order-cache.js";
 
 import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
-import {
-  calculatePriceOverviewCycleTiming,
-  formatTimingSeconds,
-} from "../services/request-timing.js";
 import { applyTabColors, applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
 import { normalizeHexColor, normalizeTabColors } from "../services/tab-preferences.js";
 import {
@@ -93,18 +89,6 @@ import {
     if (!context?.currencyId) return "未识别币种";
     return `${context.code} (${context.symbol}) · ${getCurrencySourceLabel(context)}`
       + `${context.verified ? "" : " · 格式/费用规则未验证"}`;
-  }
-
-  function getPriceOverviewCycleEstimateText(cfg = state.cfg) {
-    const timing = calculatePriceOverviewCycleTiming(
-      cfg.requestInterval,
-      cfg.batchSize,
-      cfg.batchPause
-    );
-    return `扫描总耗时 ${formatTimingSeconds(timing.requestDurationMs)} 秒`
-      + `（${timing.requestIntervalMs}ms×${timing.batchSize}次）`
-      + ` + 暂停时间 ${formatTimingSeconds(timing.pauseMs)} 秒`
-      + ` = 单轮 ${formatTimingSeconds(timing.cycleDurationMs)} 秒`;
   }
 
   const MANUAL_ORDER_PRICE_OPTIONS = [
@@ -672,9 +656,6 @@ import {
           </div>
           <div class="stch-toolbar stch-advanced-setting">
             <label>priceoverview请求间隔 <input id="stch-req-interval" class="stch-input" type="number" min="100" step="10" value="${state.cfg.requestInterval}" style="width:70px"> ms</label>
-            <label>每 <input id="stch-batch-size" class="stch-input" type="number" min="5" step="1" value="${state.cfg.batchSize}" style="width:55px"> 次priceoverview请求后暂停</label>
-            <label><input id="stch-batch-pause" class="stch-input" type="number" min="500" step="500" value="${state.cfg.batchPause}" style="width:75px"> ms</label>
-            <span class="stch-request-cycle-estimate" id="stch-request-cycle-estimate">${getPriceOverviewCycleEstimateText()}</span>
           </div>
           <div class="stch-toolbar">
             <label class="stch-advanced-setting">
@@ -862,20 +843,6 @@ import {
       state.cfg.foilScanMode = !!document.getElementById("stch-foil-scan-mode")?.checked;
       state.cfg.showScanCompletionColumn = !!document.getElementById("stch-show-scan-completion-column")?.checked;
       state.cfg.showScanSellSetColumn = !!document.getElementById("stch-show-scan-sell-set-column")?.checked;
-      state.cfg.batchSize = readNumberInput(
-        "stch-batch-size",
-        state.cfg.batchSize ?? DEFAULT_CONFIG.batchSize,
-        { integer: true, min: 1 }
-      );
-      state.cfg.batchPause = readNumberInput(
-        "stch-batch-pause",
-        state.cfg.batchPause ?? DEFAULT_CONFIG.batchPause,
-        { integer: true, min: 0 }
-      );
-      const requestCycleEstimate = document.getElementById("stch-request-cycle-estimate");
-      if (requestCycleEstimate) {
-        requestCycleEstimate.textContent = getPriceOverviewCycleEstimateText(state.cfg);
-      }
       state.cfg.showNoResultLogs = !!document.getElementById("stch-show-no-result-logs")?.checked;
       state.cfg.showAdvancedSettings = !!document.getElementById("stch-show-advanced-settings")?.checked;
       state.cfg.sidebarDisabled = !!document.getElementById("stch-sidebar-disabled")?.checked;
@@ -985,7 +952,7 @@ import {
       "stch-foil-scan-mode",
       "stch-parallel-order-pricing", "stch-parallel-order-pricing-concurrency",
       "stch-show-scan-completion-column", "stch-show-scan-sell-set-column",
-      "stch-batch-size", "stch-batch-pause", "stch-show-no-result-logs", "stch-show-advanced-settings", "stch-sidebar-disabled", "stch-buy-mode",
+      "stch-show-no-result-logs", "stch-show-advanced-settings", "stch-sidebar-disabled", "stch-buy-mode",
       "stch-early-price-prediction", "stch-minimum-price-fallback", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
       "stch-skip-cached-orders", "stch-craft-interval",
       "stch-craft-mode", "stch-surplus-item-mode",

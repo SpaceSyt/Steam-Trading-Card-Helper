@@ -344,8 +344,6 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
     const cfg = state.cfg;
     const queue = new RequestQueue(
       cfg.requestInterval,
-      cfg.batchSize,
-      cfg.batchPause,
       state,
       setSurplusStatus,
       surplusLog,
