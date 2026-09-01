@@ -293,23 +293,13 @@ import {
         </label>
       </div>
     `).join("");
-    const tabLabels = new Map(TAB_DEFINITIONS.map(tab => [tab.id, tab.label]));
-    const tabColorRows = [
-      ["scan", "orders", "active-orders"],
-      ["surplus", "collection"],
-      ["history", "craft", "blacklist", "settings"],
-    ];
-    const tabColorSettingsHtml = tabColorRows.map(row => `
-      <div class="stch-tab-color-row stch-tab-color-cols-${row.length}">
-        ${row.map(id => `
-          <label class="stch-tab-color-field">
-            <span>${tabLabels.get(id)}</span>
-            <input class="stch-input stch-tab-color-input" data-tab-color="${id}"
-              type="text" maxlength="7" spellcheck="false" placeholder="#66C0F4"
-              value="${state.cfg.tabColors?.[id] || ""}">
-          </label>
-        `).join("")}
-      </div>
+    const tabColorSettingsHtml = TAB_DEFINITIONS.map(({ id, label }) => `
+      <label class="stch-tab-color-field">
+        <span>${label}</span>
+        <input class="stch-input stch-tab-color-input" data-tab-color="${id}"
+          type="text" maxlength="7" spellcheck="false" placeholder="#66C0F4"
+          value="${state.cfg.tabColors?.[id] || ""}">
+      </label>
     `).join("");
     const backdrop = document.createElement("div");
     backdrop.id = "stch-backdrop";

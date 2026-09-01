@@ -307,19 +307,15 @@
     .stch-settings-section-title { color: #fff; font-weight: bold; font-size: 16px; margin-bottom: 4px; }
     .stch-settings-section-rule { border-bottom: 1px solid #45556b; margin-bottom: 16px; }
     .stch-tab-color-settings { display: flex; flex-direction: column; gap: 12px; }
-    .stch-tab-color-row { display: grid; gap: 12px; }
-    .stch-tab-color-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .stch-tab-color-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .stch-tab-color-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .stch-tab-color-field {
       min-width: 0;
       display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 5px;
+      align-items: center;
+      gap: 12px;
       color: #c6d4df;
       font-size: 13px;
     }
+    .stch-tab-color-field span { width: 68px; }
     .stch-tab-color-input { width: 100%; max-width: 112px; text-transform: uppercase; }
     .stch-tab-color-input.invalid { border-color: #d85c5c; color: #e06b65; }
     .stch-tab-color-help { margin-top: 14px; color: #697887; font-size: 12px; }
