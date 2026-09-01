@@ -641,7 +641,7 @@ import {
             <span class="stch-settings-hint">当前使用：${currencyStatus}</span>
           </div>
           <div class="stch-toolbar">
-            <label><input id="stch-parallel-order-pricing" type="checkbox" ${state.cfg.parallelOrderPricingEnabled ? "checked" : ""}> 提交订购单时并发定价</label>
+            <label><input id="stch-parallel-order-pricing" type="checkbox" ${state.cfg.parallelOrderPricingEnabled ? "checked" : ""}> HTML 类请求并发</label>
             <label>并发数 <input id="stch-parallel-order-pricing-concurrency" class="stch-input" type="number" min="1" max="20" step="1" value="${state.cfg.parallelOrderPricingConcurrency}" style="width:55px"></label>
           </div>
           <div class="stch-toolbar stch-advanced-setting">
@@ -726,7 +726,7 @@ import {
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.4.3</span>
+        <span class="stch-label">V2.6.0</span>
       </div>
     `;
     document.body.appendChild(modal);

@@ -73,7 +73,12 @@ import { persistMarketObservations } from "./market-observations.js";
           failedPriceCount++;
           continue;
         }
-        const pk = await priceCard(card.marketHashName, queue, { persistMarketCache: false });
+        const pk = await priceCard(card.marketHashName, queue, {
+          preferListing: true,
+          requireMedian: true,
+          requireVolume: true,
+          persistMarketCache: false,
+        });
         if (pk?.record) marketRecords.push(pk.record);
         const appliedPrice = applyPriceCardResult(card, pk, info.currencyId);
         if (appliedPrice.outcome === PRICE_CARD_OUTCOMES.ERROR) {

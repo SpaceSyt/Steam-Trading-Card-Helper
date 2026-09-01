@@ -316,7 +316,7 @@ test("records with every history metric missing are rejected", () => {
   assert.equal(decoded.diagnostics[0].code, "invalid-records-dropped");
 });
 
-test("overview metrics use only the latest priceoverview rolling snapshot", () => {
+test("overview metrics combine priceoverview and listing-page rolling snapshots", () => {
   const records = [
     makeRecord({ observedAt: BASE_AT + 2000, lowestSellMinor: 34, volume: 1500 }),
     makeRecord({ observedAt: BASE_AT, lowestSellMinor: 32, volume: 1200 }),
@@ -330,16 +330,24 @@ test("overview metrics use only the latest priceoverview rolling snapshot", () =
     }),
     makeRecord({ observedAt: BASE_AT + 1000, lowestSellMinor: null, volume: 1400 }),
     makeRecord({ observedAt: BASE_AT + 3000, lowestSellMinor: 36, volume: null }),
+    makeRecord({
+      observedAt: BASE_AT + 3500,
+      source: "listing-page",
+      lowestSellMinor: 38,
+      medianMinor: 39,
+      highestBuyMinor: 35,
+      volume: 1600,
+    }),
   ];
 
   assert.deepEqual(getMarketOverviewMetrics(records), {
-    currentMinor: 36,
-    previousMinor: 34,
+    currentMinor: 38,
+    previousMinor: 36,
     changeMinor: 2,
-    percentChange: (2 / 34) * 100,
-    volume24h: 1500,
-    observedAt: BASE_AT + 3000,
-    priceSampleCount: 3,
+    percentChange: (2 / 36) * 100,
+    volume24h: 1600,
+    observedAt: BASE_AT + 3500,
+    priceSampleCount: 4,
   });
 });
 

@@ -594,9 +594,11 @@ export function getMarketHistoryStatistics(points, field) {
   };
 }
 
-function getPriceOverviewRecords(records, sorted = false) {
+function getRollingPriceRecords(records, sorted = false) {
   const overview = (Array.isArray(records) ? records : [])
-    .filter(record => record?.source === "priceoverview");
+    .filter(record => (
+      record?.source === "priceoverview" || record?.source === "listing-page"
+    ));
   return sorted
     ? overview
     : overview.sort((left, right) => Number(left.observedAt) - Number(right.observedAt));
@@ -604,7 +606,7 @@ function getPriceOverviewRecords(records, sorted = false) {
 
 /** Build the current row metrics without mixing endpoint snapshots. */
 export function getMarketOverviewMetrics(records, options = {}) {
-  const overview = getPriceOverviewRecords(records, options.sorted === true);
+  const overview = getRollingPriceRecords(records, options.sorted === true);
   const prices = overview.filter(record => (
     Number.isFinite(Number(record.lowestSellMinor))
     && Number(record.lowestSellMinor) > 0
@@ -647,7 +649,7 @@ export function getMarketSparklinePoints(records, options = {}) {
   const from = options.from === undefined ? -Infinity : Number(options.from);
   const maxValue = options.maxPoints === undefined ? 96 : Number(options.maxPoints);
   const maxPoints = Number.isFinite(maxValue) ? Math.max(1, Math.floor(maxValue)) : 96;
-  const points = getPriceOverviewRecords(records, options.sorted === true)
+  const points = getRollingPriceRecords(records, options.sorted === true)
     .filter(record => (
       Number(record.observedAt) >= from
       && Number.isFinite(Number(record.lowestSellMinor))

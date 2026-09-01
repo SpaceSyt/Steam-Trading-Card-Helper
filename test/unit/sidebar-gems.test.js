@@ -23,6 +23,20 @@ const {
   resetSessionGemPrice,
 } = await import("../../src/sidebar/gems.js");
 
+function makeListingHtml(price = 450) {
+  const renderContext = {
+    queryData: JSON.stringify({ queries: [{
+      queryKey: ["market", "orderbook", 753, "753-Sack of Gems"],
+      state: { data: {
+        amtMinSellOrder: price,
+        amtMaxBuyOrder: price - 1,
+        eCurrency: 23,
+      } },
+    }] }),
+  };
+  return `<script>window.SSR.renderContext=JSON.parse(${JSON.stringify(JSON.stringify(renderContext))});</script>`;
+}
+
 beforeEach(() => {
   resetSessionGemPrice();
   resetPriceOverviewRateState();
@@ -36,7 +50,7 @@ afterEach(() => {
   clearActiveCurrencyContext();
 });
 
-test("the session gem request consumes one shared priceoverview slot", async () => {
+test("the session gem request uses listing data without consuming a priceoverview slot", async () => {
   let requestCount = 0;
   const queue = new RequestQueue(0, state, null, null, {
     stopPredicate: () => false,
@@ -45,12 +59,7 @@ test("the session gem request consumes one shared priceoverview slot", async () 
       return {
         status: 200,
         ok: true,
-        text: async () => JSON.stringify({
-          success: true,
-          lowest_price: "¥ 4.50",
-          median_price: "¥ 4.55",
-          volume: "100",
-        }),
+        text: async () => makeListingHtml(),
       };
     },
   });
@@ -59,7 +68,7 @@ test("the session gem request consumes one shared priceoverview slot", async () 
   await loadSidebarGemPrice(queue);
 
   assert.equal(requestCount, 1);
-  assert.equal(getPriceOverviewRateState().count, 1);
+  assert.equal(getPriceOverviewRateState().count, 0);
   queue.stop();
 });
 
@@ -70,12 +79,7 @@ test("gem price is requested once per page session without 429 retries", async (
       calls.push({ url, options });
       return {
         status: 200,
-        data: {
-          success: true,
-          lowest_price: "¥ 4.50",
-          median_price: "¥ 4.55",
-          volume: "100",
-        },
+        text: makeListingHtml(),
       };
     },
   };
@@ -91,12 +95,31 @@ test("gem price is requested once per page session without 429 retries", async (
   assert.strictEqual(second, first);
   assert.equal(first.priceCents, 450);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].options.requestPolicy, {
-    base: "priceoverview",
-    retry429: false,
-  });
+  assert.equal(calls[0].options.requestPolicy, "default");
 
   resetSessionGemPrice();
   await loadSidebarGemPrice(firstQueue);
   assert.equal(calls.length, 2);
+});
+
+test("gem price falls back to one-shot priceoverview when listing parsing fails", async () => {
+  const calls = [];
+  const queue = {
+    async fetch(url, options) {
+      calls.push({ url, options });
+      if (url.includes("/market/listings/")) return { status: 200, text: "invalid" };
+      return {
+        status: 200,
+        data: { success: true, lowest_price: "¥ 4.50", median_price: "¥ 4.55", volume: "100" },
+      };
+    },
+  };
+
+  const price = await loadSidebarGemPrice(queue);
+  assert.equal(price.priceCents, 450);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1].options.requestPolicy, {
+    base: "priceoverview",
+    retry429: false,
+  });
 });

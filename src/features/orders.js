@@ -30,6 +30,7 @@ import {
 import { scanStatus, orderStatus, orderLog } from "../status-controllers.js";
 
 import { createTextSpan } from "../utils/dom.js";
+import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurrency.js";
 
 import { unsafeWindow } from "../globals.js";
 import {
@@ -377,10 +378,10 @@ const { setStatus: setOrderStatus } = orderStatus;
 
     const marketHashNames = [...new Set(candidates.map(({ card }) => card.marketHashName))];
     const results = new Map();
-    let nextIndex = 0;
-    const worker = async () => {
-      while (nextIndex < marketHashNames.length) {
-        const marketHashName = marketHashNames[nextIndex++];
+    await runWithConcurrency(
+      marketHashNames,
+      getHtmlRequestConcurrency(state.cfg),
+      async marketHashName => {
         try {
           const value = pricingProfile.automatic
             ? await fetchMarketOrderDepth(marketHashName, null, {
@@ -395,13 +396,7 @@ const { setStatus: setOrderStatus } = orderStatus;
           results.set(marketHashName, { error });
         }
       }
-    };
-    const configuredConcurrency = Math.floor(Number(state.cfg.parallelOrderPricingConcurrency));
-    const concurrency = Number.isFinite(configuredConcurrency)
-      ? Math.min(20, Math.max(1, configuredConcurrency))
-      : 4;
-    const workerCount = Math.min(concurrency, marketHashNames.length);
-    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    );
     return results;
   }
 

@@ -599,7 +599,11 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         setGrindStatus(`查询价格: ${item.itemName || item.marketHashName}`);
 
         if (item.marketHashName && item.marketableCount > 0) {
-          const price = await priceCard(item.marketHashName, queue, { persistMarketCache: false });
+          const price = await priceCard(item.marketHashName, queue, {
+            preferListing: true,
+            requireVolume: true,
+            persistMarketCache: false,
+          });
           if (price?.record) marketRecords.push(price.record);
           if (isPriceCardPriced(price)) {
             item.priceCents = price.lowestSellCents;

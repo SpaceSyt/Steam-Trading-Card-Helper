@@ -409,6 +409,7 @@ async function querySelectedLowestSellPrices() {
       const result = await priceCard(group.marketHashName, queue, {
         appid: group.appid,
         currencyId,
+        preferListing: true,
         persistMarketCache: false,
       });
       if (result?.record) observations.push(result.record);

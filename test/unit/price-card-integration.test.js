@@ -106,6 +106,53 @@ afterEach(() => {
   Date.now = originalDateNow;
 });
 
+test("priceCard uses listing orderbook and transaction history before priceoverview", async () => {
+  const observedAt = 1_720_000_000_000;
+  const now = Math.floor(observedAt / 1000);
+  const renderContext = {
+    queryData: JSON.stringify({ queries: [
+      {
+        queryKey: ["market", "orderbook", 753, MARKET_HASH_NAME],
+        state: { data: { amtMinSellOrder: 32, amtMaxBuyOrder: 29, eCurrency: 23 } },
+      },
+      {
+        queryKey: ["market", "pricehistory", 753, MARKET_HASH_NAME],
+        state: { data: {
+          ecurrency: 23,
+          prices: [
+            { time: now - 3600, price_median: 0.35, purchases: 7 },
+            { time: now - 7200, price_median: 0.34, purchases: 3 },
+          ],
+        } },
+      },
+    ] }),
+  };
+  const html = `<script>window.SSR.renderContext=JSON.parse(${JSON.stringify(JSON.stringify(renderContext))});</script>`;
+  const calls = [];
+  const queue = {
+    async fetch(url, options) {
+      calls.push({ url, options });
+      return { status: 200, text: html };
+    },
+  };
+  initializeActiveCurrency(23);
+  Date.now = () => observedAt;
+
+  const result = await priceCard(MARKET_HASH_NAME, queue, {
+    preferListing: true,
+    requireMedian: true,
+    requireVolume: true,
+    persistMarketCache: false,
+  });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /\/market\/listings\/753\//);
+  assert.equal(result.lowestSellCents, 32);
+  assert.equal(result.medianCents, 35);
+  assert.equal(result.volume, 10);
+  assert.equal(result.record.source, MARKET_DATA_SOURCES.LISTING_PAGE);
+});
+
 test("priceCard follows the active CNY/USD context and keeps their cached records isolated", async () => {
   const queue = new FakeRequestQueue({
     23: {

@@ -6,6 +6,7 @@ import {
   MARKET_DATA_SCHEMA_VERSION,
   MARKET_DATA_SOURCES,
   fromLegacyPriceResult,
+  normalizeListingPage,
   normalizeListingOrderbook,
   normalizePriceHistory,
   normalizePriceOverview,
@@ -126,6 +127,27 @@ test("listing payload currency wins and a mismatched context code is discarded",
 
   assert.equal(record.currencyId, 23);
   assert.equal(record.currencyCode, null);
+});
+
+test("listing page combines orderbook prices with derived transaction metrics", () => {
+  const record = normalizeListingPage({
+    lowestSellCents: 448,
+    highestBuyCents: 440,
+    currency: 23,
+    historyCurrency: 23,
+    medianPriceMajor: 4.49,
+    volume: 3929,
+  }, {
+    ...baseContext,
+    currencyId: 23,
+    currencyCode: "CNY",
+  });
+
+  assert.equal(record.lowestSellMinor, 448);
+  assert.equal(record.highestBuyMinor, 440);
+  assert.equal(record.medianMinor, 449);
+  assert.equal(record.volume, 3929);
+  assert.equal(record.source, MARKET_DATA_SOURCES.LISTING_PAGE);
 });
 
 test("price history creates one timestamped canonical record per valid tuple", async () => {

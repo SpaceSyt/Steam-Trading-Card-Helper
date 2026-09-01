@@ -74,6 +74,7 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
     const requestQueue = queue || ownedQueue;
     try {
       const price = await priceCard(SIDEBAR_GEM_SACK_HASH, requestQueue, {
+        preferListing: true,
         requestPolicy: { base: "priceoverview", retry429: false },
       });
       const priced = isPriceCardPriced(price);

@@ -35,6 +35,7 @@ import {
 
 import { surplusStatus } from "../status-controllers.js";
 import { enableTileDragSelection } from "../ui/checkbox-drag.js";
+import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurrency.js";
 
 const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusProgress, hideProgress: hideSurplusProgress } = surplusStatus;
 
@@ -349,7 +350,30 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
       surplusLog,
       { stopPredicate: currentState => Boolean(currentState?.surplusStopRequested) }
     );
-    state.surplusQueue = queue;
+    const parallelQueues = new Set();
+    const stopQueues = () => {
+      queue.stop();
+      parallelQueues.forEach(activeQueue => activeQueue.stop());
+      parallelQueues.clear();
+    };
+    const withHtmlQueue = async operation => {
+      if (!state.cfg.parallelOrderPricingEnabled) return operation(queue);
+      const activeQueue = new RequestQueue(
+        cfg.requestInterval,
+        state,
+        null,
+        null,
+        { stopPredicate: currentState => Boolean(currentState?.surplusStopRequested) }
+      );
+      parallelQueues.add(activeQueue);
+      try {
+        return await operation(activeQueue);
+      } finally {
+        activeQueue.stop();
+        parallelQueues.delete(activeQueue);
+      }
+    };
+    state.surplusQueue = { stop: stopQueues };
     const marketRecords = [];
 
     try {
@@ -377,42 +401,55 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
 
       let scanned = 0;
       let failed = 0;
-      for (let index = 0; index < inventory.groups.length; index++) {
-        if (state.surplusStopRequested) break;
-        const group = inventory.groups[index];
-        scanned++;
-        const label = `${group.gameName || group.appid}${group.isFoil ? "（闪亮）" : ""}`;
-        setSurplusProgress(
-          index,
-          inventory.groups.length,
-          `阶段2: ${index + 1}/${inventory.groups.length} · ${label}`
-        );
-        setSurplusStatus(`读取徽章: ${label}`);
+      let completed = 0;
+      await runWithConcurrency(
+        inventory.groups,
+        getHtmlRequestConcurrency(cfg),
+        async group => {
+          if (state.surplusStopRequested) return;
+          scanned++;
+          const label = `${group.gameName || group.appid}${group.isFoil ? "（闪亮）" : ""}`;
+          setSurplusProgress(
+            completed,
+            inventory.groups.length,
+            `阶段2: ${completed + 1}/${inventory.groups.length} · ${label}`
+          );
+          setSurplusStatus(`读取徽章: ${label}`);
 
-        try {
-          const rows = await resolveSurplusForBadge(group, profileUrl, queue);
-          if (rows.length === 0) {
-            if (state.cfg.showNoResultLogs) {
-              surplusLog(`[${group.appid}] ${label}: 没有升满后剩余`, "info");
+          try {
+            const rows = await withHtmlQueue(activeQueue => (
+              resolveSurplusForBadge(group, profileUrl, activeQueue)
+            ));
+            if (rows.length === 0) {
+              if (state.cfg.showNoResultLogs) {
+                surplusLog(`[${group.appid}] ${label}: 没有升满后剩余`, "info");
+              }
+              return;
             }
-            continue;
+            state.surplusResults.push(...rows);
+            const surplusCount = rows.reduce((sum, row) => sum + row.surplusCount, 0);
+            surplusLog(
+              `[${group.appid}] ${label}: ${rows.length} 种卡牌，多余 ${surplusCount} 张`,
+              "ok"
+            );
+          } catch (error) {
+            if (state.surplusStopRequested) return;
+            failed++;
+            surplusLog(
+              `[${group.appid}] ${label}: 读取失败 ${error?.message || error?.status || error}`,
+              "warn"
+            );
+          } finally {
+            completed++;
+            setSurplusProgress(
+              completed,
+              inventory.groups.length,
+              `阶段2: ${completed}/${inventory.groups.length}`
+            );
+            if (completed === 1 || completed % 5 === 0) renderSurplusResults();
           }
-          state.surplusResults.push(...rows);
-          const surplusCount = rows.reduce((sum, row) => sum + row.surplusCount, 0);
-          surplusLog(
-            `[${group.appid}] ${label}: ${rows.length} 种卡牌，多余 ${surplusCount} 张`,
-            "ok"
-          );
-          if (index === 0 || (index + 1) % 5 === 0) renderSurplusResults();
-        } catch (error) {
-          if (state.surplusStopRequested) break;
-          failed++;
-          surplusLog(
-            `[${group.appid}] ${label}: 读取失败 ${error?.message || error?.status || error}`,
-            "warn"
-          );
         }
-      }
+      );
 
       sortSurplusResults();
       renderSurplusResults();
@@ -434,35 +471,48 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
         }
 
         const priceCache = new Map();
-        for (let index = 0; index < state.surplusResults.length; index++) {
-          if (state.surplusStopRequested) break;
-          const result = state.surplusResults[index];
-          setSurplusProgress(
-            index,
-            state.surplusResults.length,
-            `阶段3: ${index + 1}/${state.surplusResults.length} · ${result.cardName || result.marketHashName}`
-          );
-          setSurplusStatus(`查询市场: ${result.cardName || result.marketHashName}`);
+        let priceCompleted = 0;
+        await runWithConcurrency(
+          state.surplusResults,
+          getHtmlRequestConcurrency(cfg),
+          async result => {
+            if (state.surplusStopRequested) return;
+            setSurplusProgress(
+              priceCompleted,
+              state.surplusResults.length,
+              `阶段3: ${priceCompleted + 1}/${state.surplusResults.length} · ${result.cardName || result.marketHashName}`
+            );
+            setSurplusStatus(`查询市场: ${result.cardName || result.marketHashName}`);
 
-          let price = null;
-          if (result.marketHashName) {
-            if (priceCache.has(result.marketHashName)) {
-              price = priceCache.get(result.marketHashName);
-            } else {
-              price = await priceCard(result.marketHashName, queue, { persistMarketCache: false });
-              if (price?.record) marketRecords.push(price.record);
-              priceCache.set(result.marketHashName, price);
+            let price = null;
+            if (result.marketHashName) {
+              let pricePromise = priceCache.get(result.marketHashName);
+              let created = false;
+              if (!pricePromise) {
+                created = true;
+                pricePromise = withHtmlQueue(activeQueue => (
+                  priceCard(result.marketHashName, activeQueue, {
+                    preferListing: true,
+                    requireVolume: true,
+                    persistMarketCache: false,
+                  })
+                ));
+                priceCache.set(result.marketHashName, pricePromise);
+              }
+              price = await pricePromise;
+              if (created && price?.record) marketRecords.push(price.record);
             }
+            applySurplusMarketInfo(
+              result,
+              price,
+              state.surplusGemPrice?.priceCents || 0
+            );
+            if (!isPriceCardPriced(price) && !isPriceCardNoPrice(price)) priceFailed++;
+            if (result.volume === 0) zeroVolume++;
+            priceCompleted++;
+            if (priceCompleted === 1 || priceCompleted % 5 === 0) renderSurplusResults();
           }
-          applySurplusMarketInfo(
-            result,
-            price,
-            state.surplusGemPrice?.priceCents || 0
-          );
-          if (!isPriceCardPriced(price) && !isPriceCardNoPrice(price)) priceFailed++;
-          if (result.volume === 0) zeroVolume++;
-          if (index === 0 || (index + 1) % 5 === 0) renderSurplusResults();
-        }
+        );
 
         sortSurplusResults();
         renderSurplusResults();
@@ -490,7 +540,7 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
         surplusLog(`检测中断: ${error?.message || error?.status || error}`, "err");
       }
     } finally {
-      queue.stop();
+      stopQueues();
       persistMarketObservations(marketRecords);
       state.surplusQueue = null;
       state.surplusScanning = false;

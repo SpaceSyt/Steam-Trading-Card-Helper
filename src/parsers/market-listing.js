@@ -1,5 +1,8 @@
 import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
 
+  const RECENT_HISTORY_SECONDS = 24 * 60 * 60;
+  const HISTORY_LAG_TOLERANCE_SECONDS = 2 * 60 * 60;
+
   function parseCount(value) {
     if (value === null || value === undefined || value === "") return null;
     const count = Number(String(value).replace(/[\s,.'’]/g, ""));
@@ -54,6 +57,54 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
     return unkeyed.length === 1 ? unkeyed[0] : null;
   }
 
+  function parseRecentPriceHistory(queries, marketHashName, now = Date.now()) {
+    const historyQuery = findTargetQuery(
+      queries,
+      marketHashName,
+      "pricehistory",
+      data => data && Array.isArray(data.prices)
+    );
+    const history = historyQuery?.state?.data;
+    if (!history) return null;
+
+    const points = history.prices.map(point => ({
+      time: parseCount(point?.time),
+      price: parseNonnegativeNumber(point?.price_median),
+      purchases: parseCount(point?.purchases),
+    })).filter(point => (
+      point.time !== null
+      && point.price !== null
+      && point.price > 0
+      && point.purchases !== null
+      && point.purchases > 0
+    ));
+    const latestTime = points.reduce((latest, point) => Math.max(latest, point.time), 0);
+    const currentTime = Math.floor(Number(now) / 1000);
+    const cutoff = Math.max(
+      latestTime - RECENT_HISTORY_SECONDS,
+      currentTime - RECENT_HISTORY_SECONDS - HISTORY_LAG_TOLERANCE_SECONDS
+    );
+    const recent = points.filter(point => point.time > cutoff);
+    const volume = recent.reduce((sum, point) => sum + point.purchases, 0);
+    let medianPriceMajor = null;
+    if (volume > 0) {
+      let cumulative = 0;
+      const midpoint = volume / 2;
+      for (const point of [...recent].sort((left, right) => left.price - right.price)) {
+        cumulative += point.purchases;
+        if (cumulative >= midpoint) {
+          medianPriceMajor = point.price;
+          break;
+        }
+      }
+    }
+    return {
+      historyCurrency: parseCount(history.ecurrency),
+      medianPriceMajor,
+      volume,
+    };
+  }
+
   export function parseMarketListingSnapshotFromHtml(listingHtml, marketHashName) {
     try {
       const queries = getRenderQueries(listingHtml);
@@ -75,6 +126,7 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
       );
       const description = descriptionQuery?.state?.data;
       if (!orderbook && !description) return null;
+      const recentHistory = parseRecentPriceHistory(queries, marketHashName);
       return {
         highestBuyCents,
         lowestSellCents,
@@ -84,6 +136,7 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
         ),
         displayName: String(description?.name || "").trim(),
         imageUrl: getDescriptionImageUrl(description),
+        ...(recentHistory || {}),
       };
     } catch (_) {
       return null;

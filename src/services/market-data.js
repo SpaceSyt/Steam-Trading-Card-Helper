@@ -2,6 +2,7 @@ export const MARKET_DATA_SCHEMA_VERSION = 1;
 
 export const MARKET_DATA_SOURCES = Object.freeze({
   PRICE_OVERVIEW: "priceoverview",
+  LISTING_PAGE: "listing-page",
   LISTING_ORDERBOOK: "listing-orderbook",
   PRICE_HISTORY: "price-history",
   LEGACY_PRICE_RESULT: "legacy-price-result",
@@ -272,6 +273,37 @@ export function normalizeListingOrderbook(payload, context = {}) {
       data.highest_buy_order
     )),
     volume: null,
+  });
+}
+
+export function normalizeListingPage(payload, context = {}) {
+  const data = unwrapResponseData(payload);
+  const orderbookCurrencyId = normalizeCurrencyId(data.currency);
+  const historyCurrencyId = normalizeCurrencyId(data.historyCurrency);
+  const payloadCurrencyId = firstDefined(orderbookCurrencyId, historyCurrencyId);
+  const requestedCurrencyId = normalizeCurrencyId(firstDefined(context.currencyId, context.currency));
+  const currencyMismatch = (
+    orderbookCurrencyId !== null
+    && requestedCurrencyId !== null
+    && orderbookCurrencyId !== requestedCurrencyId
+  ) || (
+    historyCurrencyId !== null
+    && requestedCurrencyId !== null
+    && historyCurrencyId !== requestedCurrencyId
+  ) || (
+    orderbookCurrencyId !== null
+    && historyCurrencyId !== null
+    && orderbookCurrencyId !== historyCurrencyId
+  );
+  return normalizeMarketRecord({
+    ...adapterIdentity(data, context, MARKET_DATA_SOURCES.LISTING_PAGE, {
+      currencyId: firstDefined(payloadCurrencyId, requestedCurrencyId),
+      currencyCode: currencyMismatch ? null : firstDefined(context.currencyCode, context.currency_code),
+    }),
+    lowestSellMinor: normalizeMinorAmount(data.lowestSellCents),
+    medianMinor: parseMajorAmountToMinor(data.medianPriceMajor, getMinorDigits(context)),
+    highestBuyMinor: normalizeMinorAmount(data.highestBuyCents),
+    volume: normalizeMarketVolume(data.volume),
   });
 }
 

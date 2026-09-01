@@ -57,6 +57,33 @@ test("listing SSR snapshot includes order counts, description name, and image", 
   );
 });
 
+test("listing SSR derives recent median and volume from transaction history", () => {
+  const now = Math.floor(Date.now() / 1000);
+  const html = makeSsrHtml([
+    {
+      queryKey: ["market", "orderbook", 753, MARKET_HASH_NAME],
+      state: { data: { amtMinSellOrder: 448, amtMaxBuyOrder: 440, eCurrency: 23 } },
+    },
+    {
+      queryKey: ["market", "pricehistory", 753, MARKET_HASH_NAME],
+      state: { data: {
+        ecurrency: 23,
+        prices: [
+          { time: now - 23 * 60 * 60, price_median: 4.47, purchases: 2 },
+          { time: now - 2 * 60 * 60, price_median: 4.49, purchases: 5 },
+          { time: now - 60 * 60, price_median: 4.50, purchases: 3 },
+          { time: now - 30 * 60 * 60, price_median: 4.30, purchases: 99 },
+        ],
+      } },
+    },
+  ]);
+
+  const snapshot = parseMarketListingSnapshotFromHtml(html, MARKET_HASH_NAME);
+  assert.equal(snapshot.historyCurrency, 23);
+  assert.equal(snapshot.medianPriceMajor, 4.49);
+  assert.equal(snapshot.volume, 10);
+});
+
 test("description metadata remains usable when the listing has no buy order", () => {
   const html = makeSsrHtml([
     {

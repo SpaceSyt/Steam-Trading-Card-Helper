@@ -221,7 +221,11 @@ import { isItemCollectionHealthy } from "../services/item-collection.js";
       });
     } else {
       ui.setStatus(`读取出售参考价 ${index + 1}/${total}: ${group.itemName}`);
-      const price = await priceCard(group.marketHashName, queue, { persistMarketCache: false });
+      const price = await priceCard(group.marketHashName, queue, {
+        preferListing: true,
+        requireMedian: priceSource === "median",
+        persistMarketCache: false,
+      });
       if (price?.record) marketRecords.push(price.record);
       if (!isPriceCardPriced(price)) {
         basePriceCents = null;

@@ -2,7 +2,6 @@ import { state } from "../state.js";
 
 import { priceCard } from "../parsers/price.js";
 import { RequestQueue } from "../request/queue.js";
-import { fetchHighestBuyPrice } from "./orders.js";
 import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action-state.js";
 
 import { formatMoney } from "../utils/format.js";
@@ -539,23 +538,16 @@ async function refreshAllPrices() {
       if (generation !== refreshGeneration) break;
       const item = items[index];
       setHistoryStatus(`正在刷新 ${index + 1}/${items.length}：${item.displayName || item.marketHashName}`);
+      let metadata = null;
       const overview = await priceCard(item.marketHashName, queue, {
         appid: MARKET_APPID,
         currencyId: getCurrencyId(),
+        preferListing: true,
+        requireVolume: true,
         persistMarketCache: false,
+        onMetadata: value => { metadata = mergeMetadata(metadata, value); },
       });
       if (overview?.record) observations.push(overview.record);
-      if (generation !== refreshGeneration) break;
-      let metadata = null;
-      try {
-        await fetchHighestBuyPrice(item.marketHashName, queue, {
-          persistMarketCache: false,
-          onRecord: record => { if (record) observations.push(record); },
-          onMetadata: value => { metadata = mergeMetadata(metadata, value); },
-        });
-      } catch (_) {
-        // The listing metadata callback may still have supplied a sell count.
-      }
       if (generation !== refreshGeneration) break;
       const refreshedPrice = Number.isFinite(Number(overview?.record?.lowestSellMinor))
         && Number(overview.record.lowestSellMinor) > 0;
