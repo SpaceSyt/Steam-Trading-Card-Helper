@@ -15,6 +15,7 @@ import { renderResults, renderOrderResults, updateSummary } from "../ui/render.j
 import { isPriceOverviewGroupBusy, updateAllActionStates } from "../ui/action-state.js";
 
 import { scanStatus, orderStatus, orderLog } from "../status-controllers.js";
+import { createRequestQueuePool, getHtmlRequestConcurrency } from "../utils/concurrency.js";
 
 const { setStatus, log } = scanStatus;
 
@@ -33,12 +34,15 @@ const { setStatus: setOrderStatus } = orderStatus;
     state.recalculationRunning = true;
     updateAllActionStates();
     const cfg = state.cfg;
-    const queue = new RequestQueue(
-      cfg.requestInterval,
-      state,
-      statusFn,
-      logFn,
-      { stopPredicate: () => false }
+    const queue = createRequestQueuePool(
+      getHtmlRequestConcurrency(cfg),
+      () => new RequestQueue(
+        cfg.requestInterval,
+        state,
+        statusFn,
+        logFn,
+        { stopPredicate: () => false }
+      )
     );
 
     let refreshed = 0;

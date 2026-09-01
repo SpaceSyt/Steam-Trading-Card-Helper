@@ -18,6 +18,11 @@ import {
   removeStoredMarketWatchItem,
   upsertStoredMarketWatchItem,
 } from "../services/market-watchlist.js";
+import {
+  createRequestQueuePool,
+  getHtmlRequestConcurrency,
+  runWithConcurrency,
+} from "../utils/concurrency.js";
 
 const MARKET_APPID = "753";
 const RANGE_MS = Object.freeze({
@@ -516,12 +521,16 @@ async function refreshAllPrices() {
   const generation = ++refreshGeneration;
   setRefreshRunning(true);
   updateAllActionStates();
-  const queue = new RequestQueue(
-    state.cfg.requestInterval,
-    state,
-    text => setHistoryStatus(text || "正在刷新全部价格"),
-    null,
-    { stopPredicate: () => false }
+  const concurrency = getHtmlRequestConcurrency(state.cfg);
+  const queue = createRequestQueuePool(
+    concurrency,
+    () => new RequestQueue(
+      state.cfg.requestInterval,
+      state,
+      text => setHistoryStatus(text || "正在刷新全部价格"),
+      null,
+      { stopPredicate: () => false }
+    )
   );
   currentRefreshQueue = queue;
   const observations = [];
@@ -534,21 +543,29 @@ async function refreshAllPrices() {
   };
 
   try {
-    for (let index = 0; index < items.length; index += 1) {
-      if (generation !== refreshGeneration) break;
-      const item = items[index];
+    const currencyId = getCurrencyId();
+    const refreshed = new Array(items.length);
+    let completed = 0;
+    await runWithConcurrency(items, concurrency, async (item, index) => {
+      if (generation !== refreshGeneration) return;
       setHistoryStatus(`正在刷新 ${index + 1}/${items.length}：${item.displayName || item.marketHashName}`);
       let metadata = null;
       const overview = await priceCard(item.marketHashName, queue, {
         appid: MARKET_APPID,
-        currencyId: getCurrencyId(),
+        currencyId,
         preferListing: true,
         requireVolume: true,
         persistMarketCache: false,
         onMetadata: value => { metadata = mergeMetadata(metadata, value); },
       });
+      if (generation !== refreshGeneration) return;
+      refreshed[index] = { item, overview, metadata };
+      completed++;
+      setHistoryStatus(`正在刷新 ${completed}/${items.length}`);
+    });
+    for (const result of refreshed.filter(Boolean)) {
+      const { item, overview, metadata } = result;
       if (overview?.record) observations.push(overview.record);
-      if (generation !== refreshGeneration) break;
       const refreshedPrice = Number.isFinite(Number(overview?.record?.lowestSellMinor))
         && Number(overview.record.lowestSellMinor) > 0;
       const refreshedVolume = overview?.record?.volume !== null
@@ -565,7 +582,7 @@ async function refreshAllPrices() {
           imageUrl: metadata.imageUrl || item.imageUrl,
           sellOrderCount: metadata.sellOrderCount,
           metadataObservedAt: metadata.observedAt,
-          currencyId: getCurrencyId(),
+          currencyId,
         });
         if (!updated.ok) metadataFailed = true;
       }

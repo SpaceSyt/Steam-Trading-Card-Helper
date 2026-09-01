@@ -14,6 +14,7 @@ import {
 } from "./grind.js";
 import { enableTileDragSelection } from "../ui/checkbox-drag.js";
 import { updateAllActionStates } from "../ui/action-state.js";
+import { appendEmptyState, appendInventoryImage } from "../utils/dom.js";
 
 const CATEGORY_LABELS = {
   card: "卡牌",
@@ -105,15 +106,9 @@ export function renderItemCollection() {
   list.classList.add("stch-inventory-grid");
 
   if (!isItemCollectionHealthy()) {
-    const empty = document.createElement("div");
-    empty.className = "stch-inventory-empty";
-    empty.textContent = "收藏数据已损坏；为保护物品，出售和分解已停用";
-    list.appendChild(empty);
+    appendEmptyState(list, "收藏数据已损坏；为保护物品，出售和分解已停用");
   } else if (items.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "stch-inventory-empty";
-    empty.textContent = "暂无收藏";
-    list.appendChild(empty);
+    appendEmptyState(list, "暂无收藏");
   } else {
     for (const item of items) {
       const tile = document.createElement("div");
@@ -127,17 +122,11 @@ export function renderItemCollection() {
         "收藏中的物品不会出现在出售或分解候选中",
       ].filter(Boolean).join("\n");
 
-      if (item.imageUrl) {
-        const image = document.createElement("img");
-        image.src = item.imageUrl;
-        image.alt = item.itemName || item.marketHashName || "";
-        tile.appendChild(image);
-      } else {
-        const placeholder = document.createElement("div");
-        placeholder.className = "stch-inv-placeholder";
-        placeholder.textContent = item.itemName || "?";
-        tile.appendChild(placeholder);
-      }
+      appendInventoryImage(
+        tile,
+        item.imageUrl,
+        item.itemName || item.marketHashName
+      );
 
       const category = document.createElement("span");
       category.className = "stch-inv-badge stch-inv-badge-left";

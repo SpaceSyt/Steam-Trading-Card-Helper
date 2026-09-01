@@ -27,6 +27,12 @@ import { getSelectedSurplusResults, renderSurplusResults } from "./surplus.js";
 
 import { getSelectedGrindResults, renderGrindResults } from "./grind.js";
 import { isItemCollectionHealthy } from "../services/item-collection.js";
+import {
+  createRequestQueuePool,
+  getHtmlRequestConcurrency,
+  getOtherRequestConcurrency,
+  runWithConcurrency,
+} from "../utils/concurrency.js";
 
   function getProcessingMode() {
     const value = document.getElementById("stch-surplus-item-mode")?.value
@@ -212,35 +218,36 @@ import { isItemCollectionHealthy } from "../services/item-collection.js";
   async function getSellBasePrice(group, priceSource, queue, ui, index, total, cache, marketRecords) {
     if (cache.has(group.marketHashName)) return cache.get(group.marketHashName);
 
-    let basePriceCents = null;
-    if (priceSource === "highest") {
-      ui.setStatus(`读取求购最高 ${index + 1}/${total}: ${group.itemName}`);
-      basePriceCents = await fetchHighestBuyPrice(group.marketHashName, queue, {
-        persistMarketCache: false,
-        onRecord: record => marketRecords.push(record),
-      });
-    } else {
-      ui.setStatus(`读取出售参考价 ${index + 1}/${total}: ${group.itemName}`);
-      const price = await priceCard(group.marketHashName, queue, {
-        preferListing: true,
-        requireMedian: priceSource === "median",
-        persistMarketCache: false,
-      });
-      if (price?.record) marketRecords.push(price.record);
-      if (!isPriceCardPriced(price)) {
-        basePriceCents = null;
-      } else if (priceSource === "lowest") {
-        basePriceCents = price?.priceSource === "lowest" ? price.lowestSellCents : null;
+    const request = (async () => {
+      let basePriceCents = null;
+      if (priceSource === "highest") {
+        ui.setStatus(`读取求购最高 ${index + 1}/${total}: ${group.itemName}`);
+        basePriceCents = await fetchHighestBuyPrice(group.marketHashName, queue, {
+          persistMarketCache: false,
+          onRecord: record => marketRecords.push(record),
+        });
       } else {
-        basePriceCents = Number.isFinite(price?.medianCents) && price.medianCents > 0
-          ? price.medianCents
-          : null;
+        ui.setStatus(`读取出售参考价 ${index + 1}/${total}: ${group.itemName}`);
+        const price = await priceCard(group.marketHashName, queue, {
+          preferListing: true,
+          requireMedian: priceSource === "median",
+          persistMarketCache: false,
+        });
+        if (price?.record) marketRecords.push(price.record);
+        if (isPriceCardPriced(price)) {
+          basePriceCents = priceSource === "lowest"
+            ? (price.priceSource === "lowest" ? price.lowestSellCents : null)
+            : (Number.isFinite(price.medianCents) && price.medianCents > 0
+              ? price.medianCents
+              : null);
+        }
       }
-    }
-
-    const value = Number.isFinite(basePriceCents) && basePriceCents > 0
-      ? basePriceCents
-      : null;
+      return Number.isFinite(basePriceCents) && basePriceCents > 0
+        ? basePriceCents
+        : null;
+    })();
+    cache.set(group.marketHashName, request);
+    const value = await request;
     cache.set(group.marketHashName, value);
     return value;
   }
@@ -253,7 +260,6 @@ import { isItemCollectionHealthy } from "../services/item-collection.js";
     }
     const priceCache = new Map();
     const marketRecords = [];
-    const plan = [];
     const skipped = {
       missingHash: 0,
       unmarketable: 0,
@@ -274,53 +280,57 @@ import { isItemCollectionHealthy } from "../services/item-collection.js";
       }
       return true;
     });
+    const plan = new Array(candidates.length);
 
-    for (let index = 0; index < candidates.length; index++) {
-      const group = candidates[index];
-      let basePriceCents = null;
-      try {
-        basePriceCents = await getSellBasePrice(
-          group,
+    await runWithConcurrency(
+      candidates,
+      getHtmlRequestConcurrency(state.cfg),
+      async (group, index) => {
+        let basePriceCents = null;
+        try {
+          basePriceCents = await getSellBasePrice(
+            group,
+            priceSource,
+            queue,
+            ui,
+            index,
+            candidates.length,
+            priceCache,
+            marketRecords
+          );
+        } catch (error) {
+          skipped.failedPrice++;
+          ui.log(`  ${group.itemName}: ${error?.message || error}，已跳过`, "warn");
+        }
+        if (!basePriceCents) {
+          skipped.missingPrice++;
+          return;
+        }
+
+        const targetBuyerCents = basePriceCents + adjustmentCents;
+        const clampedBuyerCents = Math.max(minimumBuyerCents, targetBuyerCents);
+        if (clampedBuyerCents !== targetBuyerCents) skipped.clamped++;
+        const sellerReceiveCents = getSellerReceiveForBuyerPrice(clampedBuyerCents);
+        if (sellerReceiveCents <= 0) {
+          skipped.missingPrice++;
+          return;
+        }
+        const unitBuyerCents = getBuyerPriceForSellerReceive(sellerReceiveCents);
+        plan[index] = {
+          ...group,
           priceSource,
-          queue,
-          ui,
-          index,
-          candidates.length,
-          priceCache,
-          marketRecords
-        );
-      } catch (error) {
-        skipped.failedPrice++;
-        ui.log(`  ${group.itemName}: ${error?.message || error}，已跳过`, "warn");
+          basePriceCents,
+          targetBuyerCents,
+          unitBuyerCents,
+          sellerReceiveCents,
+          totalBuyerCents: unitBuyerCents * group.quantity,
+          totalReceiveCents: sellerReceiveCents * group.quantity,
+        };
       }
-      if (!basePriceCents) {
-        skipped.missingPrice++;
-        continue;
-      }
-
-      const targetBuyerCents = basePriceCents + adjustmentCents;
-      const clampedBuyerCents = Math.max(minimumBuyerCents, targetBuyerCents);
-      if (clampedBuyerCents !== targetBuyerCents) skipped.clamped++;
-      const sellerReceiveCents = getSellerReceiveForBuyerPrice(clampedBuyerCents);
-      if (sellerReceiveCents <= 0) {
-        skipped.missingPrice++;
-        continue;
-      }
-      const unitBuyerCents = getBuyerPriceForSellerReceive(sellerReceiveCents);
-      plan.push({
-        ...group,
-        priceSource,
-        basePriceCents,
-        targetBuyerCents,
-        unitBuyerCents,
-        sellerReceiveCents,
-        totalBuyerCents: unitBuyerCents * group.quantity,
-        totalReceiveCents: sellerReceiveCents * group.quantity,
-      });
-    }
+    );
 
     persistMarketObservations(marketRecords);
-    return { plan, skipped, priceSource, adjustmentCents, minimumBuyerCents };
+    return { plan: plan.filter(Boolean), skipped, priceSource, adjustmentCents, minimumBuyerCents };
   }
 
   function getProfileActionBaseUrl() {
@@ -354,7 +364,7 @@ import { isItemCollectionHealthy } from "../services/item-collection.js";
   async function buildGemPlan(mode, ui, queue) {
     const gemAssets = makeGemAssets(mode);
     const candidates = gemAssets.candidates;
-    const plan = [];
+    const plan = new Array(candidates.length);
     const skipped = {
       missingAsset: 0,
       missingAppid: 0,
@@ -363,29 +373,32 @@ import { isItemCollectionHealthy } from "../services/item-collection.js";
       invalidQuantity: gemAssets.invalidQuantity,
     };
 
-    for (let index = 0; index < candidates.length; index++) {
-      const asset = candidates[index];
-      if (!asset.assetid) {
-        skipped.missingAsset++;
-        continue;
+    await runWithConcurrency(
+      candidates,
+      getOtherRequestConcurrency(state.cfg),
+      async (asset, index) => {
+        if (!asset.assetid) {
+          skipped.missingAsset++;
+          return;
+        }
+        if (!/^\d+$/.test(asset.appid)) {
+          skipped.missingAppid++;
+          return;
+        }
+        if (asset.selectedAmount < asset.assetAmount) {
+          skipped.partialStack++;
+          return;
+        }
+        try {
+          const gooValueExpected = await fetchAssetGooValue(asset, queue, ui, index, candidates.length);
+          plan[index] = { ...asset, gooValueExpected };
+        } catch (error) {
+          skipped.noGooValue++;
+          ui.log(`  ${asset.itemName}: ${error?.message || error}，已跳过`, "warn");
+        }
       }
-      if (!/^\d+$/.test(asset.appid)) {
-        skipped.missingAppid++;
-        continue;
-      }
-      if (asset.selectedAmount < asset.assetAmount) {
-        skipped.partialStack++;
-        continue;
-      }
-      try {
-        const gooValueExpected = await fetchAssetGooValue(asset, queue, ui, index, candidates.length);
-        plan.push({ ...asset, gooValueExpected });
-      } catch (error) {
-        skipped.noGooValue++;
-        ui.log(`  ${asset.itemName}: ${error?.message || error}，已跳过`, "warn");
-      }
-    }
-    return { plan, skipped };
+    );
+    return { plan: plan.filter(Boolean), skipped };
   }
 
   async function readJsonResponse(response) {
@@ -576,7 +589,10 @@ import { isItemCollectionHealthy } from "../services/item-collection.js";
 
     state.surplusActionRunning = true;
     updateAllActionStates();
-    const queue = getActionQueue(ui);
+    const queue = createRequestQueuePool(
+      getHtmlRequestConcurrency(state.cfg),
+      () => getActionQueue(ui)
+    );
     let finalStatus = null;
     let submitted = 0;
     let failed = 0;
@@ -645,7 +661,10 @@ import { isItemCollectionHealthy } from "../services/item-collection.js";
 
     state.surplusActionRunning = true;
     updateAllActionStates();
-    const queue = getActionQueue(ui);
+    const queue = createRequestQueuePool(
+      getOtherRequestConcurrency(state.cfg),
+      () => getActionQueue(ui)
+    );
     let finalStatus = null;
     let submitted = 0;
     let failed = 0;

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   parseMarketOrderDepthFromListingHtml,
   parseMarketListingSnapshotFromHtml,
+  parseMarketListingWithDepthFromHtml,
   parseMarketOrderbookFromListingHtml,
 } from "../../src/parsers/market-listing.js";
 
@@ -138,7 +139,7 @@ test("listing SSR exposes strictly validated buy-order depth", () => {
     } },
   }]);
 
-  assert.deepEqual(parseMarketOrderDepthFromListingHtml(html, MARKET_HASH_NAME), {
+  const expectedDepth = {
     currencyId: 23,
     highestBuyMinor: 430,
     lowestSellMinor: 438,
@@ -149,6 +150,18 @@ test("listing SSR exposes strictly validated buy-order depth", () => {
       { priceMinor: 429, quantity: 5 },
       { priceMinor: 428, quantity: 382 },
     ],
+  };
+  assert.deepEqual(parseMarketOrderDepthFromListingHtml(html, MARKET_HASH_NAME), expectedDepth);
+  assert.deepEqual(parseMarketListingWithDepthFromHtml(html, MARKET_HASH_NAME), {
+    snapshot: {
+      highestBuyCents: 430,
+      lowestSellCents: 438,
+      currency: 23,
+      sellOrderCount: 100,
+      displayName: "",
+      imageUrl: "",
+    },
+    depth: expectedDepth,
   });
 });
 

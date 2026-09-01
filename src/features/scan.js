@@ -48,6 +48,11 @@ import {
 } from "../ui/action-state.js";
 
 import { scanStatus } from "../status-controllers.js";
+import {
+  createRequestQueuePool,
+  getHtmlRequestConcurrency,
+  runWithConcurrency,
+} from "../utils/concurrency.js";
 
 const { log, setStatus, setProgress, hideProgress } = scanStatus;
 
@@ -152,12 +157,16 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
       foilScanMode: !!state.cfg.foilScanMode,
       buyMode: state.cfg.foilScanMode ? "complete1" : state.cfg.buyMode
     };
-    const queue = new RequestQueue(
-      cfg.requestInterval,
-      state,
-      setStatus,
-      log,
-      { stopPredicate: currentState => Boolean(currentState?.stopRequested) }
+    const concurrency = getHtmlRequestConcurrency(cfg);
+    const queue = createRequestQueuePool(
+      concurrency,
+      () => new RequestQueue(
+        cfg.requestInterval,
+        state,
+        setStatus,
+        log,
+        { stopPredicate: currentState => Boolean(currentState?.stopRequested) }
+      )
     );
 
 
@@ -317,10 +326,11 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           const noPriceCards = [];
           let failedPriceCount = 0;
 
-          for (const card of info.cards) {
+          await runWithConcurrency(info.cards, concurrency, async card => {
+            if (thresholdSkip) return;
             if (state.stopRequested || state.skipCurrent) {
               cancelledCurrent = true;
-              break;
+              return;
             }
             if (!card.marketHashName) {
               log(`  ⚠ 卡牌 "${card.name}" 无 market hash name，保留为缺价`, "warn");
@@ -334,7 +344,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
                 observedAt: null,
               }, info.currencyId);
               failedPriceCount++;
-              continue;
+              return;
             }
 
             const pk = await priceCard(card.marketHashName, queue, {
@@ -343,6 +353,11 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               requireVolume: true,
               persistMarketCache: false,
             });
+            if (thresholdSkip) return;
+            if (state.stopRequested || state.skipCurrent) {
+              cancelledCurrent = true;
+              return;
+            }
             if (pk?.record) marketRecords.push(pk.record);
             const appliedPrice = applyPriceCardResult(card, pk, info.currencyId);
             if (appliedPrice.outcome === PRICE_CARD_OUTCOMES.ERROR) {
@@ -352,12 +367,12 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
                 "warn"
               );
               failedPriceCount++;
-              continue;
+              return;
             }
             if (appliedPrice.outcome === PRICE_CARD_OUTCOMES.NO_PRICE) {
               log(`  ⚠ 卡牌 "${card.name}" Steam 未返回可用价格，保留为缺价`, "warn");
               noPriceCards.push(card);
-              continue;
+              return;
             }
             if (pk.volume < minVolume) minVolume = pk.volume;
             if (pk.estimated) {
@@ -388,7 +403,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               log(`  → 已查${info.cardPrices.length}/${info.totalInSet}张, 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(getThresholdCents())}，跳过`, "info");
               allPriced = false;
               thresholdSkip = true;
-              break;
+              return;
             }
 
             if (!hasIncompletePricing && state.cfg.earlyPricePrediction) {
@@ -434,10 +449,10 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
                 }
                 allPriced = false;
                 thresholdSkip = true;
-                break;
+                return;
               }
             }
-          }
+          });
 
           if (cancelledCurrent) {
             if (state.skipCurrent) {

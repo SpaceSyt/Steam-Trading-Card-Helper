@@ -3,6 +3,10 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
   const RECENT_HISTORY_SECONDS = 24 * 60 * 60;
   const HISTORY_LAG_TOLERANCE_SECONDS = 2 * 60 * 60;
 
+  export function getMarketListingUrl(marketHashName, appid = 753) {
+    return `https://steamcommunity.com/market/listings/${appid}/${encodeURIComponent(marketHashName)}?l=english`;
+  }
+
   function parseCount(value) {
     if (value === null || value === undefined || value === "") return null;
     const count = Number(String(value).replace(/[\s,.'’]/g, ""));
@@ -67,18 +71,24 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
     const history = historyQuery?.state?.data;
     if (!history) return null;
 
-    const points = history.prices.map(point => ({
-      time: parseCount(point?.time),
-      price: parseNonnegativeNumber(point?.price_median),
-      purchases: parseCount(point?.purchases),
-    })).filter(point => (
-      point.time !== null
-      && point.price !== null
-      && point.price > 0
-      && point.purchases !== null
-      && point.purchases > 0
-    ));
-    const latestTime = points.reduce((latest, point) => Math.max(latest, point.time), 0);
+    const points = [];
+    let latestTime = 0;
+    for (const rawPoint of history.prices) {
+      const point = {
+        time: parseCount(rawPoint?.time),
+        price: parseNonnegativeNumber(rawPoint?.price_median),
+        purchases: parseCount(rawPoint?.purchases),
+      };
+      if (
+        point.time === null
+        || point.price === null
+        || point.price <= 0
+        || point.purchases === null
+        || point.purchases <= 0
+      ) continue;
+      points.push(point);
+      latestTime = Math.max(latestTime, point.time);
+    }
     const currentTime = Math.floor(Number(now) / 1000);
     const cutoff = Math.max(
       latestTime - RECENT_HISTORY_SECONDS,
@@ -90,7 +100,7 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
     if (volume > 0) {
       let cumulative = 0;
       const midpoint = volume / 2;
-      for (const point of [...recent].sort((left, right) => left.price - right.price)) {
+      for (const point of recent.sort((left, right) => left.price - right.price)) {
         cumulative += point.purchases;
         if (cumulative >= midpoint) {
           medianPriceMajor = point.price;
@@ -105,9 +115,8 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
     };
   }
 
-  export function parseMarketListingSnapshotFromHtml(listingHtml, marketHashName) {
+  function parseMarketListingSnapshot(queries, marketHashName, includeHistory = true) {
     try {
-      const queries = getRenderQueries(listingHtml);
       const orderbookQuery = findTargetQuery(
         queries,
         marketHashName,
@@ -126,7 +135,9 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
       );
       const description = descriptionQuery?.state?.data;
       if (!orderbook && !description) return null;
-      const recentHistory = parseRecentPriceHistory(queries, marketHashName);
+      const recentHistory = includeHistory
+        ? parseRecentPriceHistory(queries, marketHashName)
+        : null;
       return {
         highestBuyCents,
         lowestSellCents,
@@ -143,14 +154,25 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
     }
   }
 
+  export function parseMarketListingSnapshotFromHtml(listingHtml, marketHashName, options = {}) {
+    return parseMarketListingSnapshot(
+      getRenderQueries(listingHtml),
+      marketHashName,
+      options.includeHistory !== false
+    );
+  }
+
   export function parseMarketOrderbookFromListingHtml(listingHtml, marketHashName) {
-    const snapshot = parseMarketListingSnapshotFromHtml(listingHtml, marketHashName);
+    const snapshot = parseMarketListingSnapshotFromHtml(
+      listingHtml,
+      marketHashName,
+      { includeHistory: false }
+    );
     if (!snapshot || snapshot.highestBuyCents === null) return null;
     return snapshot;
   }
 
-  export function parseMarketOrderDepthFromListingHtml(listingHtml, marketHashName) {
-    const queries = getRenderQueries(listingHtml);
+  function parseMarketOrderDepth(queries, marketHashName) {
     const orderbookQuery = findTargetQuery(
       queries,
       marketHashName,
@@ -179,6 +201,22 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
       buyOrderCount,
       sellOrderCount: parseCount(orderbook.cSellOrders),
       buyLevels,
+    };
+  }
+
+  export function parseMarketOrderDepthFromListingHtml(listingHtml, marketHashName) {
+    return parseMarketOrderDepth(getRenderQueries(listingHtml), marketHashName);
+  }
+
+  export function parseMarketListingWithDepthFromHtml(listingHtml, marketHashName, options = {}) {
+    const queries = getRenderQueries(listingHtml);
+    return {
+      snapshot: parseMarketListingSnapshot(
+        queries,
+        marketHashName,
+        options.includeHistory !== false
+      ),
+      depth: parseMarketOrderDepth(queries, marketHashName),
     };
   }
 

@@ -20,6 +20,11 @@ import {
 import { craftStatus } from "../status-controllers.js";
 
 import { getProfileUrl, getSessionId } from "../utils/steam.js";
+import {
+  createRequestQueuePool,
+  getHtmlRequestConcurrency,
+  runWithConcurrency,
+} from "../utils/concurrency.js";
 
 const { log: craftLog, setStatus: setCraftStatus, setProgress: setCraftProgress, hideProgress: hideCraftProgress } = craftStatus;
 
@@ -273,12 +278,16 @@ const { log: craftLog, setStatus: setCraftStatus, setProgress: setCraftProgress,
     setCraftStatus("扫描可合成徽章");
 
     const cfg = state.cfg;
-    const queue = new RequestQueue(
-      cfg.requestInterval,
-      state,
-      null,
-      craftLog,
-      { stopPredicate: currentState => Boolean(currentState?.craftStopRequested) }
+    const concurrency = getHtmlRequestConcurrency(cfg);
+    const queue = createRequestQueuePool(
+      concurrency,
+      () => new RequestQueue(
+        cfg.requestInterval,
+        state,
+        null,
+        craftLog,
+        { stopPredicate: currentState => Boolean(currentState?.craftStopRequested) }
+      )
     );
     state.craftQueue = queue;
 
@@ -342,13 +351,14 @@ const { log: craftLog, setStatus: setCraftStatus, setProgress: setCraftProgress,
       }
 
       craftLog(`找到 ${candidates.length} 个候选徽章，开始读取卡组数量`);
-      for (let index = 0; index < candidates.length; index++) {
-        if (state.craftStopRequested) break;
-        const candidate = candidates[index];
+      const results = new Array(candidates.length);
+      let completed = 0;
+      await runWithConcurrency(candidates, concurrency, async (candidate, index) => {
+        if (state.craftStopRequested) return;
         setCraftProgress(
-          index,
+          completed,
           candidates.length,
-          `读取卡组 ${index + 1}/${candidates.length} · ${candidate.gameName}`
+          `读取卡组 ${completed + 1}/${candidates.length} · ${candidate.gameName}`
         );
         setCraftStatus(`读取卡组: ${candidate.gameName}`);
         try {
@@ -364,21 +374,26 @@ const { log: craftLog, setStatus: setCraftStatus, setProgress: setCraftProgress,
               `[${candidate.appid}] ${candidate.gameName}: 页面已不可合成，跳过`,
               "warn"
             );
-            continue;
+            return;
           }
-          state.craftResults.push(result);
+          results[index] = result;
           craftLog(
             `[${result.appid}] ${result.gameName}: Lv${result.level}，可合成 ${result.maxCraftable} 次`,
             "ok"
           );
         } catch (error) {
-          if (state.craftStopRequested) break;
-          craftLog(
-            `[${candidate.appid}] ${candidate.gameName}: 读取失败 ${error?.message || error?.status || error}`,
-            "err"
-          );
+          if (!state.craftStopRequested) {
+            craftLog(
+              `[${candidate.appid}] ${candidate.gameName}: 读取失败 ${error?.message || error?.status || error}`,
+              "err"
+            );
+          }
+        } finally {
+          completed++;
+          setCraftProgress(completed, candidates.length, `读取卡组 ${completed}/${candidates.length}`);
         }
-      }
+      });
+      state.craftResults.push(...results.filter(Boolean));
 
       state.craftResults.sort((left, right) =>
         left.gameName.localeCompare(right.gameName, "zh-CN")

@@ -12,6 +12,25 @@
     return hit;
   }
 
+  export function appendEmptyState(root, text) {
+    const empty = document.createElement("div");
+    empty.className = "stch-inventory-empty";
+    empty.textContent = text;
+    root.appendChild(empty);
+  }
+
+  export function appendInventoryImage(root, imageUrl, label) {
+    const image = document.createElement(imageUrl ? "img" : "div");
+    if (imageUrl) {
+      image.src = imageUrl;
+      image.alt = label || "";
+    } else {
+      image.className = "stch-inv-placeholder";
+      image.textContent = label || "?";
+    }
+    root.appendChild(image);
+  }
+
   export function getFirstText(root, selectors) {
     for (const selector of selectors) {
       const text = root.querySelector(selector)?.textContent?.trim();

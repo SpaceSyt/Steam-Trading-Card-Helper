@@ -374,26 +374,33 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     });
   }
 
+  function getSelectedPricingTotals(results) {
+    const totals = { completion: 0, full: 0, level: 0 };
+    for (const result of results) {
+      const value = getRealtimePricingTotals(result);
+      if (value.completionCents == null || value.fullCents == null || value.levelCents == null) {
+        return null;
+      }
+      totals.completion += value.completionCents;
+      totals.full += value.fullCents;
+      totals.level += value.levelCents;
+    }
+    return totals;
+  }
+
+  function getPricingTotalText(totals, key) {
+    return totals ? formatMoney(totals[key]) : "-";
+  }
+
   export function updateSummary() {
     const summary = document.getElementById("stch-summary");
     if (!summary) return;
     const count = state.results.length;
     const modeLabel = state.results.some(info => info.isFoil) ? "闪卡" : "普通卡";
     const thresholdCents = Math.round((Number(state.cfg.threshold) || 0) * 100);
-    const totals = getSelectedResults().reduce((sum, result) => {
-      const value = getRealtimePricingTotals(result);
-      if (value.completionCents == null || value.fullCents == null || value.levelCents == null) {
-        sum.incomplete = true;
-        return sum;
-      }
-      sum.completion += value.completionCents;
-      sum.full += value.fullCents;
-      sum.level += value.levelCents;
-      return sum;
-    }, { completion: 0, full: 0, level: 0, incomplete: false });
-    const totalText = value => totals.incomplete ? "-" : formatMoney(value);
+    const totals = getSelectedPricingTotals(getSelectedResults());
     summary.innerHTML = `
-      共 <b>${count}</b> 个${modeLabel} ≤ ${formatMoney(thresholdCents)} (单套卡牌价格上限)，补全总价 <b>${totalText(totals.completion)}</b>，全套总价 <b>${totalText(totals.full)}</b>，满级总价 <b>${totalText(totals.level)}</b>
+      共 <b>${count}</b> 个${modeLabel} ≤ ${formatMoney(thresholdCents)} (单套卡牌价格上限)，补全总价 <b>${getPricingTotalText(totals, "completion")}</b>，全套总价 <b>${getPricingTotalText(totals, "full")}</b>，满级总价 <b>${getPricingTotalText(totals, "level")}</b>
     `;
   }
 
@@ -409,20 +416,9 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     const count = state.orderResults.length;
     const selectedResults = getSelectedOrderResults();
     const selectedCount = selectedResults.length;
-    const totals = selectedResults.reduce((sum, result) => {
-      const value = getRealtimePricingTotals(result);
-      if (value.completionCents == null || value.fullCents == null || value.levelCents == null) {
-        sum.incomplete = true;
-        return sum;
-      }
-      sum.completion += value.completionCents;
-      sum.full += value.fullCents;
-      sum.level += value.levelCents;
-      return sum;
-    }, { completion: 0, full: 0, level: 0, incomplete: false });
-    const totalText = value => totals.incomplete ? "-" : formatMoney(value);
+    const totals = getSelectedPricingTotals(selectedResults);
     summary.innerHTML = `
-      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>${totalText(totals.completion)}</b>，全套总价 <b>${totalText(totals.full)}</b>，满级总价 <b>${totalText(totals.level)}</b>
+      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>${getPricingTotalText(totals, "completion")}</b>，全套总价 <b>${getPricingTotalText(totals, "full")}</b>，满级总价 <b>${getPricingTotalText(totals, "level")}</b>
     `;
   }
 

@@ -174,9 +174,10 @@ import {
   }
 
   export function getOuterHeight(element) {
-    if (!element || getComputedStyle(element).display === "none") return 0;
-    const rect = element.getBoundingClientRect();
+    if (!element) return 0;
     const style = getComputedStyle(element);
+    if (style.display === "none") return 0;
+    const rect = element.getBoundingClientRect();
     return rect.height
       + (parseFloat(style.marginTop) || 0)
       + (parseFloat(style.marginBottom) || 0);
@@ -644,6 +645,10 @@ import {
             <label><input id="stch-parallel-order-pricing" type="checkbox" ${state.cfg.parallelOrderPricingEnabled ? "checked" : ""}> HTML 类请求并发</label>
             <label>并发数 <input id="stch-parallel-order-pricing-concurrency" class="stch-input" type="number" min="1" max="20" step="1" value="${state.cfg.parallelOrderPricingConcurrency}" style="width:55px"></label>
           </div>
+          <div class="stch-toolbar">
+            <label><input id="stch-parallel-other-requests" type="checkbox" ${state.cfg.parallelOtherRequestsEnabled ? "checked" : ""}> 其他请求并发</label>
+            <label>并发数 <input id="stch-parallel-other-requests-concurrency" class="stch-input" type="number" min="1" max="20" step="1" value="${state.cfg.parallelOtherRequestsConcurrency}" style="width:55px"></label>
+          </div>
           <div class="stch-toolbar stch-advanced-setting">
             <label>priceoverview请求间隔 <input id="stch-req-interval" class="stch-input" type="number" min="100" step="10" value="${state.cfg.requestInterval}" style="width:70px"> ms</label>
           </div>
@@ -726,7 +731,7 @@ import {
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.6.0</span>
+        <span class="stch-label">V2.6.1</span>
       </div>
     `;
     document.body.appendChild(modal);
@@ -842,6 +847,12 @@ import {
         state.cfg.parallelOrderPricingConcurrency ?? DEFAULT_CONFIG.parallelOrderPricingConcurrency,
         { integer: true, min: 1, max: 20 }
       );
+      state.cfg.parallelOtherRequestsEnabled = !!document.getElementById("stch-parallel-other-requests")?.checked;
+      state.cfg.parallelOtherRequestsConcurrency = readNumberInput(
+        "stch-parallel-other-requests-concurrency",
+        state.cfg.parallelOtherRequestsConcurrency ?? DEFAULT_CONFIG.parallelOtherRequestsConcurrency,
+        { integer: true, min: 1, max: 20 }
+      );
       const buyModeEl = document.getElementById("stch-buy-mode");
       if (state.cfg.foilScanMode) {
         state.cfg.buyMode = buyModeEl?.dataset.normalValue || state.cfg.buyMode || DEFAULT_CONFIG.buyMode;
@@ -941,6 +952,7 @@ import {
       "stch-max-pages", "stch-include-drops",
       "stch-foil-scan-mode",
       "stch-parallel-order-pricing", "stch-parallel-order-pricing-concurrency",
+      "stch-parallel-other-requests", "stch-parallel-other-requests-concurrency",
       "stch-show-scan-completion-column", "stch-show-scan-sell-set-column",
       "stch-show-no-result-logs", "stch-show-advanced-settings", "stch-sidebar-disabled", "stch-buy-mode",
       "stch-early-price-prediction", "stch-minimum-price-fallback", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",

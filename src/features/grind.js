@@ -35,6 +35,13 @@ import {
 
 import { grindStatus } from "../status-controllers.js";
 import { enableTileDragSelection } from "../ui/checkbox-drag.js";
+import { appendEmptyState, appendInventoryImage } from "../utils/dom.js";
+import {
+  createRequestQueuePool,
+  getHtmlRequestConcurrency,
+  getOtherRequestConcurrency,
+  runWithConcurrency,
+} from "../utils/concurrency.js";
 
 const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress, hideProgress: hideGrindProgress } = grindStatus;
 
@@ -67,17 +74,19 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     const key = `${params.appid}_${params.itemType}_${params.borderColor}`;
     if (grindGemValueCache.has(key)) return grindGemValueCache.get(key);
 
-    try {
-      const url = `https://steamcommunity.com/auction/ajaxgetgoovalueforitemtype/?appid=${encodeURIComponent(params.appid)}&item_type=${encodeURIComponent(params.itemType)}&border_color=${encodeURIComponent(params.borderColor)}`;
-      const response = await queue.fetch(url);
-      const value = Math.max(0, parseInt(response?.data?.goo_value, 10) || 0);
-      grindGemValueCache.set(key, value);
-      return value;
-    } catch (_) {
-      if (state.grindStopRequested || queue.stopped) return 0;
-      grindGemValueCache.set(key, 0);
-      return 0;
-    }
+    const request = (async () => {
+      try {
+        const url = `https://steamcommunity.com/auction/ajaxgetgoovalueforitemtype/?appid=${encodeURIComponent(params.appid)}&item_type=${encodeURIComponent(params.itemType)}&border_color=${encodeURIComponent(params.borderColor)}`;
+        const response = await queue.fetch(url);
+        return Math.max(0, parseInt(response?.data?.goo_value, 10) || 0);
+      } catch (_) {
+        return 0;
+      }
+    })();
+    grindGemValueCache.set(key, request);
+    const value = await request;
+    grindGemValueCache.set(key, value);
+    return value;
   }
 
   export function addGrindItem(groupMap, asset, description, amount, source, gemValue, pointsShop = false, category = "") {
@@ -238,6 +247,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
 
       const assets = Array.isArray(data.assets) ? data.assets : [];
       totalAssetsSeen += assets.length;
+      const candidates = [];
       for (const asset of assets) {
         if (state.grindStopRequested) break;
         const description = descriptions.get(getDescriptionKey(asset));
@@ -259,21 +269,29 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
           skipped.pointsShop += assetAmount;
           continue;
         }
-        const gemValue = await getGrindGemValue(description, queue);
-        const result = addGrindItem(
-          groupMap,
-          asset,
-          description,
-          assetAmount,
-          "item",
-          gemValue,
-          pointsShop,
-          itemMode
-        );
-        if (result === "noGemValue") skipped.noGemValue += assetAmount;
-        else if (result === "blacklisted") skipped.blacklisted += assetAmount;
-        else if (result === "gem") skipped.gems += assetAmount;
+        candidates.push({ asset, description, assetAmount, pointsShop });
       }
+      await runWithConcurrency(
+        candidates,
+        getOtherRequestConcurrency(state.cfg),
+        async ({ asset, description, assetAmount, pointsShop }) => {
+          if (state.grindStopRequested) return;
+          const gemValue = await getGrindGemValue(description, queue);
+          const result = addGrindItem(
+            groupMap,
+            asset,
+            description,
+            assetAmount,
+            "item",
+            gemValue,
+            pointsShop,
+            itemMode
+          );
+          if (result === "noGemValue") skipped.noGemValue += assetAmount;
+          else if (result === "blacklisted") skipped.blacklisted += assetAmount;
+          else if (result === "gem") skipped.gems += assetAmount;
+        }
+      );
 
       grindLog(
         `库存第 ${page} 页：读取 ${assets.length} 件，累计候选 ${groupMap.size} 种`,
@@ -412,14 +430,11 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     const visible = getVisibleGrindResults();
     pruneSelectedGrindResults(visible);
     if (visible.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "stch-inventory-empty";
-      empty.textContent = state.grindScanning
+      appendEmptyState(list, state.grindScanning
         ? "正在扫描可分解物品..."
         : state.grindResults.length > 0
           ? "当前筛选下没有建议分解物品"
-          : "尚未扫描可分解物品";
-      list.appendChild(empty);
+          : "尚未扫描可分解物品");
       updateGrindSummary();
       updateSurplusActionState();
       return;
@@ -462,17 +477,11 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
       if (item.nameColor) tile.style.borderColor = item.nameColor;
       if (item.backgroundColor) tile.style.backgroundColor = item.backgroundColor;
 
-      if (item.imageUrl) {
-        const image = document.createElement("img");
-        image.src = item.imageUrl;
-        image.alt = item.itemName || item.marketHashName || "";
-        tile.appendChild(image);
-      } else {
-        const placeholder = document.createElement("div");
-        placeholder.className = "stch-inv-placeholder";
-        placeholder.textContent = item.itemName || "?";
-        tile.appendChild(placeholder);
-      }
+      appendInventoryImage(
+        tile,
+        item.imageUrl,
+        item.itemName || item.marketHashName
+      );
 
       const price = document.createElement("span");
       price.className = "stch-inv-badge";
@@ -530,20 +539,26 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     updateAllActionStates();
 
     const cfg = state.cfg;
-    const queue = new RequestQueue(
+    const createQueue = () => new RequestQueue(
       cfg.requestInterval,
       state,
       setGrindStatus,
       grindLog,
       { stopPredicate: currentState => Boolean(currentState?.grindStopRequested) }
     );
-    state.grindQueue = queue;
+    const htmlQueue = createRequestQueuePool(getHtmlRequestConcurrency(cfg), createQueue);
+    const otherQueue = createRequestQueuePool(getOtherRequestConcurrency(cfg), createQueue);
+    const stopQueues = () => {
+      htmlQueue.stop();
+      otherQueue.stop();
+    };
+    state.grindQueue = { stop: stopQueues };
     const marketRecords = [];
 
     try {
       grindLog("【阶段 1/3】读取宝石袋市场价格");
       setGrindProgress(0, 1, "阶段1: 读取宝石价格");
-      const gemPrice = await loadSidebarGemPrice(queue);
+      const gemPrice = await loadSidebarGemPrice(htmlQueue);
       state.grindGemPrice = gemPrice;
       if (gemPrice.priceCents) {
         const sackNet = getGemSackSellerNetCents(gemPrice.priceCents);
@@ -561,7 +576,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
 
       grindLog("【阶段 2/3】读取社区库存并识别可分解物品");
       setGrindProgress(0, 1, "阶段2: 读取库存");
-      const inventory = await loadGrindInventoryItems(steamId, queue);
+      const inventory = await loadGrindInventoryItems(steamId, otherQueue);
       if (state.grindStopRequested) {
         grindLog("已停止扫描", "warn");
         return;
@@ -588,47 +603,52 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
       let priced = 0;
       let failed = 0;
 
-      for (let index = 0; index < inventory.items.length; index++) {
-        if (state.grindStopRequested) break;
-        const item = inventory.items[index];
-        setGrindProgress(
-          index,
-          inventory.items.length,
-          `阶段3: ${index + 1}/${inventory.items.length} · ${item.itemName || item.marketHashName}`
-        );
-        setGrindStatus(`查询价格: ${item.itemName || item.marketHashName}`);
+      let completed = 0;
+      await runWithConcurrency(
+        inventory.items,
+        getHtmlRequestConcurrency(cfg),
+        async item => {
+          if (state.grindStopRequested) return;
+          setGrindProgress(
+            completed,
+            inventory.items.length,
+            `阶段3: ${completed + 1}/${inventory.items.length} · ${item.itemName || item.marketHashName}`
+          );
+          setGrindStatus(`查询价格: ${item.itemName || item.marketHashName}`);
 
-        if (item.marketHashName && item.marketableCount > 0) {
-          const price = await priceCard(item.marketHashName, queue, {
-            preferListing: true,
-            requireVolume: true,
-            persistMarketCache: false,
-          });
-          if (price?.record) marketRecords.push(price.record);
-          if (isPriceCardPriced(price)) {
-            item.priceCents = price.lowestSellCents;
-            item.medianCents = price.medianCents;
-            item.volume = price.volume;
-            item.priceSource = price.priceSource === "lowest" ? "在售最低" : "平均价格";
-            priced++;
-          } else if (isPriceCardNoPrice(price)) {
-            item.volume = 0;
-            item.priceSource = "无可用价格";
-            item.priceLookupFailed = false;
-          } else if (isPriceCardError(price)) {
-            failed++;
-            item.priceSource = "查价失败";
+          if (item.marketHashName && item.marketableCount > 0) {
+            const price = await priceCard(item.marketHashName, htmlQueue, {
+              preferListing: true,
+              requireVolume: true,
+              persistMarketCache: false,
+            });
+            if (price?.record) marketRecords.push(price.record);
+            if (isPriceCardPriced(price)) {
+              item.priceCents = price.lowestSellCents;
+              item.medianCents = price.medianCents;
+              item.volume = price.volume;
+              item.priceSource = price.priceSource === "lowest" ? "在售最低" : "平均价格";
+              priced++;
+            } else if (isPriceCardNoPrice(price)) {
+              item.volume = 0;
+              item.priceSource = "无可用价格";
+              item.priceLookupFailed = false;
+            } else if (isPriceCardError(price)) {
+              failed++;
+              item.priceSource = "查价失败";
+              item.priceLookupFailed = true;
+            }
+          } else {
+            item.priceSource = "缺少市场信息";
             item.priceLookupFailed = true;
           }
-        } else {
-          item.priceSource = "缺少市场信息";
-          item.priceLookupFailed = true;
-        }
 
-        applyGrindRecommendation(item, gemPrice.priceCents);
-        state.grindResults.push(item);
-        if (index === 0 || (index + 1) % 5 === 0) renderGrindResults();
-      }
+          applyGrindRecommendation(item, gemPrice.priceCents);
+          state.grindResults.push(item);
+          completed++;
+          if (completed === 1 || completed % 5 === 0) renderGrindResults();
+        }
+      );
 
       state.grindResults.sort((left, right) => {
         const recommendCompare = Number(right.recommendationKey === "grind") - Number(left.recommendationKey === "grind");
@@ -658,7 +678,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         grindLog(`扫描中断: ${error?.message || error?.status || error}`, "err");
       }
     } finally {
-      queue.stop();
+      stopQueues();
       persistMarketObservations(marketRecords);
       state.grindQueue = null;
       state.grindScanning = false;

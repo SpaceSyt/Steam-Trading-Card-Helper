@@ -35,7 +35,12 @@ import {
 
 import { surplusStatus } from "../status-controllers.js";
 import { enableTileDragSelection } from "../ui/checkbox-drag.js";
-import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurrency.js";
+import {
+  createRequestQueuePool,
+  getHtmlRequestConcurrency,
+  runWithConcurrency,
+} from "../utils/concurrency.js";
+import { appendEmptyState, appendInventoryImage } from "../utils/dom.js";
 
 const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusProgress, hideProgress: hideSurplusProgress } = surplusStatus;
 
@@ -233,14 +238,11 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
     const visible = getVisibleSurplusResults();
     pruneSelectedSurplusResults(visible);
     if (visible.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "stch-inventory-empty";
-      empty.textContent = state.surplusScanning
+      appendEmptyState(list, state.surplusScanning
         ? "正在检测多余卡牌..."
         : state.surplusResults.length > 0
           ? "当前筛选下没有多余卡牌"
-          : "尚未检测到多余卡牌";
-      list.appendChild(empty);
+          : "尚未检测到多余卡牌");
       updateSurplusSummary();
       updateSurplusActionState();
       return;
@@ -281,17 +283,11 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
       if (result.nameColor) tile.style.borderColor = result.nameColor;
       if (result.backgroundColor) tile.style.backgroundColor = result.backgroundColor;
 
-      if (result.imageUrl) {
-        const image = document.createElement("img");
-        image.src = result.imageUrl;
-        image.alt = result.cardName || result.marketHashName || "";
-        tile.appendChild(image);
-      } else {
-        const placeholder = document.createElement("div");
-        placeholder.className = "stch-inv-placeholder";
-        placeholder.textContent = result.cardName || "?";
-        tile.appendChild(placeholder);
-      }
+      appendInventoryImage(
+        tile,
+        result.imageUrl,
+        result.cardName || result.marketHashName
+      );
 
       const count = document.createElement("span");
       count.className = "stch-inv-badge";
@@ -343,37 +339,17 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
     updateAllActionStates();
 
     const cfg = state.cfg;
-    const queue = new RequestQueue(
-      cfg.requestInterval,
-      state,
-      setSurplusStatus,
-      surplusLog,
-      { stopPredicate: currentState => Boolean(currentState?.surplusStopRequested) }
-    );
-    const parallelQueues = new Set();
-    const stopQueues = () => {
-      queue.stop();
-      parallelQueues.forEach(activeQueue => activeQueue.stop());
-      parallelQueues.clear();
-    };
-    const withHtmlQueue = async operation => {
-      if (!state.cfg.parallelOrderPricingEnabled) return operation(queue);
-      const activeQueue = new RequestQueue(
+    const queue = createRequestQueuePool(
+      getHtmlRequestConcurrency(cfg),
+      () => new RequestQueue(
         cfg.requestInterval,
         state,
-        null,
-        null,
+        setSurplusStatus,
+        surplusLog,
         { stopPredicate: currentState => Boolean(currentState?.surplusStopRequested) }
-      );
-      parallelQueues.add(activeQueue);
-      try {
-        return await operation(activeQueue);
-      } finally {
-        activeQueue.stop();
-        parallelQueues.delete(activeQueue);
-      }
-    };
-    state.surplusQueue = { stop: stopQueues };
+      )
+    );
+    state.surplusQueue = queue;
     const marketRecords = [];
 
     try {
@@ -417,9 +393,7 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
           setSurplusStatus(`读取徽章: ${label}`);
 
           try {
-            const rows = await withHtmlQueue(activeQueue => (
-              resolveSurplusForBadge(group, profileUrl, activeQueue)
-            ));
+            const rows = await resolveSurplusForBadge(group, profileUrl, queue);
             if (rows.length === 0) {
               if (state.cfg.showNoResultLogs) {
                 surplusLog(`[${group.appid}] ${label}: 没有升满后剩余`, "info");
@@ -490,13 +464,11 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
               let created = false;
               if (!pricePromise) {
                 created = true;
-                pricePromise = withHtmlQueue(activeQueue => (
-                  priceCard(result.marketHashName, activeQueue, {
-                    preferListing: true,
-                    requireVolume: true,
-                    persistMarketCache: false,
-                  })
-                ));
+                pricePromise = priceCard(result.marketHashName, queue, {
+                  preferListing: true,
+                  requireVolume: true,
+                  persistMarketCache: false,
+                });
                 priceCache.set(result.marketHashName, pricePromise);
               }
               price = await pricePromise;
@@ -540,7 +512,7 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
         surplusLog(`检测中断: ${error?.message || error?.status || error}`, "err");
       }
     } finally {
-      stopQueues();
+      queue.stop();
       persistMarketObservations(marketRecords);
       state.surplusQueue = null;
       state.surplusScanning = false;

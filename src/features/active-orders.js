@@ -27,6 +27,11 @@ import {
   priceCard,
 } from "../parsers/price.js";
 import { persistMarketObservations } from "../services/market-observations.js";
+import {
+  createRequestQueuePool,
+  getHtmlRequestConcurrency,
+  runWithConcurrency,
+} from "../utils/concurrency.js";
 
 const LOWEST_SELL_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -391,20 +396,23 @@ async function querySelectedLowestSellPrices() {
   groups.forEach(group => { group.lowestSellState = "loading"; });
   renderActiveBuyOrders();
   updateAllActionStates();
-  const queue = new RequestQueue(
-    state.cfg.requestInterval,
-    state,
-    text => setStatus(text || "正在查询最低售价"),
-    null,
-    { stopPredicate: () => false }
+  const queue = createRequestQueuePool(
+    getHtmlRequestConcurrency(state.cfg),
+    () => new RequestQueue(
+      state.cfg.requestInterval,
+      state,
+      text => setStatus(text || "正在查询最低售价"),
+      null,
+      { stopPredicate: () => false }
+    )
   );
   let found = 0;
   let missing = 0;
   const observations = [];
   try {
     const currencyId = getOrderCurrencyContext().currencyId;
-    for (let index = 0; index < groups.length; index += 1) {
-      const group = groups[index];
+    let completed = 0;
+    await runWithConcurrency(groups, getHtmlRequestConcurrency(state.cfg), async (group, index) => {
       setStatus(`正在查询最低售价 ${index + 1}/${groups.length}：${group.displayName}`);
       const result = await priceCard(group.marketHashName, queue, {
         appid: group.appid,
@@ -431,7 +439,9 @@ async function querySelectedLowestSellPrices() {
         missing += 1;
       }
       updateLowestSellCell(group);
-    }
+      completed++;
+      setStatus(`正在查询最低售价 ${completed}/${groups.length}`);
+    });
     setStatus(
       missing ? `最低售价查询完成：成功 ${found} 项，缺失或失败 ${missing} 项` : `最低售价查询完成：${found} 项`,
       missing ? "warn" : "ok"

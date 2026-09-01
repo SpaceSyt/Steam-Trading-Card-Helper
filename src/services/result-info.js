@@ -14,6 +14,7 @@ import {
 } from "../parsers/price.js";
 
 import { persistMarketObservations } from "./market-observations.js";
+import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurrency.js";
 
   export function getResultKey(info) {
     return `${info.appid}_${info.isFoil ? 1 : 0}`;
@@ -56,10 +57,14 @@ import { persistMarketObservations } from "./market-observations.js";
     const setsToTarget = Math.max(0, info.targetLevel - info.level);
     const noPriceCards = [];
     const marketRecords = [];
+    const cardPrices = new Array(info.cards.length);
     let failedPriceCount = 0;
 
     try {
-      for (const card of info.cards) {
+      await runWithConcurrency(
+        info.cards,
+        getHtmlRequestConcurrency(state.cfg),
+        async (card, index) => {
         if (!card.marketHashName) {
           applyPriceCardResult(card, {
             outcome: PRICE_CARD_OUTCOMES.ERROR,
@@ -71,7 +76,7 @@ import { persistMarketObservations } from "./market-observations.js";
             observedAt: null,
           }, info.currencyId);
           failedPriceCount++;
-          continue;
+          return;
         }
         const pk = await priceCard(card.marketHashName, queue, {
           preferListing: true,
@@ -83,18 +88,18 @@ import { persistMarketObservations } from "./market-observations.js";
         const appliedPrice = applyPriceCardResult(card, pk, info.currencyId);
         if (appliedPrice.outcome === PRICE_CARD_OUTCOMES.ERROR) {
           failedPriceCount++;
-          continue;
+          return;
         }
         if (appliedPrice.outcome === PRICE_CARD_OUTCOMES.NO_PRICE) {
           noPriceCards.push(card);
-          continue;
+          return;
         }
         minVolume = Math.min(minVolume, pk.volume);
         if (pk.estimated) {
           info.hasEstimated = true;
           info.hasMedianFallback = true;
         }
-        info.cardPrices.push({
+        cardPrices[index] = {
           name: card.name,
           lowestCents: pk.lowestSellCents,
           medianCents: pk.medianCents,
@@ -103,7 +108,7 @@ import { persistMarketObservations } from "./market-observations.js";
           priceSource: pk.priceSource,
           currencyId: pk.currencyId,
           observedAt: pk.observedAt,
-        });
+        };
 
         const need1 = Math.max(0, 1 - card.owned);
         const need5 = Math.max(0, setsToTarget - card.owned);
@@ -112,10 +117,13 @@ import { persistMarketObservations } from "./market-observations.js";
         level5CostCents += need5 > 0
           ? pk.lowestSellCents + (need5 - 1) * Math.max(pk.lowestSellCents, pk.medianCents)
           : 0;
-      }
+        }
+      );
     } finally {
       persistMarketObservations(marketRecords);
     }
+
+    info.cardPrices = cardPrices.filter(Boolean);
 
     info.noPriceDataCount = noPriceCards.length;
     info.failedPriceCount = failedPriceCount;

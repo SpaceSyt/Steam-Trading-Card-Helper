@@ -14,9 +14,6 @@ import { getSelectedResults, getSelectedOrderResults } from "../services/result-
     const selectedCount = mode === "card"
       ? (state.selectedSurplusResults?.size || 0)
       : (state.selectedGrindResults?.size || 0);
-    const selectedLabel = document.getElementById("stch-surplus-selected-count");
-    if (selectedLabel) selectedLabel.textContent = `选择 ${selectedCount} 项`;
-
     const list = document.getElementById(mode === "card" ? "stch-surplus-list" : "stch-grind-list");
     const visibleTiles = list ? [...list.querySelectorAll(".stch-inv-tile")] : [];
     const selectedVisibleCount = visibleTiles.filter(tile => tile.classList.contains("selected")).length;

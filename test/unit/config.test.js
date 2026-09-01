@@ -74,6 +74,8 @@ test("new ordering, sidebar, advanced, and blacklist settings normalize safely",
   assert.equal(defaults.showScanSellSetColumn, true);
   assert.equal(defaults.parallelOrderPricingEnabled, false);
   assert.equal(defaults.parallelOrderPricingConcurrency, 4);
+  assert.equal(defaults.parallelOtherRequestsEnabled, true);
+  assert.equal(defaults.parallelOtherRequestsConcurrency, 8);
 
   const optedOut = normalizeConfig({
     minimumPriceFallback: false,
@@ -84,6 +86,8 @@ test("new ordering, sidebar, advanced, and blacklist settings normalize safely",
     showScanSellSetColumn: false,
     parallelOrderPricingEnabled: true,
     parallelOrderPricingConcurrency: 8.9,
+    parallelOtherRequestsEnabled: false,
+    parallelOtherRequestsConcurrency: 12.9,
   });
   assert.equal(optedOut.minimumPriceFallback, false);
   assert.equal(optedOut.sidebarDisabled, true);
@@ -93,12 +97,17 @@ test("new ordering, sidebar, advanced, and blacklist settings normalize safely",
   assert.equal(optedOut.showScanSellSetColumn, false);
   assert.equal(optedOut.parallelOrderPricingEnabled, true);
   assert.equal(optedOut.parallelOrderPricingConcurrency, 8);
+  assert.equal(optedOut.parallelOtherRequestsEnabled, false);
+  assert.equal(optedOut.parallelOtherRequestsConcurrency, 12);
 
   assert.equal(normalizeConfig({ blacklistExpiryDays: 0 }).blacklistExpiryDays, 1);
   assert.equal(normalizeConfig({ blacklistExpiryDays: "invalid" }).blacklistExpiryDays, 7);
   assert.equal(normalizeConfig({ parallelOrderPricingConcurrency: 0 }).parallelOrderPricingConcurrency, 1);
   assert.equal(normalizeConfig({ parallelOrderPricingConcurrency: 99 }).parallelOrderPricingConcurrency, 20);
   assert.equal(normalizeConfig({ parallelOrderPricingConcurrency: "invalid" }).parallelOrderPricingConcurrency, 4);
+  assert.equal(normalizeConfig({ parallelOtherRequestsConcurrency: 0 }).parallelOtherRequestsConcurrency, 1);
+  assert.equal(normalizeConfig({ parallelOtherRequestsConcurrency: 99 }).parallelOtherRequestsConcurrency, 20);
+  assert.equal(normalizeConfig({ parallelOtherRequestsConcurrency: "invalid" }).parallelOtherRequestsConcurrency, 8);
 });
 
 test("an automatic pricing draft can temporarily override both strategy offsets", () => {

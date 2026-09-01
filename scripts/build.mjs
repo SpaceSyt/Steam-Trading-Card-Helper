@@ -40,7 +40,6 @@ await build({
   format: "iife",
   charset: "utf8",
   minify: true,
-  keepNames: true,
   legalComments: "none",
   sourcemap: false,
   loader: { ".css": "text" },

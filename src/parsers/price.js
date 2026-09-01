@@ -11,7 +11,7 @@ import {
   toLegacyPriceResult,
 } from "../services/market-data.js";
 import { persistMarketObservations } from "../services/market-observations.js";
-import { parseMarketListingSnapshotFromHtml } from "./market-listing.js";
+import { getMarketListingUrl, parseMarketListingSnapshotFromHtml } from "./market-listing.js";
 
 export const PRICE_CARD_OUTCOMES = Object.freeze({
   PRICED: "priced",
@@ -139,8 +139,7 @@ function getPriceCurrencyContext(options = {}) {
   return getActiveCurrencyContext() || getCurrencyContextById(CURRENCY_IDS.CNY);
 }
 
-function makePriceCardResult(record, currencyContext, options, observedAt) {
-  const legacy = toLegacyPriceResult(record);
+function makePriceCardResult(record, currencyContext, options, observedAt, legacy = toLegacyPriceResult(record)) {
   if (!record || !legacy) {
     return makePriceCardError(PRICE_CARD_ERROR_KINDS.PARSE, {
       errorMessage: "价格响应无法规范化",
@@ -189,11 +188,12 @@ export async function priceCard(marketHashName, queue, options = {}) {
     const appid = String(options.appid || 753);
     if (options.preferListing === true) {
       try {
-        const listingUrl = `https://steamcommunity.com/market/listings/${appid}/${encodeURIComponent(normalizedMarketHashName)}?l=english`;
+        const listingUrl = getMarketListingUrl(normalizedMarketHashName, appid);
         const listingResponse = await queue.fetch(listingUrl, { requestPolicy: "default" });
         const snapshot = parseMarketListingSnapshotFromHtml(
           listingResponse?.text || "",
-          normalizedMarketHashName
+          normalizedMarketHashName,
+          { includeHistory: options.requireMedian === true || options.requireVolume === true }
         );
         const observedAt = Date.now();
         if (snapshot && typeof options.onMetadata === "function") {
@@ -289,7 +289,7 @@ export async function priceCard(marketHashName, queue, options = {}) {
         currencyId: currencyContext.currencyId,
       });
     }
-    return makePriceCardResult(record, currencyContext, options, observedAt);
+    return makePriceCardResult(record, currencyContext, options, observedAt, legacy);
   } catch (e) {
     return classifyRequestError(e, currencyContext?.currencyId ?? null);
   }

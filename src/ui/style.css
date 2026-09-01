@@ -563,9 +563,6 @@
       width: 100%;
       box-sizing: border-box;
     }
-    .stch-order-tools {
-      margin-left: auto;
-    }
     .stch-craft-row .stch-craft-available {
       width: 64px;
       flex-shrink: 0;
@@ -624,16 +621,6 @@
     .stch-surplus-action-spacer {
       flex: 1 1 auto;
       min-width: 16px;
-    }
-    .stch-surplus-action-row .stch-processing-selected-count {
-      margin-left: 0;
-    }
-    .stch-processing-selected-count {
-      width: auto;
-      min-width: 78px;
-      margin-left: auto;
-      margin-right: 0;
-      justify-content: flex-end;
     }
     .stch-surplus-action-buttons {
       display: flex;
@@ -833,13 +820,6 @@
       display: flex;
       justify-content: center;
       white-space: nowrap;
-    }
-    .stch-selected-count.stch-processing-selected-count {
-      width: auto;
-      min-width: 78px;
-      margin-left: auto;
-      margin-right: 0;
-      justify-content: flex-end;
     }
     .stch-sortable {
       cursor: pointer;

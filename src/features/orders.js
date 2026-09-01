@@ -11,9 +11,9 @@ import { getBadgeTargetLevel } from "../utils/badge.js";
 import { getMultibuyQuantity } from "./multibuy.js";
 
 import {
+  getMarketListingUrl,
   parseMarketListingSnapshotFromHtml,
-  parseMarketOrderDepthFromListingHtml,
-  parseMarketOrderbookFromListingHtml,
+  parseMarketListingWithDepthFromHtml,
 } from "../parsers/market-listing.js";
 import { getActiveOrderPricingProfile } from "../config.js";
 import { calculateAutomaticBuyPrice } from "../services/order-wall.js";
@@ -185,6 +185,23 @@ const { setStatus: setOrderStatus } = orderStatus;
     return "在售最低";
   }
 
+  function validateListingSnapshot(snapshot, currencyId) {
+    if (
+      Number.isInteger(snapshot?.currency)
+      && snapshot.currency > 0
+      && snapshot.currency !== currencyId
+    ) {
+      throw new Error(`商品页币种不一致 (${snapshot.currency}/${currencyId})`);
+    }
+    if (
+      Number.isInteger(snapshot?.currency)
+      && snapshot.currency > 0
+      && !(Number.isFinite(snapshot.highestBuyCents) && snapshot.highestBuyCents > 0)
+    ) {
+      throw createNoBuyOrdersError();
+    }
+  }
+
   export async function fetchHighestBuyPrice(marketHashName, queue = null, options = {}) {
     const currencyContext = getOrderCurrencyContext();
     const cacheKey = getCurrencyMarketKey(marketHashName, currencyContext.currencyId);
@@ -223,15 +240,15 @@ const { setStatus: setOrderStatus } = orderStatus;
       }
     };
     try {
-      const listingUrl =
-        `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}?l=english`;
+      const listingUrl = getMarketListingUrl(marketHashName);
       const listingResponse = await requestQueue.fetch(listingUrl, {
         requestPolicy: "default",
       });
       const listingHtml = listingResponse?.text || "";
       const listingSnapshot = parseMarketListingSnapshotFromHtml(
         listingHtml,
-        marketHashName
+        marketHashName,
+        { includeHistory: false }
       );
       const metadataObservedAt = Date.now();
       if (listingSnapshot && typeof options.onMetadata === "function") {
@@ -242,23 +259,10 @@ const { setStatus: setOrderStatus } = orderStatus;
           observedAt: metadataObservedAt,
         });
       }
-      if (
-        Number.isInteger(listingSnapshot?.currency)
-        && listingSnapshot.currency > 0
-        && listingSnapshot.currency !== currencyContext.currencyId
-      ) {
-        throw new Error(
-          `商品页币种不一致 (${listingSnapshot.currency}/${currencyContext.currencyId})`
-        );
-      }
-      if (
-        Number.isInteger(listingSnapshot?.currency)
-        && listingSnapshot.currency > 0
-        && !(Number.isFinite(listingSnapshot.highestBuyCents) && listingSnapshot.highestBuyCents > 0)
-      ) {
-        throw createNoBuyOrdersError();
-      }
-      const newOrderbook = parseMarketOrderbookFromListingHtml(listingHtml, marketHashName);
+      validateListingSnapshot(listingSnapshot, currencyContext.currencyId);
+      const newOrderbook = listingSnapshot?.highestBuyCents !== null
+        ? listingSnapshot
+        : null;
       if (newOrderbook) {
         if (
           newOrderbook.currency != null
@@ -313,29 +317,16 @@ const { setStatus: setOrderStatus } = orderStatus;
     );
     const requestQueue = queue || ownedQueue;
     try {
-      const listingUrl =
-        `https://steamcommunity.com/market/listings/753/${encodeURIComponent(marketHashName)}?l=english`;
+      const listingUrl = getMarketListingUrl(marketHashName);
       const response = await requestQueue.fetch(listingUrl, { requestPolicy: "default" });
       const listingHtml = response?.text || "";
-      const snapshot = parseMarketListingSnapshotFromHtml(listingHtml, marketHashName);
-      const depth = parseMarketOrderDepthFromListingHtml(listingHtml, marketHashName);
+      const { snapshot, depth } = parseMarketListingWithDepthFromHtml(
+        listingHtml,
+        marketHashName,
+        { includeHistory: false }
+      );
       if (!depth) {
-        if (
-          Number.isInteger(snapshot?.currency)
-          && snapshot.currency > 0
-          && snapshot.currency !== currencyContext.currencyId
-        ) {
-          throw new Error(
-            `商品页币种不一致 (${snapshot.currency}/${currencyContext.currencyId})`
-          );
-        }
-        if (
-          Number.isInteger(snapshot?.currency)
-          && snapshot.currency > 0
-          && !(Number.isFinite(snapshot.highestBuyCents) && snapshot.highestBuyCents > 0)
-        ) {
-          throw createNoBuyOrdersError();
-        }
+        validateListingSnapshot(snapshot, currencyContext.currencyId);
         throw new Error("商品页缺少有效的完整买单深度");
       }
       if (depth.currencyId !== currencyContext.currencyId) {
