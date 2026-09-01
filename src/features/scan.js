@@ -405,10 +405,8 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
                   && predictionAutoBlacklistCents > 0
                   && prediction.predictedCents > predictionAutoBlacklistCents;
                 log(
-                  `  → 已查${prediction.sampleCount}/${info.totalInSet}张, ` +
-                  `保守预测全套≥${formatMoney(prediction.predictedCents)} > ` +
-                  `安全线${formatMoney(predictionLimit)}，提前跳过 ` +
-                  `(样本${formatMoney(prediction.minPrice)}-${formatMoney(prediction.maxPrice)})`,
+                  `  → 已查 ${prediction.sampleCount}/${info.totalInSet}，预测 ` +
+                  `${formatMoney(prediction.predictedCents)} > ${formatMoney(predictionLimit)}，跳过`,
                   "info"
                 );
                 if (shouldAutoBlacklistPrediction) {
@@ -495,17 +493,9 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           renderGameRow(info);
           if (info.hasIncompletePricing) {
             log(
-              `  ✓ [${b.appid}] ${info.gameName}: 已保留条目，` +
-              `${noPriceCards.length + failedPriceCount}/${info.totalInSet} 张缺少价格；补全 - | 全套 - | 满级 -`,
+              `[${b.appid}] ${info.gameName}: 缺价 ` +
+              `${noPriceCards.length + failedPriceCount}/${info.totalInSet}，已保留`,
               "warn"
-            );
-          } else {
-            log(
-              `  ✓ [${b.appid}] ${info.gameName}: ` +
-              `补全 ${formatMoney(setCostCents)} | ` +
-              `全套 ${formatMoney(fullSetCostCents)} | ` +
-              `满级 ${formatMoney(level5CostCents)}`,
-              "ok"
             );
           }
 

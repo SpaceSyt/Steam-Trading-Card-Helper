@@ -204,7 +204,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     if (state.orderResults.length === 0) {
       const row = document.createElement("div");
       row.className = "stch-game-row";
-      const text = createTextSpan("", "订购卡牌缓存为空。价格扫描结果会实时进入这里，也可以手动输入 AppID。");
+      const text = createTextSpan("", "订购缓存为空");
       text.style.color = "#8f98a0";
       row.appendChild(text);
       fragment.appendChild(row);
@@ -393,7 +393,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     }, { completion: 0, full: 0, level: 0, incomplete: false });
     const totalText = value => totals.incomplete ? "-" : formatMoney(value);
     summary.innerHTML = `
-      共 <b>${count}</b> 个${modeLabel} ≤ ${formatMoney(thresholdCents)} (单套卡牌价格上限)，补全总价 <b>${totalText(totals.completion)}</b>，全套总价 ${totalText(totals.full)}，满级总价 ${totalText(totals.level)}
+      共 <b>${count}</b> 个${modeLabel} ≤ ${formatMoney(thresholdCents)} (单套卡牌价格上限)，补全总价 <b>${totalText(totals.completion)}</b>，全套总价 <b>${totalText(totals.full)}</b>，满级总价 <b>${totalText(totals.level)}</b>
     `;
   }
 
@@ -422,7 +422,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     }, { completion: 0, full: 0, level: 0, incomplete: false });
     const totalText = value => totals.incomplete ? "-" : formatMoney(value);
     summary.innerHTML = `
-      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>${totalText(totals.completion)}</b>，全套总价 ${totalText(totals.full)}，满级总价 ${totalText(totals.level)}
+      缓存 <b>${count}</b> 个 · 已选择 <b>${selectedCount}</b> 个 · 补全总价 <b>${totalText(totals.completion)}</b>，全套总价 <b>${totalText(totals.full)}</b>，满级总价 <b>${totalText(totals.level)}</b>
     `;
   }
 

@@ -343,13 +343,13 @@ import {
       </div>
       <div class="stch-body">
         <div class="stch-tabs">
-          <span class="stch-tab ${activeClass("scan")}" data-tab="scan">卡牌价格扫描</span>
+          <span class="stch-tab ${activeClass("scan")}" data-tab="scan">价格扫描</span>
           <span class="stch-tab" data-tab="orders">订购卡牌</span>
-          <span class="stch-tab ${activeClass("active-orders")}" data-tab="active-orders">已下订购单</span>
+          <span class="stch-tab ${activeClass("active-orders")}" data-tab="active-orders">订购单</span>
           <span class="stch-tab ${activeClass("history")}" data-tab="history">价格走势</span>
           <span class="stch-tab" data-tab="craft">徽章合成</span>
-          <span class="stch-tab" data-tab="blacklist">游戏/AppID黑名单</span>
-          <span class="stch-tab" data-tab="surplus">多余物品处理</span>
+          <span class="stch-tab" data-tab="blacklist">黑名单</span>
+          <span class="stch-tab" data-tab="surplus">多余物品</span>
           <span class="stch-tab" data-tab="collection">物品收藏</span>
           <span class="stch-tab stch-tab-right ${activeClass("settings")}" data-tab="settings">设置</span>
         </div>
@@ -474,7 +474,7 @@ import {
               <input id="stch-order-manual-foil" type="checkbox">
               闪卡模式
             </label>
-            <div class="stch-btn alt" id="stch-order-add-btn">读取并加入</div>
+            <div class="stch-btn alt" id="stch-order-add-btn">加入</div>
             <div class="stch-btn alt disabled" id="stch-order-recalculate-btn">重新计算</div>
             <div class="stch-btn disabled" id="stch-order-submit-orders-btn">提交订购单</div>
           </div>
@@ -493,7 +493,6 @@ import {
           </div>
           <div class="stch-summary" id="stch-order-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-order-summary"></span>
-            <span class="stch-selected-count" id="stch-order-selected-count">已选择 0 项</span>
           </div>
           <div class="stch-status-text" id="stch-order-status" style="display:none"></div>
           <div class="stch-game-list stch-order-page-list" id="stch-order-list"></div>
@@ -506,7 +505,7 @@ import {
               </select>
             </label>
             <button type="button" class="stch-btn alt" id="stch-active-orders-refresh">刷新</button>
-            <button type="button" class="stch-btn alt disabled" id="stch-active-orders-query-prices">查询选中价格</button>
+            <button type="button" class="stch-btn alt disabled" id="stch-active-orders-query-prices">查价</button>
             <button type="button" class="stch-btn alt stch-btn-danger disabled" id="stch-active-orders-cancel-selected">撤销选中</button>
           </div>
           <div class="stch-summary stch-active-orders-summary-row">
@@ -528,7 +527,7 @@ import {
             <label>最大徽章页数 <input id="stch-craft-max-pages" class="stch-input" type="number" min="1" max="20" value="${state.cfg.maxBadgePages}"></label>
           </div>
           <div class="stch-scan-actions">
-            <div class="stch-btn" id="stch-craft-scan-btn">扫描可合成徽章</div>
+            <div class="stch-btn" id="stch-craft-scan-btn">扫描</div>
             <div class="stch-btn alt disabled" id="stch-craft-stop-btn">停止</div>
             <div class="stch-craft-actions">
               <div class="stch-btn alt disabled" id="stch-craft-one-btn">全部 1 次</div>
@@ -568,7 +567,6 @@ import {
               <input id="stch-auto-bl-enabled" type="checkbox" ${state.cfg.autoBlackEnabled ? "checked" : ""}>
               启用自动游戏黑名单
             </label>
-            <span style="color:#8f98a0;font-size:12px;">扫描时超过此价格的游戏会自动加入游戏/AppID黑名单</span>
           </div>
           <div class="stch-bl-list" id="stch-bl-list"></div>
           <div class="stch-bl-list" id="stch-bl-list-fixed" style="max-height:100px;margin-top:8px;"></div>
@@ -604,7 +602,6 @@ import {
             <div class="stch-btn" id="stch-surplus-scan-btn">开始检测</div>
             <div class="stch-btn alt disabled" id="stch-surplus-stop-btn">停止</div>
             <div class="stch-surplus-action-spacer"></div>
-            <span class="stch-selected-count stch-processing-selected-count" id="stch-surplus-selected-count">选择 0 项</span>
             <div class="stch-btn alt disabled" id="stch-surplus-select-all-btn">全选</div>
             <div class="stch-surplus-action-buttons">
               <div class="stch-btn alt disabled" id="stch-surplus-collect-btn">收藏选中</div>
@@ -740,7 +737,7 @@ import {
                 <div class="stch-settings-section-title">Tab 标签颜色</div>
                 <div class="stch-settings-section-rule"></div>
                 <div class="stch-tab-color-settings">${tabColorSettingsHtml}</div>
-                <div class="stch-tab-color-help">输入六位 HEX 色值，例如 #66C0F4；留空可恢复默认颜色。</div>
+                <div class="stch-tab-color-help">留空恢复默认</div>
                 <div class="stch-footer-status" id="stch-personalization-status"></div>
               </div>
             </div>
@@ -748,7 +745,7 @@ import {
           <div class="stch-settings-page-actions">
             <label class="stch-advanced-toggle"><input id="stch-show-advanced-settings" type="checkbox" ${state.cfg.showAdvancedSettings ? "checked" : ""}> 显示高级</label>
             <span class="stch-footer-status" id="stch-settings-action-status"></span>
-            <div class="stch-btn alt" id="stch-onboarding-open">重新查看使用说明</div>
+            <div class="stch-btn alt" id="stch-onboarding-open">使用说明</div>
             <div class="stch-btn alt" id="stch-settings-export-data">导出文件</div>
             <div class="stch-btn alt" id="stch-settings-import-data">导入数据</div>
             <input id="stch-settings-import-file" type="file" accept="application/json,.json" hidden>
@@ -758,7 +755,7 @@ import {
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.4.3 · 当前币种：${currencyStatus}</span>
+        <span class="stch-label">V2.4.3</span>
       </div>
     `;
     document.body.appendChild(modal);

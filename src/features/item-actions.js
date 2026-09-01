@@ -528,8 +528,7 @@ import { isItemCollectionHealthy } from "../services/item-collection.js";
         `到手 ${formatMoney(item.sellerReceiveCents)}`,
       ]),
       note:
-        `${notes.join("；") || "未发现需跳过的项目"}。` +
-        "将直接提交 Steam 市场上架请求；可能仍需要在 Steam 手机应用中确认。",
+        [...notes, "可能需要手机确认"].join("；") + "。",
     });
   }
 
@@ -556,8 +555,7 @@ import { isItemCollectionHealthy } from "../services/item-collection.js";
         `${formatInt(item.gooValueExpected)} 宝石`,
       ]),
       note:
-        `${notes.join("；") || "未发现需跳过的项目"}。` +
-        "转化宝石会不可逆销毁物品，请确认选中项目和数量。",
+        [...notes, "不可逆销毁物品"].join("；") + "。",
     });
   }
 

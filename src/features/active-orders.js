@@ -478,11 +478,8 @@ async function cancelGroups(groups) {
   if (isSharedActionBusy() || groups.length === 0) return;
   const orders = groups.flatMap(group => group.orders);
   const frozen = orders.reduce((sum, order) => sum + order.frozenMinor, 0);
-  if (!confirm(
-    `确认撤销选中的 ${groups.length} 项订购单？\n`
-    + `剩余 ${orders.reduce((sum, order) => sum + order.remainingQuantity, 0)} 件，冻结 ${formatMoney(frozen)}。\n\n`
-    + "撤单将逐笔执行；结果不明确的订单不会自动重试。"
-  )) return;
+  const remaining = orders.reduce((sum, order) => sum + order.remainingQuantity, 0);
+  if (!confirm(`撤销 ${groups.length} 项（${remaining} 件，冻结 ${formatMoney(frozen)}）？`)) return;
 
   state.activeOrdersCancelling = true;
   updateAllActionStates();

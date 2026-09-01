@@ -719,8 +719,7 @@ const { setStatus: setOrderStatus } = orderStatus;
         `${skipped.sellGuardClamped} 种卡牌已限制在最低卖价以下`
       );
       backdrop.querySelector(".stch-order-note").textContent =
-        `${notes.join("；") || "未发现需跳过的卡牌"}。` +
-        "订单将长期保留，直到成交或手动取消；提交即表示同意 Steam 订户协议。";
+        [...notes, "订单长期有效"].join("；") + "。";
 
       const finish = confirmed => {
         backdrop.remove();

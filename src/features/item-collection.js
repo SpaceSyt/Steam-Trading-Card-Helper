@@ -112,7 +112,7 @@ export function renderItemCollection() {
   } else if (items.length === 0) {
     const empty = document.createElement("div");
     empty.className = "stch-inventory-empty";
-    empty.textContent = "尚未收藏物品；请在多余物品处理中选择后收藏";
+    empty.textContent = "暂无收藏";
     list.appendChild(empty);
   } else {
     for (const item of items) {

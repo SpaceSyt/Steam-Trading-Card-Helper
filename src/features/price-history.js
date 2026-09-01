@@ -402,7 +402,7 @@ function renderOverview() {
   if (items.length === 0) {
     const empty = document.createElement("div");
     empty.className = "stch-history-list-empty";
-    empty.textContent = "还没有已保存物品。请从扫描结果、订购缓存选择，或手动输入 market_hash_name 后添加。";
+    empty.textContent = "暂无保存项";
     list.appendChild(empty);
     return;
   }

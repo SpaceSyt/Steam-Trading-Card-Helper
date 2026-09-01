@@ -432,10 +432,7 @@ const { log: craftLog, setStatus: setCraftStatus, setProgress: setCraftProgress,
           </div>
           <div class="stch-order-list"></div>
           <div class="stch-order-note">
-            ${craftMode === "max"
-              ? "每个徽章会按所选次数提交一次合成请求。"
-              : "每一级都会独立提交一次合成请求。"}
-            若请求结果不确定，脚本会立即停止且不会自动重试，请重新扫描后再继续。
+            ${craftMode === "max" ? "每个游戏一次请求" : "每级一次请求"}；结果不明时停止。
           </div>
           <div class="stch-order-dialog-actions">
             <div class="stch-btn alt" data-action="cancel">取消</div>
