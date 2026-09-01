@@ -95,4 +95,8 @@ test("gem price is requested once per page session without 429 retries", async (
     base: "priceoverview",
     retry429: false,
   });
+
+  resetSessionGemPrice();
+  await loadSidebarGemPrice(firstQueue);
+  assert.equal(calls.length, 2);
 });

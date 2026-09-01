@@ -7,7 +7,11 @@ import { getGemSackSellerNetCents, getGemBreakEvenBuyerPrice } from "../utils/ma
 
 import { loadSidebarProfileInfo } from "./profile.js";
 
-import { loadSidebarGemInfo, loadSidebarGemPrice } from "./gems.js";
+import {
+  loadSidebarGemInfo,
+  loadSidebarGemPrice,
+  resetSessionGemPrice,
+} from "./gems.js";
 
 import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action-state.js";
 
@@ -114,8 +118,9 @@ import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action
     if (refresh) refresh.disabled = sidebarLoading;
   }
 
-  export async function refreshSidebarData() {
+  export async function refreshSidebarData({ forceGemPrice = false } = {}) {
     if (isPriceOverviewProbeBlocked(sidebarLoading || state.sidebarPriceRefreshing)) return;
+    if (forceGemPrice) resetSessionGemPrice();
     sidebarLoading = true;
     state.sidebarPriceRefreshing = true;
     sidebarData.error = "";
@@ -238,7 +243,7 @@ import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action
     });
     document.getElementById("stch-sidebar-refresh")?.addEventListener("click", event => {
       event.stopPropagation();
-      refreshSidebarData();
+      refreshSidebarData({ forceGemPrice: true });
     });
 
     renderSidebar();
