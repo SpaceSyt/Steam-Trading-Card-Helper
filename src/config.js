@@ -3,7 +3,7 @@
 
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 29;
+  export const CONFIG_SCHEMA_VERSION = 30;
 
   export const AUTOMATIC_PRICE_STRATEGY_CONFIG = Object.freeze({
     conservative: Object.freeze({
@@ -63,6 +63,8 @@
     automaticAggressiveWallAnchor: "top",
     automaticAggressiveWallOffset: 0.01,
     automaticAggressiveNoWallOffset: 0.01,
+    parallelOrderPricingEnabled: false,
+    parallelOrderPricingConcurrency: 4,
     minimumPriceFallback: true,
     earlyPricePrediction: true,
     earlyPredictionAutoBlacklist: false,
@@ -108,6 +110,7 @@
       ? currencyId
       : defaults.currencyId;
     merged.automaticPricingEnabled = merged.automaticPricingEnabled === true;
+    merged.parallelOrderPricingEnabled = merged.parallelOrderPricingEnabled === true;
     merged.showAdvancedSettings = merged.showAdvancedSettings === true;
     merged.sidebarDisabled = merged.sidebarDisabled === true;
     merged.showScanCompletionColumn = merged.showScanCompletionColumn !== false;
@@ -120,6 +123,10 @@
     merged.blacklistExpiryDays = Number.isFinite(blacklistExpiryDays)
       ? Math.max(1, Math.floor(blacklistExpiryDays))
       : defaults.blacklistExpiryDays;
+    const parallelOrderPricingConcurrency = Number(merged.parallelOrderPricingConcurrency);
+    merged.parallelOrderPricingConcurrency = Number.isFinite(parallelOrderPricingConcurrency)
+      ? Math.min(20, Math.max(1, Math.floor(parallelOrderPricingConcurrency)))
+      : defaults.parallelOrderPricingConcurrency;
     merged.automaticPriceStrategy = ["conservative", "balanced", "aggressive"]
       .includes(merged.automaticPriceStrategy)
       ? merged.automaticPriceStrategy

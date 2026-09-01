@@ -379,6 +379,40 @@ const { setStatus: setOrderStatus } = orderStatus;
     }
   }
 
+  async function fetchParallelOrderPricing(candidates, pricingProfile, marketRecords) {
+    if (!state.cfg.parallelOrderPricingEnabled) return null;
+    if (!pricingProfile.automatic && pricingProfile.priceSource !== "highest") return null;
+
+    const marketHashNames = [...new Set(candidates.map(({ card }) => card.marketHashName))];
+    const results = new Map();
+    let nextIndex = 0;
+    const worker = async () => {
+      while (nextIndex < marketHashNames.length) {
+        const marketHashName = marketHashNames[nextIndex++];
+        try {
+          const value = pricingProfile.automatic
+            ? await fetchMarketOrderDepth(marketHashName, null, {
+              onRecord: record => marketRecords.push(record),
+            })
+            : await fetchHighestBuyPrice(marketHashName, null, {
+              persistMarketCache: false,
+              onRecord: record => marketRecords.push(record),
+            });
+          results.set(marketHashName, { value });
+        } catch (error) {
+          results.set(marketHashName, { error });
+        }
+      }
+    };
+    const configuredConcurrency = Math.floor(Number(state.cfg.parallelOrderPricingConcurrency));
+    const concurrency = Number.isFinite(configuredConcurrency)
+      ? Math.min(20, Math.max(1, configuredConcurrency))
+      : 4;
+    const workerCount = Math.min(concurrency, marketHashNames.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    return results;
+  }
+
   export async function buildBuyOrderPlan(selected, activeOrders, ui = {}) {
     const statusFn = ui.setStatus || setStatus;
     const logFn = ui.log || log;
@@ -443,6 +477,12 @@ const { setStatus: setOrderStatus } = orderStatus;
       }
     }
 
+    const parallelPricing = await fetchParallelOrderPricing(
+      candidates,
+      pricingProfile,
+      marketRecords
+    );
+
     for (let index = 0; index < candidates.length; index++) {
       const { info, card, quantity, reservedQuantity, targetQuantity } = candidates[index];
       let basePriceCents = null;
@@ -453,9 +493,13 @@ const { setStatus: setOrderStatus } = orderStatus;
       if (pricingProfile.automatic) {
         statusFn(`自动定价 ${index + 1}/${candidates.length}: ${card.name}`);
         try {
-          const depth = await fetchMarketOrderDepth(card.marketHashName, ui.queue || null, {
-            onRecord: record => marketRecords.push(record),
-          });
+          const prefetched = parallelPricing?.get(card.marketHashName);
+          if (prefetched?.error) throw prefetched.error;
+          const depth = parallelPricing
+            ? prefetched?.value
+            : await fetchMarketOrderDepth(card.marketHashName, ui.queue || null, {
+              onRecord: record => marketRecords.push(record),
+            });
           automaticQuote = calculateAutomaticBuyPrice(depth, {
             strategy: priceSource,
             strategyRule: pricingProfile.strategyRule,
@@ -490,10 +534,14 @@ const { setStatus: setOrderStatus } = orderStatus;
       } else if (priceSource === "highest") {
         statusFn(`读取求购最高 ${index + 1}/${candidates.length}: ${card.name}`);
         try {
-          basePriceCents = await fetchHighestBuyPrice(card.marketHashName, ui.queue || null, {
-            persistMarketCache: false,
-            onRecord: record => marketRecords.push(record),
-          });
+          const prefetched = parallelPricing?.get(card.marketHashName);
+          if (prefetched?.error) throw prefetched.error;
+          basePriceCents = parallelPricing
+            ? prefetched?.value ?? null
+            : await fetchHighestBuyPrice(card.marketHashName, ui.queue || null, {
+              persistMarketCache: false,
+              onRecord: record => marketRecords.push(record),
+            });
         } catch (error) {
           pricingError = error;
         }

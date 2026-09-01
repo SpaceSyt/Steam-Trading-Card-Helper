@@ -72,6 +72,8 @@ test("new ordering, sidebar, advanced, and blacklist settings normalize safely",
   assert.equal(defaults.blacklistExpiryDays, 7);
   assert.equal(defaults.showScanCompletionColumn, true);
   assert.equal(defaults.showScanSellSetColumn, true);
+  assert.equal(defaults.parallelOrderPricingEnabled, false);
+  assert.equal(defaults.parallelOrderPricingConcurrency, 4);
 
   const optedOut = normalizeConfig({
     minimumPriceFallback: false,
@@ -80,6 +82,8 @@ test("new ordering, sidebar, advanced, and blacklist settings normalize safely",
     blacklistExpiryDays: 3.9,
     showScanCompletionColumn: false,
     showScanSellSetColumn: false,
+    parallelOrderPricingEnabled: true,
+    parallelOrderPricingConcurrency: 8.9,
   });
   assert.equal(optedOut.minimumPriceFallback, false);
   assert.equal(optedOut.sidebarDisabled, true);
@@ -87,9 +91,14 @@ test("new ordering, sidebar, advanced, and blacklist settings normalize safely",
   assert.equal(optedOut.blacklistExpiryDays, 3);
   assert.equal(optedOut.showScanCompletionColumn, false);
   assert.equal(optedOut.showScanSellSetColumn, false);
+  assert.equal(optedOut.parallelOrderPricingEnabled, true);
+  assert.equal(optedOut.parallelOrderPricingConcurrency, 8);
 
   assert.equal(normalizeConfig({ blacklistExpiryDays: 0 }).blacklistExpiryDays, 1);
   assert.equal(normalizeConfig({ blacklistExpiryDays: "invalid" }).blacklistExpiryDays, 7);
+  assert.equal(normalizeConfig({ parallelOrderPricingConcurrency: 0 }).parallelOrderPricingConcurrency, 1);
+  assert.equal(normalizeConfig({ parallelOrderPricingConcurrency: 99 }).parallelOrderPricingConcurrency, 20);
+  assert.equal(normalizeConfig({ parallelOrderPricingConcurrency: "invalid" }).parallelOrderPricingConcurrency, 4);
 });
 
 test("an automatic pricing draft can temporarily override both strategy offsets", () => {

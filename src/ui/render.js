@@ -8,7 +8,7 @@ import { formatMoney } from "../utils/format.js";
 
 import { getBadgeTargetLevel, getBadgeUrlSuffix } from "../utils/badge.js";
 
-import { getResultKey, getSelectedOrderResults } from "../services/result-info.js";
+import { getResultKey, getSelectedOrderResults, getSelectedResults } from "../services/result-info.js";
 
 import { pruneOrderCache, upsertOrderResult, getOrderCacheAgeDays } from "../services/order-cache.js";
 
@@ -18,7 +18,6 @@ import { updateBulkActionState, updateOrderActionState } from "./action-state.js
 
 import { updateResultColumns } from "../features/scan.js";
 import { getActiveOrderPricingProfile } from "../config.js";
-import { calculateAutomaticBuyPrice } from "../services/order-wall.js";
 import { calculateResultPricingTotals } from "../services/pricing-estimate.js";
 import { enableCheckboxDragSelection } from "./checkbox-drag.js";
 
@@ -34,7 +33,10 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
         updateOrderSummary({ prune: false });
         updateOrderActionState();
       }
-      if (pendingSelectionUpdates.has("scan")) updateBulkActionState();
+      if (pendingSelectionUpdates.has("scan")) {
+        updateSummary();
+        updateBulkActionState();
+      }
       pendingSelectionUpdates.clear();
     });
   }
@@ -121,6 +123,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
         sourceState.selected.clear();
       }
       sourceState.render();
+      scheduleSelectionUpdate(source);
     };
     selectAll.addEventListener("click", e => {
       e.stopPropagation();
@@ -352,7 +355,9 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
       state.cfg,
       state.automaticPricingDraft
     );
-    const adjustmentCents = Math.round((Number(profile.adjustment) || 0) * 100);
+    const adjustmentCents = profile.automatic
+      ? Math.round(Number(profile.strategyRule?.noWallOffsetMinor) || 0)
+      : Math.round((Number(profile.adjustment) || 0) * 100);
     const minimumCents = getMarketMinimumPriceCents();
     if (!Number.isSafeInteger(minimumCents) || minimumCents <= 0) {
       return {
@@ -361,46 +366,11 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
         levelCents: null,
       };
     }
-    const currencyId = Number(state.currencyContext?.currencyId || state.cfg.currencyId) || 23;
-    const getCacheKey = card => JSON.stringify([
-      String(currencyId),
-      String(card?.marketHashName || ""),
-    ]);
-    const getHighestBuy = card => {
-      const cached = state.highestBuyPrices.get(getCacheKey(card));
-      return Number.isFinite(cached?.priceCents) && cached.priceCents > 0
-        ? cached.priceCents
-        : null;
-    };
-    const resolveBasePriceMinor = card => {
-      if (profile.priceSource === "median") return card?.medianCents;
-      if (profile.priceSource === "highest") return getHighestBuy(card);
-      return card?.lowestCents;
-    };
-    const resolveFinalPriceMinor = profile.automatic
-      ? card => {
-        const depth = state.marketOrderDepths.get(getCacheKey(card))?.depth;
-        if (depth) {
-          return calculateAutomaticBuyPrice(depth, {
-            strategy: profile.priceSource,
-            strategyRule: profile.strategyRule,
-            adjustmentMinor: adjustmentCents,
-            minimumPriceMinor: minimumCents,
-          })?.finalPriceMinor ?? null;
-        }
-        const highestBuy = getHighestBuy(card);
-        if (highestBuy == null) return null;
-        const strategyOffset = Number(profile.strategyRule?.noWallOffsetMinor) || 0;
-        return Math.max(minimumCents, highestBuy + strategyOffset + adjustmentCents);
-      }
-      : null;
     return calculateResultPricingTotals(info, {
-      automatic: profile.automatic,
-      priceSource: profile.priceSource,
+      automatic: false,
+      priceSource: "lowest",
       adjustmentMinor: adjustmentCents,
       minimumPriceMinor: minimumCents,
-      resolveBasePriceMinor,
-      resolveFinalPriceMinor,
     });
   }
 
@@ -410,7 +380,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     const count = state.results.length;
     const modeLabel = state.results.some(info => info.isFoil) ? "闪卡" : "普通卡";
     const thresholdCents = Math.round((Number(state.cfg.threshold) || 0) * 100);
-    const totals = state.results.reduce((sum, result) => {
+    const totals = getSelectedResults().reduce((sum, result) => {
       const value = getRealtimePricingTotals(result);
       if (value.completionCents == null || value.fullCents == null || value.levelCents == null) {
         sum.incomplete = true;
@@ -437,8 +407,9 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     if (!summary) return;
     if (options.prune !== false) pruneOrderCache(true);
     const count = state.orderResults.length;
-    const selectedCount = getSelectedOrderResults().length;
-    const totals = state.orderResults.reduce((sum, result) => {
+    const selectedResults = getSelectedOrderResults();
+    const selectedCount = selectedResults.length;
+    const totals = selectedResults.reduce((sum, result) => {
       const value = getRealtimePricingTotals(result);
       if (value.completionCents == null || value.fullCents == null || value.levelCents == null) {
         sum.incomplete = true;

@@ -21,7 +21,11 @@ import { recalculateSelectedResults, recalculateSelectedOrderResults } from "../
 
 import { activatePriceHistoryTab, initPriceHistoryUi, resetPriceHistoryRuntime, stopPriceHistoryRefresh } from "../features/price-history.js";
 
-import { submitSelectedBuyOrders, submitSelectedOrderBuyOrders, addManualOrderAppid } from "../features/orders.js";
+import {
+  submitSelectedBuyOrders,
+  submitSelectedOrderBuyOrders,
+  addManualOrderAppid,
+} from "../features/orders.js";
 
 import {
   activateActiveBuyOrdersTab,
@@ -70,7 +74,6 @@ import { normalizeHexColor, normalizeTabColors } from "../services/tab-preferenc
 import {
   createDataBackup,
   getDataBackupFileName,
-  getUtf8ByteLength,
   parseDataBackup,
   restoreDataBackup,
   serializeDataBackup,
@@ -666,6 +669,10 @@ import {
             </label>
             <span class="stch-settings-hint">当前使用：${currencyStatus}</span>
           </div>
+          <div class="stch-toolbar">
+            <label><input id="stch-parallel-order-pricing" type="checkbox" ${state.cfg.parallelOrderPricingEnabled ? "checked" : ""}> 提交订购单时并发定价</label>
+            <label>并发数 <input id="stch-parallel-order-pricing-concurrency" class="stch-input" type="number" min="1" max="20" step="1" value="${state.cfg.parallelOrderPricingConcurrency}" style="width:55px"></label>
+          </div>
           <div class="stch-toolbar stch-advanced-setting">
             <label>priceoverview请求间隔 <input id="stch-req-interval" class="stch-input" type="number" min="100" step="10" value="${state.cfg.requestInterval}" style="width:70px"> ms</label>
             <label>每 <input id="stch-batch-size" class="stch-input" type="number" min="5" step="1" value="${state.cfg.batchSize}" style="width:55px"> 次priceoverview请求后暂停</label>
@@ -742,9 +749,8 @@ import {
             <label class="stch-advanced-toggle"><input id="stch-show-advanced-settings" type="checkbox" ${state.cfg.showAdvancedSettings ? "checked" : ""}> 显示高级</label>
             <span class="stch-footer-status" id="stch-settings-action-status"></span>
             <div class="stch-btn alt" id="stch-onboarding-open">重新查看使用说明</div>
-            <div class="stch-btn alt" id="stch-settings-import-data">导入数据</div>
-            <div class="stch-btn alt" id="stch-settings-copy-data">复制数据</div>
             <div class="stch-btn alt" id="stch-settings-export-data">导出文件</div>
+            <div class="stch-btn alt" id="stch-settings-import-data">导入数据</div>
             <input id="stch-settings-import-file" type="file" accept="application/json,.json" hidden>
             <div class="stch-btn alt" id="stch-settings-clear-cache">清除缓存</div>
             <div class="stch-btn stch-btn-danger" id="stch-settings-reset">恢复默认设定</div>
@@ -876,6 +882,12 @@ import {
       state.cfg.showNoResultLogs = !!document.getElementById("stch-show-no-result-logs")?.checked;
       state.cfg.showAdvancedSettings = !!document.getElementById("stch-show-advanced-settings")?.checked;
       state.cfg.sidebarDisabled = !!document.getElementById("stch-sidebar-disabled")?.checked;
+      state.cfg.parallelOrderPricingEnabled = !!document.getElementById("stch-parallel-order-pricing")?.checked;
+      state.cfg.parallelOrderPricingConcurrency = readNumberInput(
+        "stch-parallel-order-pricing-concurrency",
+        state.cfg.parallelOrderPricingConcurrency ?? DEFAULT_CONFIG.parallelOrderPricingConcurrency,
+        { integer: true, min: 1, max: 20 }
+      );
       const buyModeEl = document.getElementById("stch-buy-mode");
       if (state.cfg.foilScanMode) {
         state.cfg.buyMode = buyModeEl?.dataset.normalValue || state.cfg.buyMode || DEFAULT_CONFIG.buyMode;
@@ -974,6 +986,7 @@ import {
     const cfgIds = ["stch-threshold", "stch-req-interval",
       "stch-max-pages", "stch-include-drops",
       "stch-foil-scan-mode",
+      "stch-parallel-order-pricing", "stch-parallel-order-pricing-concurrency",
       "stch-show-scan-completion-column", "stch-show-scan-sell-set-column",
       "stch-batch-size", "stch-batch-pause", "stch-show-no-result-logs", "stch-show-advanced-settings", "stch-sidebar-disabled", "stch-buy-mode",
       "stch-early-price-prediction", "stch-minimum-price-fallback", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
@@ -1166,41 +1179,6 @@ import {
     const createBackupText = () => serializeDataBackup(
       createDataBackup((key, fallback) => GM_getValue(key, fallback))
     );
-    const copyBackupText = async text => {
-      if (navigator.clipboard?.writeText && window.isSecureContext) {
-        try {
-          await navigator.clipboard.writeText(text);
-          return true;
-        } catch (_) {}
-      }
-      const input = document.createElement("textarea");
-      input.value = text;
-      input.setAttribute("readonly", "");
-      input.style.position = "fixed";
-      input.style.opacity = "0";
-      document.body.appendChild(input);
-      input.select();
-      const copied = document.execCommand("copy");
-      input.remove();
-      return copied;
-    };
-    const copyBackupData = async event => {
-      if (event.currentTarget.classList.contains("disabled")) return;
-      try {
-        const text = createBackupText();
-        const bytes = getUtf8ByteLength(text);
-        if (bytes > 1024 * 1024) {
-          setSettingsActionStatus("备份超过 1 MiB，请使用“导出文件”");
-          return;
-        }
-        const copied = await copyBackupText(text);
-        setSettingsActionStatus(copied
-          ? `已复制数据（${Math.max(1, Math.ceil(bytes / 1024))} KiB）`
-          : "复制失败，请使用“导出文件”");
-      } catch (error) {
-        setSettingsActionStatus(`导出失败：${error?.message || error}`);
-      }
-    };
     const exportBackupFile = async event => {
       if (event.currentTarget.classList.contains("disabled")) return;
       try {
@@ -1219,7 +1197,7 @@ import {
             const writable = await handle.createWritable();
             await writable.write(text);
             await writable.close();
-            setSettingsActionStatus("备份文件已保存");
+            setSettingsActionStatus("已导出");
             return;
           } catch (error) {
             if (error?.name === "AbortError") throw error;
@@ -1233,7 +1211,7 @@ import {
         link.download = fileName;
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setSettingsActionStatus("备份已下载，请移动到 OneDrive");
+        setSettingsActionStatus("已导出");
       } catch (error) {
         if (error?.name === "AbortError") {
           setSettingsActionStatus("已取消导出");
@@ -1364,7 +1342,6 @@ import {
     document.getElementById("stch-settings-import-data")?.addEventListener("click", () => {
       document.getElementById("stch-settings-import-file")?.click();
     });
-    document.getElementById("stch-settings-copy-data")?.addEventListener("click", copyBackupData);
     document.getElementById("stch-settings-export-data")?.addEventListener("click", exportBackupFile);
     document.getElementById("stch-settings-import-file")?.addEventListener("change", importBackupData);
     document.getElementById("stch-settings-clear-cache")?.addEventListener("click", clearCachedOrders);

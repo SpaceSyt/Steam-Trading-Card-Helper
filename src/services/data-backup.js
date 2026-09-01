@@ -108,7 +108,3 @@ export function getDataBackupFileName(now = Date.now()) {
   const stamp = new Date(now).toISOString().replace(/[:.]/g, "-");
   return `steam-card-helper-backup-${stamp}.json`;
 }
-
-export function getUtf8ByteLength(text) {
-  return new TextEncoder().encode(String(text)).byteLength;
-}

@@ -45,6 +45,9 @@ afterEach(() => {
   state.highestBuyPrices.clear();
   state.automaticPricingDraft = null;
   state.cfg.currencyId = 23;
+  state.cfg.parallelOrderPricingEnabled = false;
+  state.cfg.parallelOrderPricingConcurrency = 4;
+  delete window.fetch;
 });
 
 const MARKET_HASH_NAME = "123-Test Card";
@@ -81,17 +84,68 @@ function makeUi() {
   };
 }
 
-function makeOrderbookHtml(data) {
+function makeOrderbookHtml(data, marketHashName = MARKET_HASH_NAME) {
   const renderContext = {
     queryData: JSON.stringify({
       queries: [{
-        queryKey: ["market", "orderbook", 753, MARKET_HASH_NAME],
+        queryKey: ["market", "orderbook", 753, marketHashName],
         state: { data },
       }],
     }),
   };
   return `<script>window.SSR.renderContext=JSON.parse(${JSON.stringify(JSON.stringify(renderContext))});</script>`;
 }
+
+test("optional order pricing limits parallel listing requests to the configured concurrency", async () => {
+  Object.assign(state.cfg, {
+    buyMode: "buy1",
+    automaticPricingEnabled: true,
+    automaticPriceStrategy: "balanced",
+    minimumPriceFallback: true,
+    parallelOrderPricingEnabled: true,
+    parallelOrderPricingConcurrency: 2,
+  });
+  const marketHashNames = ["123-Card A", "123-Card B", "123-Card C"];
+  const parallelSelection = [{
+    appid: "123",
+    gameName: "Parallel Test",
+    level: 0,
+    cards: marketHashNames.map((marketHashName, index) => ({
+      name: `Card ${index + 1}`,
+      marketHashName,
+      owned: 0,
+    })),
+  }];
+  let active = 0;
+  let maximumActive = 0;
+  let requestCount = 0;
+  window.fetch = async url => {
+    requestCount++;
+    active++;
+    maximumActive = Math.max(maximumActive, active);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    active--;
+    const marketHashName = decodeURIComponent(String(url).split("/").pop().split("?")[0]);
+    const html = makeOrderbookHtml({
+      amtMaxBuyOrder: 45,
+      amtMinSellOrder: 60,
+      eCurrency: 23,
+      cBuyOrders: 10,
+      rgCompactBuyOrders: [45, 10],
+    }, marketHashName);
+    return {
+      status: 200,
+      ok: true,
+      text: async () => html,
+    };
+  };
+
+  const result = await buildBuyOrderPlan(parallelSelection, new Map(), makeUi());
+
+  assert.equal(requestCount, 3);
+  assert.equal(maximumActive, 2);
+  assert.equal(result.plan.length, 3);
+});
 
 test("automatic ordering keeps the unadjusted reference separate from a temporary no-wall offset", async () => {
   setActiveCurrencyContext(getCurrencyContextById(23));
