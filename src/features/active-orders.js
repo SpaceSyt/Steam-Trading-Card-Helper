@@ -274,7 +274,7 @@ function renderOrderRow(group, smartPricingContext) {
 
   const comparison = getSmartComparison(group, smartPricingContext);
   const smart = createElement("div", `stch-active-order-smart ${comparison.className}`, comparison.label);
-  if (comparison.available) smart.title = `使用当前自动定价设置与已缓存订单簿计算；建议价 ${formatMoney(comparison.suggestedMinor)}`;
+  if (comparison.available) smart.title = `使用当前智能定价设置与已缓存订单簿计算；建议价 ${formatMoney(comparison.suggestedMinor)}`;
   row.appendChild(smart);
 
   const select = createElement("label", "stch-active-order-select");

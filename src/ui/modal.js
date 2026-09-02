@@ -342,7 +342,7 @@ import {
             </div>
             <div class="stch-onboarding-step">
               <b>3. 理解购买价格</b>
-              手动价格可选在售最低、平均价格或求购最高；自动定价可按订单墙选择保守、平衡或抢单。买价调整可正可负。
+              手动价格可选在售最低、平均价格或求购最高；智能定价可按订单墙选择保守、平衡或抢单。买价调整可正可负。
             </div>
             <div class="stch-onboarding-step">
               <b>4. 管理已下订购单</b>
@@ -387,7 +387,7 @@ import {
             <label id="stch-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}"><span id="stch-price-adjustment-text">${automaticPricingEnabled ? "无墙调整" : "买价调整"}</span> ${currencySymbol} <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
             <label class="stch-auto-pricing-toggle ${automaticPricingClass}">
               <input id="stch-auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}>
-              自动定价模式
+              智能定价模式
             </label>
           </div>
           <div class="stch-scan-actions">
@@ -463,7 +463,7 @@ import {
             <label id="stch-order-page-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}"><span id="stch-order-page-price-adjustment-text">${automaticPricingEnabled ? "无墙调整" : "买价调整"}</span> ${currencySymbol} <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
             <label class="stch-auto-pricing-toggle ${automaticPricingClass}">
               <input id="stch-order-page-auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}>
-              自动定价模式
+              智能定价模式
             </label>
           </div>
           <div class="stch-summary" id="stch-order-summary-row" style="display:none">
@@ -731,7 +731,7 @@ import {
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.6.1</span>
+        <span class="stch-label">V2.6.2</span>
       </div>
     `;
     document.body.appendChild(modal);

@@ -469,7 +469,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       let pricingError = null;
       let minimumFallbackReason = null;
       if (pricingProfile.automatic) {
-        statusFn(`自动定价 ${index + 1}/${candidates.length}: ${card.name}`);
+        statusFn(`智能定价 ${index + 1}/${candidates.length}: ${card.name}`);
         try {
           const prefetched = parallelPricing?.get(card.marketHashName);
           if (prefetched?.error) throw prefetched.error;
@@ -491,7 +491,7 @@ const { setStatus: setOrderStatus } = orderStatus;
             : null;
           unitPriceCents = automaticQuote?.finalPriceMinor ?? null;
           if (!automaticQuote) {
-            pricingError = new Error("无法根据订单簿计算自动定价");
+            pricingError = new Error("无法根据订单簿计算智能定价");
           }
         } catch (error) {
           pricingError = error;
@@ -630,7 +630,7 @@ const { setStatus: setOrderStatus } = orderStatus;
         ? `+${formatMoney(value)}`
         : formatMoney(value);
       const pricingSummary = automaticPricing
-        ? `价格基准 <b>自动定价 · ${getOrderPriceSourceLabel(priceSource)}</b> · `
+        ? `价格基准 <b>智能定价 · ${getOrderPriceSourceLabel(priceSource)}</b> · `
           + `有墙调整 <b>${signedMoney(strategyRule?.wallOffsetMinor || 0)}</b> · `
           + `无墙调整 <b>${signedMoney(strategyRule?.noWallOffsetMinor || 0)}</b>`
         : `价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> · `
