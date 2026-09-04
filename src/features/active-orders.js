@@ -32,6 +32,7 @@ import {
   getHtmlRequestConcurrency,
   runWithConcurrency,
 } from "../utils/concurrency.js";
+import { setStatusText } from "../utils/dom.js";
 
 const LOWEST_SELL_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -43,11 +44,7 @@ function createElement(tag, className = "", text = "") {
 }
 
 function setStatus(text, type = "") {
-  const element = document.getElementById("stch-active-orders-status");
-  if (!element) return;
-  element.textContent = text || "";
-  element.className = `stch-status-text${type ? ` ${type}` : ""}`;
-  element.style.display = text ? "" : "none";
+  setStatusText("stch-active-orders-status", text, type);
 }
 
 function appendCancelLog(text, type = "") {
@@ -219,6 +216,7 @@ function updateSummary(visibleGroups = getVisibleGroups()) {
 }
 
 let summaryFrame = 0;
+let imageObserver = null;
 function scheduleSummaryUpdate() {
   if (summaryFrame) return;
   summaryFrame = requestAnimationFrame(() => {
@@ -227,7 +225,40 @@ function scheduleSummaryUpdate() {
   });
 }
 
-function renderOrderRow(group, smartPricingContext) {
+function observeImage(image, list) {
+  const load = () => {
+    image.src = image.dataset.src;
+    delete image.dataset.src;
+  };
+  if (!("IntersectionObserver" in window)) {
+    image.loading = "lazy";
+    load();
+    return;
+  }
+  imageObserver ||= new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      imageObserver.unobserve(entry.target);
+      entry.target.src = entry.target.dataset.src;
+      delete entry.target.dataset.src;
+    });
+  }, { root: list });
+  imageObserver.observe(image);
+}
+
+function getCachedCardImages() {
+  const images = new Map();
+  [state.results, state.orderResults].forEach(results => results.forEach(info => {
+    info.cards.forEach(card => {
+      if (card.marketHashName && card.imageUrl && !images.has(card.marketHashName)) {
+        images.set(card.marketHashName, card.imageUrl);
+      }
+    });
+  }));
+  return images;
+}
+
+function renderOrderRow(group, smartPricingContext, imageUrl) {
   const row = createElement("div", "stch-active-order-row");
   row.dataset.groupKey = group.key;
   row.classList.toggle("selected", state.selectedActiveBuyOrderGroups.has(group.key));
@@ -236,9 +267,9 @@ function renderOrderRow(group, smartPricingContext) {
   item.href = group.listingUrl;
   item.target = "_blank";
   item.rel = "noopener noreferrer";
-  if (group.imageUrl) {
+  if (imageUrl) {
     const image = createElement("img", "stch-active-order-image");
-    image.src = group.imageUrl;
+    image.dataset.src = imageUrl;
     image.alt = "";
     item.appendChild(image);
   }
@@ -297,6 +328,8 @@ function renderOrderRow(group, smartPricingContext) {
 export function renderActiveBuyOrders() {
   const list = document.getElementById("stch-active-orders-list");
   if (!list) return;
+  imageObserver?.disconnect();
+  imageObserver = null;
   renderGameFilter();
   const visible = getVisibleGroups();
   list.innerHTML = "";
@@ -328,6 +361,7 @@ export function renderActiveBuyOrders() {
       renderActiveBuyOrders();
     });
     fragment.appendChild(header);
+    const cachedCardImages = getCachedCardImages();
     let previousGame = null;
     visible.forEach(group => {
       const game = group.gameName || `App ${group.appid}`;
@@ -335,9 +369,15 @@ export function renderActiveBuyOrders() {
         fragment.appendChild(createElement("div", "stch-active-order-game-separator", game));
         previousGame = game;
       }
-      fragment.appendChild(renderOrderRow(group, smartPricingContext));
+      fragment.appendChild(renderOrderRow(
+        group,
+        smartPricingContext,
+        cachedCardImages.get(group.marketHashName) || group.imageUrl
+      ));
     });
     list.appendChild(fragment);
+    list.querySelectorAll(".stch-active-order-image[data-src]")
+      .forEach(image => observeImage(image, list));
   }
   updateSummary(visible);
 }

@@ -18,7 +18,7 @@ import {
 } from "../parsers/price.js";
 import { persistMarketObservations } from "../services/market-observations.js";
 
-import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, getCardGameName, getCommunityItemType, getCommunityItemCategory, getDescriptionImageUrl, getDescriptionColor, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, getDescriptionKey, isPointsShopCommunityItemDescription } from "../parsers/inventory.js";
+import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, getCardGameName, getCommunityItemType, getCommunityItemCategory, getDescriptionImageUrl, getDescriptionColor, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, getDescriptionKey, isPointsShopCommunityItemDescription, parseCommunityInventoryPage } from "../parsers/inventory.js";
 
 import { getGemBreakEvenBuyerPrice, getGemSackSellerNetCents } from "../utils/market-fees.js";
 
@@ -35,7 +35,10 @@ import {
 
 import { grindStatus } from "../status-controllers.js";
 import { enableTileDragSelection } from "../ui/checkbox-drag.js";
-import { appendEmptyState, appendInventoryImage } from "../utils/dom.js";
+import { appendInventoryTileText, createInventoryTile } from "../utils/dom.js";
+import { countSelected, pruneSelection, setItemsSelected } from "../utils/selection.js";
+import { getProcessingDecorationCategories } from "../services/processing-mode.js";
+import { syncProcessingView } from "../ui/processing-view.js";
 import {
   createRequestQueuePool,
   getHtmlRequestConcurrency,
@@ -94,7 +97,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     if (isGemSackDescription(description) || isLooseGemDescription(description)) return "gem";
 
     const unitGemValue = Math.max(0, parseInt(gemValue, 10) || 0);
-    if (unitGemValue <= 0) return "noGemValue";
+    if (unitGemValue <= 0 && !pointsShop) return "noGemValue";
 
     const appid = getCardGameAppid(description);
     if (isBlacklistedAppid(appid)) return "blacklisted";
@@ -103,7 +106,6 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     const key = [
       appid || "0",
       marketHashName || getDescriptionKey(description),
-      unitGemValue,
       source,
     ].join("|");
     let item = groupMap.get(key);
@@ -130,6 +132,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
       };
       groupMap.set(key, item);
     }
+    if (unitGemValue > item.gemValue) item.gemValue = unitGemValue;
     if (!item.category && category) item.category = category;
     if (!item.gameName) item.gameName = getCardGameName(description);
 
@@ -152,14 +155,23 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     return "added";
   }
 
-  export function selectDuplicateSurplusItem(item, reserveCopies) {
+  export function selectDuplicateSurplusItem(item, reserveCopies, preferPointsShop = false) {
+    const sourceAssets = item.assets || [];
     const inventoryCount = (item.assets || []).reduce(
       (sum, asset) => sum + Math.max(0, Number(asset.amount) || 0),
       0
     );
+    const hasPointsShopCopy = sourceAssets.some(asset => asset.pointsShop);
+    const reserveAtLeastOnePointsShop = preferPointsShop
+      && inventoryCount > 1
+      && hasPointsShopCopy;
     const reservedCount = Math.min(
       inventoryCount,
-      Math.max(0, Math.floor(Number(reserveCopies) || 0))
+      Math.max(
+        0,
+        Math.floor(Number(reserveCopies) || 0),
+        reserveAtLeastOnePointsShop ? 1 : 0
+      )
     );
     let remaining = Math.max(0, inventoryCount - reservedCount);
     if (remaining <= 0) return null;
@@ -170,8 +182,11 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         if (marketCompare) return marketCompare;
         const tradeCompare = Number(right.tradable) - Number(left.tradable);
         if (tradeCompare) return tradeCompare;
-        const pointsCompare = Number(left.pointsShop) - Number(right.pointsShop);
-        if (pointsCompare) return pointsCompare;
+        if (preferPointsShop) {
+          // Surplus assets are taken from the front; keep point-shop copies at the end.
+          const pointsCompare = Number(left.pointsShop) - Number(right.pointsShop);
+          if (pointsCompare) return pointsCompare;
+        }
         return String(left.assetid || "").localeCompare(String(right.assetid || ""), "en");
       })
       .flatMap(asset => {
@@ -180,7 +195,11 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         remaining -= amount;
         return amount > 0 ? [{ ...asset, amount }] : [];
       });
-    const quantity = assets.reduce((sum, asset) => sum + asset.amount, 0);
+    const usableAssets = preferPointsShop
+      ? assets.filter(asset => !asset.pointsShop)
+      : assets;
+    const quantity = usableAssets.reduce((sum, asset) => sum + asset.amount, 0);
+    if (quantity <= 0) return null;
 
     return {
       ...item,
@@ -188,19 +207,19 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
       reservedCount,
       quantity,
       totalGems: quantity * item.gemValue,
-      marketableCount: assets.reduce(
+      marketableCount: usableAssets.reduce(
         (sum, asset) => sum + (asset.marketable ? asset.amount : 0),
         0
       ),
-      tradableCount: assets.reduce(
+      tradableCount: usableAssets.reduce(
         (sum, asset) => sum + (asset.tradable ? asset.amount : 0),
         0
       ),
-      pointsShopCount: assets.reduce(
+      pointsShopCount: usableAssets.reduce(
         (sum, asset) => sum + (asset.pointsShop ? asset.amount : 0),
         0
       ),
-      assets,
+      assets: usableAssets,
     };
   }
 
@@ -208,10 +227,8 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     const groupMap = new Map();
     const language = unsafeWindow.g_strLanguage || "schinese";
     const reserveCopies = Math.max(0, Math.floor(Number(state.cfg.grindReserveCopies) || 0));
-    const includePointsShopItems = !!state.cfg.grindIncludePointsShopItems;
-    const itemMode = ["background", "emoticon"].includes(state.cfg.surplusItemMode)
-      ? state.cfg.surplusItemMode
-      : "background";
+    const preferPointsShopItems = !!state.cfg.grindIncludePointsShopItems;
+    const itemCategories = getProcessingDecorationCategories(state.cfg.surplusItemMode);
     let startAssetId = "";
     let page = 0;
     let totalInventoryCount = 0;
@@ -239,13 +256,9 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         throw new Error(data?.Error || data?.error || "Steam 未返回可用库存数据");
       }
 
-      totalInventoryCount = Number(data.total_inventory_count || totalInventoryCount) || totalInventoryCount;
-      const descriptions = new Map();
-      (Array.isArray(data.descriptions) ? data.descriptions : []).forEach(description => {
-        descriptions.set(getDescriptionKey(description), description);
-      });
-
-      const assets = Array.isArray(data.assets) ? data.assets : [];
+      const inventoryPage = parseCommunityInventoryPage(data);
+      totalInventoryCount = inventoryPage.totalInventoryCount || totalInventoryCount;
+      const { assets, descriptions } = inventoryPage;
       totalAssetsSeen += assets.length;
       const candidates = [];
       for (const asset of assets) {
@@ -261,22 +274,23 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
           skipped.blacklisted += assetAmount;
           continue;
         }
-        if (getCommunityItemCategory(description) !== itemMode) {
+        const category = getCommunityItemCategory(description);
+        if (!itemCategories.includes(category)) {
           continue;
         }
         const pointsShop = isPointsShopCommunityItemDescription(description);
-        if (pointsShop && !includePointsShopItems) {
+        if (pointsShop && !preferPointsShopItems) {
           skipped.pointsShop += assetAmount;
           continue;
         }
-        candidates.push({ asset, description, assetAmount, pointsShop });
+        candidates.push({ asset, description, assetAmount, pointsShop, category });
       }
       await runWithConcurrency(
         candidates,
         getOtherRequestConcurrency(state.cfg),
-        async ({ asset, description, assetAmount, pointsShop }) => {
+        async ({ asset, description, assetAmount, pointsShop, category }) => {
           if (state.grindStopRequested) return;
-          const gemValue = await getGrindGemValue(description, queue);
+          const gemValue = pointsShop ? 0 : await getGrindGemValue(description, queue);
           const result = addGrindItem(
             groupMap,
             asset,
@@ -285,7 +299,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
             "item",
             gemValue,
             pointsShop,
-            itemMode
+            category
           );
           if (result === "noGemValue") skipped.noGemValue += assetAmount;
           else if (result === "blacklisted") skipped.blacklisted += assetAmount;
@@ -297,13 +311,11 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         `库存第 ${page} 页：读取 ${assets.length} 件，累计候选 ${groupMap.size} 种`,
         "info"
       );
-      startAssetId = data.more_items && data.last_assetid
-        ? String(data.last_assetid)
-        : "";
+      startAssetId = inventoryPage.nextAssetId;
     } while (startAssetId && !state.grindStopRequested);
 
     const items = [...groupMap.values()].flatMap(item => {
-      const surplus = selectDuplicateSurplusItem(item, reserveCopies);
+      const surplus = selectDuplicateSurplusItem(item, reserveCopies, preferPointsShopItems);
       skipped.reserved += surplus ? surplus.reservedCount : item.quantity;
       return surplus ? [surplus] : [];
     }).sort((left, right) => {
@@ -327,8 +339,10 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
   }
 
   export function getVisibleGrindResults() {
+    const categories = getProcessingDecorationCategories(state.cfg.surplusItemMode);
     return (state.grindResults || []).filter(item => {
-      const category = item.category || state.cfg.surplusItemMode;
+      const category = item.category || "background";
+      if (!categories.includes(category)) return false;
       if (isItemCollected(item, category)) return false;
       if (state.cfg.surplusOnlyRecommended && item.recommendationKey !== "grind") return false;
       if (state.cfg.surplusOnlyTradable && item.tradableCount <= 0) return false;
@@ -351,40 +365,29 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
   }
 
   export function getSelectedGrindResults() {
-    const selected = state.selectedGrindResults || new Set();
     return (state.grindResults || []).filter(item =>
-      selected.has(getGrindResultKey(item))
-      && !isItemCollected(item, item.category || state.cfg.surplusItemMode)
+      state.selectedGrindResults.has(getGrindResultKey(item))
+      && !isItemCollected(item, item.category || "background")
     );
   }
 
   export function setAllVisibleGrindSelection(selected) {
-    if (!state.selectedGrindResults) state.selectedGrindResults = new Set();
-    const visible = getVisibleGrindResults();
-    for (const item of visible) {
-      const key = getGrindResultKey(item);
-      if (selected) state.selectedGrindResults.add(key);
-      else state.selectedGrindResults.delete(key);
-    }
+    setItemsSelected(state.selectedGrindResults, getVisibleGrindResults(), getGrindResultKey, selected);
     renderGrindResults();
   }
 
   function pruneSelectedGrindResults(visible) {
-    const selected = state.selectedGrindResults || new Set();
-    const visibleKeys = new Set(visible.map(getGrindResultKey));
-    for (const key of [...selected]) {
-      if (!visibleKeys.has(key)) selected.delete(key);
-    }
+    pruneSelection(state.selectedGrindResults, visible, getGrindResultKey);
   }
 
   export function updateGrindSummary() {
-    const row = document.getElementById("stch-grind-summary-row");
+    const row = document.getElementById("stch-surplus-summary-row");
     const summary = document.getElementById("stch-grind-summary");
     if (!row || !summary) return;
     const visible = getVisibleGrindResults();
     if (visible.length === 0) {
-      row.style.display = "none";
       summary.textContent = "";
+      syncProcessingView();
       return;
     }
 
@@ -392,11 +395,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     const visibleQuantity = visible.reduce((sum, item) => sum + item.quantity, 0);
     const recommendedQuantity = recommended.reduce((sum, item) => sum + item.quantity, 0);
     const recommendedGems = recommended.reduce((sum, item) => sum + item.totalGems, 0);
-    const selected = state.selectedGrindResults || new Set();
-    const selectedCount = visible.reduce(
-      (count, item) => count + Number(selected.has(getGrindResultKey(item))),
-      0
-    );
+    const selectedCount = countSelected(state.selectedGrindResults, visible, getGrindResultKey);
     const gemPrice = state.grindGemPrice || {};
     const priceText = gemPrice.priceCents
       ? `宝石袋 ${formatMoney(gemPrice.priceCents)} / 税后 ${formatMoney(getGemSackSellerNetCents(gemPrice.priceCents))}`
@@ -406,7 +405,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
       `建议分解 <b>${recommended.length}</b> 种 / <b>${recommendedQuantity}</b> 件 · ` +
       `预计 <b>${formatInt(recommendedGems)}</b> 宝石 · ` +
       `已选择 <b>${selectedCount}</b> 项 · ${priceText}`;
-    row.style.display = "";
+    syncProcessingView();
   }
 
   export function renderGrindResults() {
@@ -415,7 +414,6 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     enableTileDragSelection(list, {
       isSelected: tile => state.selectedGrindResults?.has(tile.dataset.key),
       setSelected: (tile, selected) => {
-        if (!state.selectedGrindResults) state.selectedGrindResults = new Set();
         if (selected) state.selectedGrindResults.add(tile.dataset.key);
         else state.selectedGrindResults.delete(tile.dataset.key);
       },
@@ -425,18 +423,13 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
       },
     });
     list.innerHTML = "";
-    list.classList.add("stch-inventory-grid");
 
     const visible = getVisibleGrindResults();
     pruneSelectedGrindResults(visible);
     if (visible.length === 0) {
-      appendEmptyState(list, state.grindScanning
-        ? "正在扫描可分解物品..."
-        : state.grindResults.length > 0
-          ? "当前筛选下没有建议分解物品"
-          : "尚未扫描可分解物品");
       updateGrindSummary();
       updateSurplusActionState();
+      syncProcessingView();
       return;
     }
 
@@ -458,12 +451,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         ? formatMoney(item.breakEvenPriceCents)
         : "—";
 
-      const tile = document.createElement("div");
-      tile.className = "stch-inv-tile";
-      tile.classList.toggle("stch-volume-zero", item.volume === 0);
-      tile.dataset.key = key;
-      tile.classList.toggle("selected", state.selectedGrindResults?.has(key));
-      tile.title = [
+      const title = [
         `${item.gameName || "未知游戏"} · ${item.itemName || item.marketHashName || "未知物品"}`,
         `类型 ${item.type || "物品"}；库存 ${item.inventoryCount}，保留 ${item.reservedCount}，多余 ${item.quantity}`,
         item.pointsShopCount ? `多余数量中含点数商店类副本 ${item.pointsShopCount} 件` : "",
@@ -474,46 +462,31 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         "按住并拖动可连续选择或取消",
         assetSummary.title ? `资产ID:\n${assetSummary.title}` : "",
       ].filter(Boolean).join("\n");
-      if (item.nameColor) tile.style.borderColor = item.nameColor;
-      if (item.backgroundColor) tile.style.backgroundColor = item.backgroundColor;
-
-      appendInventoryImage(
-        tile,
-        item.imageUrl,
-        item.itemName || item.marketHashName
-      );
-
-      const price = document.createElement("span");
-      price.className = "stch-inv-badge";
-      price.textContent = item.priceCents ? formatMoney(item.priceCents) : `x${item.quantity}`;
-      price.title = marketTitle || "数量";
-      tile.appendChild(price);
-
-      const action = document.createElement("span");
-      action.className = `stch-inv-badge stch-inv-badge-left ${item.recommendationClass || ""}`.trim();
-      action.textContent = item.recommendationLabel || "—";
-      action.title = item.recommendationReason || "";
-      tile.appendChild(action);
-
-      const gems = document.createElement("span");
-      gems.className = "stch-inv-gems";
-      gems.textContent = `${formatInt(item.totalGems)} 宝石`;
-      gems.title = `${item.gemValue} 宝石/件`;
-      tile.appendChild(gems);
-
-      const name = document.createElement("div");
-      name.className = "stch-inv-name";
-      name.textContent = item.itemName || item.marketHashName || "未知物品";
-      tile.appendChild(name);
+      const label = item.itemName || item.marketHashName;
+      const tile = createInventoryTile({
+        key,
+        selected: state.selectedGrindResults?.has(key),
+        title,
+        imageUrl: item.imageUrl,
+        label,
+        volumeZero: item.volume === 0,
+        nameColor: item.nameColor,
+        backgroundColor: item.backgroundColor,
+      });
+      appendInventoryTileText(tile, "span", "stch-inv-badge", item.priceCents ? formatMoney(item.priceCents) : `x${item.quantity}`, marketTitle || "数量");
+      appendInventoryTileText(tile, "span", `stch-inv-badge stch-inv-badge-left ${item.recommendationClass || ""}`.trim(), item.recommendationLabel || "—", item.recommendationReason || "");
+      appendInventoryTileText(tile, "span", "stch-inv-gems", `${formatInt(item.totalGems)} 宝石`, `${item.gemValue} 宝石/件`);
+      appendInventoryTileText(tile, "div", "stch-inv-name", label || "未知物品");
 
       list.appendChild(tile);
     }
 
     updateGrindSummary();
     updateSurplusActionState();
+    syncProcessingView();
   }
 
-  export async function startGrindScan() {
+  export async function startGrindScan(options = {}) {
     if (isPriceOverviewProbeBlocked(state.surplusScanning || state.grindScanning)) return;
 
     if (location.hostname !== "steamcommunity.com") {
@@ -533,8 +506,8 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     state.selectedGrindResults = new Set();
     state.grindGemPrice = null;
     grindGemValueCache.clear();
-    const logBox = document.getElementById("stch-grind-log");
-    if (logBox) logBox.innerHTML = "";
+    const logBox = document.getElementById("stch-surplus-log");
+    if (logBox && !options.preserveLog) logBox.innerHTML = "";
     renderGrindResults();
     updateAllActionStates();
 
@@ -571,8 +544,10 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         grindLog("宝石袋价格不可用；继续检测，但不会给出分解或出售建议", "warn");
       }
 
-      const itemModeLabel = state.cfg.surplusItemMode === "emoticon" ? "表情" : "背景";
-      grindLog(`本次只分析${itemModeLabel}类社区物品`, "info");
+      const itemModeLabel = getProcessingDecorationCategories(state.cfg.surplusItemMode)
+        .map(category => category === "emoticon" ? "表情" : "背景")
+        .join("和");
+      grindLog(`本次分析${itemModeLabel}类社区物品`, "info");
 
       grindLog("【阶段 2/3】读取社区库存并识别可分解物品");
       setGrindProgress(0, 1, "阶段2: 读取库存");
@@ -587,7 +562,9 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         `候选 ${inventory.items.length} 种；` +
         `跳过无宝石值 ${inventory.skipped.noGemValue} 件，` +
         `默认保留 ${inventory.skipped.reserved} 件，` +
-        `点数商店类 ${inventory.skipped.pointsShop} 件，` +
+        (state.cfg.grindIncludePointsShopItems
+          ? "优先保留点数商店副本，"
+          : `跳过点数商店类 ${inventory.skipped.pointsShop} 件，`) +
         `游戏黑名单 ${inventory.skipped.blacklisted} 件`,
         "ok"
       );

@@ -33,12 +33,17 @@ import {
   getOtherRequestConcurrency,
   runWithConcurrency,
 } from "../utils/concurrency.js";
+import {
+  normalizeProcessingMode,
+  processingModeIncludesCards,
+  processingModeIncludesDecorations,
+} from "../services/processing-mode.js";
 
   function getProcessingMode() {
     const value = document.getElementById("stch-surplus-item-mode")?.value
       || state.cfg.surplusItemMode
       || "card";
-    return ["card", "background", "emoticon"].includes(value) ? value : "card";
+    return normalizeProcessingMode(value);
   }
 
   function getProcessingUi(mode = getProcessingMode()) {
@@ -96,14 +101,18 @@ import {
   }
 
   function getSelectedGroups(mode) {
-    return mode === "card" ? getSelectedSurplusResults() : getSelectedGrindResults();
+    return [
+      ...(processingModeIncludesCards(mode) ? getSelectedSurplusResults() : []),
+      ...(processingModeIncludesDecorations(mode) ? getSelectedGrindResults() : []),
+    ];
   }
 
   function clearSelection(mode) {
-    if (mode === "card") {
+    if (processingModeIncludesCards(mode)) {
       state.selectedSurplusResults = new Set();
       renderSurplusResults();
-    } else {
+    }
+    if (processingModeIncludesDecorations(mode)) {
       state.selectedGrindResults = new Set();
       renderGrindResults();
     }
@@ -112,38 +121,12 @@ import {
   function makeSellGroups(mode) {
     const selected = getSelectedGroups(mode);
     let invalidQuantity = 0;
-    if (mode === "card") {
-      const groups = selected.map(result => {
-        const assets = (result.assets || [])
-          .filter(asset => asset.assetid && asset.marketable)
-          .flatMap(asset => {
-            const amount = getAssetQuantity(asset, "selectedAmount");
-            if (amount == null) {
-              invalidQuantity++;
-              return [];
-            }
-            return [{
-              assetid: String(asset.assetid || ""),
-              contextid: String(asset.contextid || "6"),
-              amount,
-            }];
-          });
-        return {
-          gameName: result.gameName || "",
-          itemName: result.cardName || result.marketHashName || "未知卡牌",
-          marketHashName: result.marketHashName || "",
-          quantity: assets.reduce((sum, asset) => sum + asset.amount, 0),
-          assets,
-        };
-      });
-      return { groups, invalidQuantity };
-    }
-
     const groups = selected.map(item => {
+      const isCard = item.category === "card";
       const assets = (item.assets || [])
         .filter(asset => asset.assetid && asset.marketable)
         .flatMap(asset => {
-          const amount = getAssetQuantity(asset, "amount");
+          const amount = getAssetQuantity(asset, isCard ? "selectedAmount" : "amount");
           if (amount == null) {
             invalidQuantity++;
             return [];
@@ -156,7 +139,7 @@ import {
         });
       return {
         gameName: item.gameName || "",
-        itemName: item.itemName || item.marketHashName || "未知物品",
+        itemName: item.cardName || item.itemName || item.marketHashName || "未知物品",
         marketHashName: item.marketHashName || "",
         quantity: assets.reduce((sum, asset) => sum + asset.amount, 0),
         assets,
@@ -168,34 +151,11 @@ import {
   function makeGemAssets(mode) {
     const selected = getSelectedGroups(mode);
     let invalidQuantity = 0;
-    if (mode === "card") {
-      const candidates = selected.flatMap(result =>
-        (result.assets || []).flatMap(asset => {
-          const selectedAmount = getAssetQuantity(asset, "selectedAmount");
-          const assetAmount = getAssetQuantity(asset, "amount");
-          if (selectedAmount == null || assetAmount == null) {
-            invalidQuantity++;
-            return [];
-          }
-          return [{
-            appid: String(result.appid || ""),
-            gameName: result.gameName || "",
-            itemName: result.cardName || result.marketHashName || "未知卡牌",
-            assetid: String(asset.assetid || ""),
-            contextid: String(asset.contextid || "6"),
-            selectedAmount,
-            assetAmount,
-            estimatedGems: (asset.gemValue || result.gemValue || 0) * selectedAmount,
-          }];
-        })
-      );
-      return { candidates, invalidQuantity };
-    }
-
     const candidates = selected.flatMap(item =>
       (item.assets || []).flatMap(asset => {
-        const selectedAmount = getAssetQuantity(asset, "amount");
-        const assetAmount = getAssetQuantity(asset, "originalAmount");
+        const isCard = item.category === "card";
+        const selectedAmount = getAssetQuantity(asset, isCard ? "selectedAmount" : "amount");
+        const assetAmount = getAssetQuantity(asset, isCard ? "amount" : "originalAmount");
         if (selectedAmount == null || assetAmount == null) {
           invalidQuantity++;
           return [];
@@ -203,12 +163,12 @@ import {
         return [{
           appid: String(item.appid || ""),
           gameName: item.gameName || "",
-          itemName: item.itemName || item.marketHashName || "未知物品",
+          itemName: item.cardName || item.itemName || item.marketHashName || "未知物品",
           assetid: String(asset.assetid || ""),
           contextid: String(asset.contextid || "6"),
           selectedAmount,
           assetAmount,
-          estimatedGems: (item.gemValue || 0) * selectedAmount,
+          estimatedGems: (asset.gemValue || item.gemValue || 0) * selectedAmount,
         }];
       })
     );

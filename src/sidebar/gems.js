@@ -3,7 +3,7 @@ import { state } from "../state.js";
 
 import { SIDEBAR_GEM_SACK_HASH, GEM_SACK_SIZE } from "../constants.js";
 
-import { isGemSackDescription, isLooseGemDescription, getDescriptionKey, getAssetAmount } from "../parsers/inventory.js";
+import { isGemSackDescription, isLooseGemDescription, getDescriptionKey, getAssetAmount, parseCommunityInventoryPage } from "../parsers/inventory.js";
 
 import { stchRequestJson } from "../request/http.js";
 import { RequestQueue } from "../request/queue.js";
@@ -33,15 +33,10 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
       if (data?.success !== 1 && data?.success !== true) {
         throw new Error(data?.Error || data?.error || "Steam 未返回库存数据");
       }
-      totalInventoryCount = Number(data.total_inventory_count || totalInventoryCount) || totalInventoryCount;
-
-      const descriptions = new Map();
-      (Array.isArray(data.descriptions) ? data.descriptions : []).forEach(description => {
-        descriptions.set(getDescriptionKey(description), description);
-      });
-
-      for (const asset of Array.isArray(data.assets) ? data.assets : []) {
-        const description = descriptions.get(getDescriptionKey(asset));
+      const inventoryPage = parseCommunityInventoryPage(data);
+      totalInventoryCount = inventoryPage.totalInventoryCount || totalInventoryCount;
+      for (const asset of inventoryPage.assets) {
+        const description = inventoryPage.descriptions.get(getDescriptionKey(asset));
         const amount = getAssetAmount(asset);
         if (isGemSackDescription(description)) {
           sackCount += amount;
@@ -50,9 +45,7 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
         }
       }
 
-      startAssetId = data.more_items && data.last_assetid
-        ? String(data.last_assetid)
-        : "";
+      startAssetId = inventoryPage.nextAssetId;
     } while (startAssetId);
 
     return {

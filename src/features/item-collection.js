@@ -14,7 +14,13 @@ import {
 } from "./grind.js";
 import { enableTileDragSelection } from "../ui/checkbox-drag.js";
 import { updateAllActionStates } from "../ui/action-state.js";
-import { appendEmptyState, appendInventoryImage } from "../utils/dom.js";
+import { appendEmptyState, appendInventoryTileText, createInventoryTile, setStatusText } from "../utils/dom.js";
+import { pruneSelection } from "../utils/selection.js";
+import {
+  normalizeProcessingMode,
+  processingModeIncludesCards,
+  processingModeIncludesDecorations,
+} from "../services/processing-mode.js";
 
 const CATEGORY_LABELS = {
   card: "卡牌",
@@ -26,26 +32,23 @@ function getProcessingMode() {
   const value = document.getElementById("stch-surplus-item-mode")?.value
     || state.cfg.surplusItemMode
     || "card";
-  return ["card", "background", "emoticon"].includes(value) ? value : "card";
+  return normalizeProcessingMode(value);
 }
 
 function setCollectionStatus(message, type = "") {
-  const status = document.getElementById("stch-collection-status");
-  if (!status) return;
-  status.textContent = message || "";
-  status.className = `stch-status-text ${type}`.trim();
-  status.style.display = message ? "" : "none";
+  setStatusText("stch-collection-status", message, type);
 }
 
 export function collectSelectedProcessingItems() {
-  const category = getProcessingMode();
-  const selected = category === "card"
-    ? getSelectedSurplusResults()
-    : getSelectedGrindResults();
+  const mode = getProcessingMode();
+  const selected = [
+    ...(processingModeIncludesCards(mode) ? getSelectedSurplusResults() : []),
+    ...(processingModeIncludesDecorations(mode) ? getSelectedGrindResults() : []),
+  ];
   if (selected.length === 0) return;
   const result = addItemCollectionEntries(selected.map(item => ({
     ...item,
-    category,
+    category: item.category || "card",
     itemName: item.itemName || item.cardName || item.marketHashName,
   })));
   if (!result.ok) {
@@ -62,7 +65,7 @@ export function collectSelectedProcessingItems() {
 }
 
 export function removeSelectedCollectionItems() {
-  const selected = state.selectedItemCollection || new Set();
+  const selected = state.selectedItemCollection;
   if (selected.size === 0) return;
   const result = removeItemCollectionEntries(selected);
   if (!result.ok) {
@@ -87,12 +90,8 @@ export function setAllItemCollectionSelection(selected) {
 export function renderItemCollection() {
   const list = document.getElementById("stch-collection-list");
   if (!list) return;
-  if (!state.selectedItemCollection) state.selectedItemCollection = new Set();
   const items = state.itemCollectionItems || [];
-  const validKeys = new Set(items.map(item => item.key));
-  for (const key of [...state.selectedItemCollection]) {
-    if (!validKeys.has(key)) state.selectedItemCollection.delete(key);
-  }
+  pruneSelection(state.selectedItemCollection, items, item => item.key);
 
   enableTileDragSelection(list, {
     isSelected: tile => state.selectedItemCollection.has(tile.dataset.key),
@@ -111,32 +110,23 @@ export function renderItemCollection() {
     appendEmptyState(list, "暂无收藏");
   } else {
     for (const item of items) {
-      const tile = document.createElement("div");
-      tile.className = "stch-inv-tile stch-collection-tile";
-      tile.dataset.key = item.key;
-      tile.classList.toggle("selected", state.selectedItemCollection.has(item.key));
-      tile.title = [
+      const title = [
         item.gameName,
         item.itemName || item.marketHashName,
         `类型：${CATEGORY_LABELS[item.category] || "物品"}`,
         "收藏中的物品不会出现在出售或分解候选中",
       ].filter(Boolean).join("\n");
-
-      appendInventoryImage(
-        tile,
-        item.imageUrl,
-        item.itemName || item.marketHashName
-      );
-
-      const category = document.createElement("span");
-      category.className = "stch-inv-badge stch-inv-badge-left";
-      category.textContent = CATEGORY_LABELS[item.category] || "物品";
-      tile.appendChild(category);
-
-      const name = document.createElement("div");
-      name.className = "stch-inv-name";
-      name.textContent = item.itemName || item.marketHashName || "未知物品";
-      tile.appendChild(name);
+      const label = item.itemName || item.marketHashName;
+      const tile = createInventoryTile({
+        key: item.key,
+        selected: state.selectedItemCollection.has(item.key),
+        title,
+        imageUrl: item.imageUrl,
+        label,
+        className: "stch-collection-tile",
+      });
+      appendInventoryTileText(tile, "span", "stch-inv-badge stch-inv-badge-left", CATEGORY_LABELS[item.category] || "物品");
+      appendInventoryTileText(tile, "div", "stch-inv-name", label || "未知物品");
       list.appendChild(tile);
     }
   }

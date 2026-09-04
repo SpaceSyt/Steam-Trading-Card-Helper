@@ -30,6 +30,7 @@ import {
 import {
   activateActiveBuyOrdersTab,
   initActiveBuyOrdersUi,
+  refreshActiveBuyOrders,
   resetActiveBuyOrdersRuntime,
 } from "../features/active-orders.js";
 
@@ -67,6 +68,11 @@ import { clearOrderCache, loadOrderCache, pruneOrderCache, readRawOrderCache } f
 import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
 import { applyTabColors, applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
 import { normalizeHexColor, normalizeTabColors } from "../services/tab-preferences.js";
+import {
+  normalizeProcessingMode,
+  processingModeIncludesCards,
+  processingModeIncludesDecorations,
+} from "../services/processing-mode.js";
 import {
   createDataBackup,
   getDataBackupFileName,
@@ -550,8 +556,10 @@ import {
         <div class="stch-tab-content" id="stch-tab-surplus">
           <div class="stch-toolbar stch-surplus-main-toolbar">
             <label class="stch-primary-label">处理类型
-              <select id="stch-surplus-item-mode" class="stch-input" style="width:92px">
+              <select id="stch-surplus-item-mode" class="stch-input" style="width:172px">
+                <option value="all" ${state.cfg.surplusItemMode === "all" ? "selected" : ""}>全部（卡牌、背景和表情）</option>
                 <option value="card" ${state.cfg.surplusItemMode === "card" ? "selected" : ""}>卡牌</option>
+                <option value="decoration" ${state.cfg.surplusItemMode === "decoration" ? "selected" : ""}>装饰（背景和表情）</option>
                 <option value="background" ${state.cfg.surplusItemMode === "background" ? "selected" : ""}>背景</option>
                 <option value="emoticon" ${state.cfg.surplusItemMode === "emoticon" ? "selected" : ""}>表情</option>
               </select>
@@ -572,6 +580,7 @@ import {
               </select>
             </label>
             <label class="stch-primary-label">售价调整 ${currencySymbol} <input id="stch-surplus-sell-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.surplusSellPriceAdjustment}" style="width:68px"></label>
+            <label><input id="stch-surplus-include-foil" type="checkbox" ${state.cfg.surplusIncludeFoil ? "checked" : ""}> 包含闪卡</label>
           </div>
           <div class="stch-scan-actions stch-surplus-action-row">
             <div class="stch-btn" id="stch-surplus-scan-btn">开始检测</div>
@@ -584,31 +593,23 @@ import {
               <div class="stch-btn stch-btn-danger disabled" id="stch-surplus-gem-btn">转化宝石</div>
             </div>
           </div>
-          <div class="stch-surplus-mode-panel" id="stch-surplus-card-panel">
+          <div class="stch-surplus-mode-panel" id="stch-surplus-processing-panel">
             <div class="stch-progress" id="stch-surplus-progress-wrap" style="display:none">
               <div class="stch-progress-bar" id="stch-surplus-progress-bar" style="width:0"></div>
               <div class="stch-progress-text" id="stch-surplus-progress-text">0/0</div>
             </div>
             <div class="stch-summary" id="stch-surplus-summary-row" style="display:none">
-              <span class="stch-summary-text" id="stch-surplus-summary"></span>
+              <span class="stch-summary-text stch-processing-summary" id="stch-surplus-summary"></span>
+              <span class="stch-summary-text stch-processing-summary" id="stch-grind-summary"></span>
             </div>
             <div class="stch-status-text" id="stch-surplus-status"></div>
-            <div class="stch-game-list stch-surplus-list" id="stch-surplus-list"></div>
-            <div class="stch-log-resizer" data-log="stch-surplus-log" data-content="stch-surplus-list"></div>
+            <div class="stch-game-list stch-surplus-list stch-inventory-grid" id="stch-processing-list">
+              <div class="stch-processing-results" id="stch-surplus-list"></div>
+              <div class="stch-processing-results" id="stch-grind-list"></div>
+              <div class="stch-inventory-empty" id="stch-processing-empty">尚未检测到物品</div>
+            </div>
+            <div class="stch-log-resizer" data-log="stch-surplus-log" data-content="stch-processing-list"></div>
             <div id="stch-surplus-log"></div>
-          </div>
-          <div class="stch-surplus-mode-panel" id="stch-surplus-grind-panel">
-            <div class="stch-progress" id="stch-grind-progress-wrap" style="display:none">
-              <div class="stch-progress-bar" id="stch-grind-progress-bar" style="width:0"></div>
-              <div class="stch-progress-text" id="stch-grind-progress-text">0/0</div>
-            </div>
-            <div class="stch-summary" id="stch-grind-summary-row" style="display:none">
-              <span class="stch-summary-text" id="stch-grind-summary"></span>
-            </div>
-            <div class="stch-status-text" id="stch-grind-status"></div>
-            <div class="stch-game-list stch-grind-list" id="stch-grind-list"></div>
-            <div class="stch-log-resizer" data-log="stch-grind-log" data-content="stch-grind-list"></div>
-            <div id="stch-grind-log"></div>
           </div>
         </div>
         <div class="stch-tab-content" id="stch-tab-collection">
@@ -702,10 +703,11 @@ import {
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">多余物品处理</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
+            <label><input id="stch-surplus-keep-max-level-cards" type="checkbox" ${state.cfg.surplusKeepMaxLevelCards ? "checked" : ""}> 保留满级卡牌</label>
             <label>默认保留 <input id="stch-grind-reserve-copies" class="stch-input" type="number" min="0" step="1" value="${state.cfg.grindReserveCopies}" style="width:55px"> 份背景/表情</label>
-            <label title="点数商店类副本按不可交易且不可上架的背景/表情识别">
+            <label title="优先保留不可交易且不可上架的背景/表情副本">
               <input id="stch-grind-include-points-shop" type="checkbox" ${state.cfg.grindIncludePointsShopItems ? "checked" : ""}>
-              重复物品计算包含点数商店物品
+              优先保留点数商店对应物品
             </label>
           </div>
               </div>
@@ -805,14 +807,9 @@ import {
       const value = document.getElementById("stch-surplus-item-mode")?.value
         || state.cfg.surplusItemMode
         || DEFAULT_CONFIG.surplusItemMode;
-      return ["card", "background", "emoticon"].includes(value) ? value : "card";
+      return normalizeProcessingMode(value);
     };
     const applySurplusItemMode = () => {
-      const mode = getSurplusItemMode();
-      const cardPanel = document.getElementById("stch-surplus-card-panel");
-      const grindPanel = document.getElementById("stch-surplus-grind-panel");
-      cardPanel?.classList.toggle("active", mode === "card");
-      grindPanel?.classList.toggle("active", mode !== "card");
       renderSurplusResults();
       renderGrindResults();
       updateSurplusActionState();
@@ -886,6 +883,8 @@ import {
       state.cfg.surplusOnlyTradable = !!document.getElementById("stch-surplus-only-tradable")?.checked;
       state.cfg.surplusOnlyRecommended = !!document.getElementById("stch-surplus-only-recommended")?.checked;
       state.cfg.surplusItemMode = getSurplusItemMode();
+      state.cfg.surplusIncludeFoil = !!document.getElementById("stch-surplus-include-foil")?.checked;
+      state.cfg.surplusKeepMaxLevelCards = !!document.getElementById("stch-surplus-keep-max-level-cards")?.checked;
       state.cfg.surplusSellPriceSource = document.getElementById("stch-surplus-sell-price-source")?.value
         || state.cfg.surplusSellPriceSource
         || DEFAULT_CONFIG.surplusSellPriceSource;
@@ -915,6 +914,7 @@ import {
         pruneOrderCache(true);
         renderOrderResults();
       }
+      if (changedId === "stch-buy-mode") renderOrderResults();
       if (changedId === "stch-craft-mode") renderCraftResults();
       if (changedId === "stch-sidebar-disabled") {
         setSidebarEnabled(!state.cfg.sidebarDisabled);
@@ -931,11 +931,20 @@ import {
       }
       if (changedId === "stch-surplus-item-mode") {
         if (state.cfg.surplusItemMode !== previousSurplusItemMode) {
+          state.surplusResults = [];
+          state.selectedSurplusResults = new Set();
+          state.surplusGemPrice = null;
           state.grindResults = [];
           state.selectedGrindResults = new Set();
           state.grindGemPrice = null;
         }
         applySurplusItemMode();
+      }
+      if (["stch-surplus-include-foil", "stch-surplus-keep-max-level-cards"].includes(changedId)) {
+        state.surplusResults = [];
+        state.selectedSurplusResults = new Set();
+        state.surplusGemPrice = null;
+        renderSurplusResults();
       }
       if (["stch-grind-reserve-copies", "stch-grind-include-points-shop"].includes(changedId)) {
         state.grindResults = [];
@@ -959,7 +968,7 @@ import {
       "stch-skip-cached-orders", "stch-craft-interval",
       "stch-craft-mode", "stch-surplus-item-mode",
       "stch-surplus-only-tradable", "stch-surplus-only-recommended", "stch-surplus-sell-price-source",
-      "stch-surplus-sell-adjustment",
+      "stch-surplus-sell-adjustment", "stch-surplus-include-foil", "stch-surplus-keep-max-level-cards",
       "stch-grind-reserve-copies",
       "stch-grind-include-points-shop",
       ...AUTOMATIC_STRATEGY_SETTING_ROWS.flatMap(rule => [
@@ -1116,7 +1125,12 @@ import {
         content.classList.toggle("active", content.id === `stch-tab-${tabName}`);
       });
       if (tabName === "blacklist") renderBlacklist();
-      if (tabName === "orders") renderOrderResults();
+      if (tabName === "orders") {
+        renderOrderResults();
+        if (!state.activeOrdersLoadedAt && !state.activeOrdersLoading) {
+          void refreshActiveBuyOrders().then(renderOrderResults);
+        }
+      }
       if (tabName === "active-orders") activateActiveBuyOrdersTab();
       if (tabName === "history") activatePriceHistoryTab();
       if (tabName === "surplus") applySurplusItemMode();
@@ -1319,7 +1333,10 @@ import {
     document.getElementById("stch-submit-orders-btn").addEventListener("click", submitSelectedBuyOrders);
     document.getElementById("stch-order-add-btn").addEventListener("click", addManualOrderAppid);
     document.getElementById("stch-order-recalculate-btn").addEventListener("click", recalculateSelectedOrderResults);
-    document.getElementById("stch-order-submit-orders-btn").addEventListener("click", submitSelectedOrderBuyOrders);
+    document.getElementById("stch-order-submit-orders-btn").addEventListener("click", async () => {
+      await submitSelectedOrderBuyOrders();
+      renderOrderResults();
+    });
     initActiveBuyOrdersUi();
     document.getElementById("stch-craft-scan-btn").addEventListener("click", startCraftScan);
     document.getElementById("stch-craft-stop-btn").addEventListener("click", requestCraftStop);
@@ -1327,24 +1344,36 @@ import {
     document.getElementById("stch-craft-max-btn").addEventListener("click", () => setAllCraftCounts("max"));
     document.getElementById("stch-craft-clear-btn").addEventListener("click", () => setAllCraftCounts("clear"));
     document.getElementById("stch-craft-submit-btn").addEventListener("click", submitCraftPlan);
-    document.getElementById("stch-surplus-scan-btn").addEventListener("click", event => {
+    let processingBatchStopped = false;
+    document.getElementById("stch-surplus-scan-btn").addEventListener("click", async event => {
       if (event.currentTarget.classList.contains("disabled")) return;
-      if (getSurplusItemMode() === "card") startSurplusScan();
-      else startGrindScan();
+      const mode = getSurplusItemMode();
+      processingBatchStopped = false;
+      if (processingModeIncludesCards(mode) && processingModeIncludesDecorations(mode)) {
+        state.grindResults = [];
+        state.selectedGrindResults = new Set();
+        state.grindGemPrice = null;
+        renderGrindResults();
+      }
+      if (processingModeIncludesCards(mode)) await startSurplusScan();
+      if (!processingBatchStopped && processingModeIncludesDecorations(mode)) {
+        await startGrindScan({ preserveLog: processingModeIncludesCards(mode) });
+      }
     });
     document.getElementById("stch-surplus-stop-btn").addEventListener("click", event => {
       if (event.currentTarget.classList.contains("disabled")) return;
+      processingBatchStopped = true;
       if (state.surplusScanning) requestSurplusStop();
       else if (state.grindScanning) requestGrindStop();
     });
     document.getElementById("stch-surplus-select-all-btn").addEventListener("click", event => {
       if (event.currentTarget.classList.contains("disabled")) return;
       const mode = getSurplusItemMode();
-      const list = document.getElementById(mode === "card" ? "stch-surplus-list" : "stch-grind-list");
+      const list = document.getElementById("stch-processing-list");
       const tiles = list ? [...list.querySelectorAll(".stch-inv-tile")] : [];
       const allSelected = tiles.length > 0 && tiles.every(tile => tile.classList.contains("selected"));
-      if (mode === "card") setAllVisibleSurplusSelection(!allSelected);
-      else setAllVisibleGrindSelection(!allSelected);
+      if (processingModeIncludesCards(mode)) setAllVisibleSurplusSelection(!allSelected);
+      if (processingModeIncludesDecorations(mode)) setAllVisibleGrindSelection(!allSelected);
       updateAllActionStates();
     });
     document.getElementById("stch-surplus-sell-btn").addEventListener("click", event => {

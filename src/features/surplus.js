@@ -40,7 +40,10 @@ import {
   getHtmlRequestConcurrency,
   runWithConcurrency,
 } from "../utils/concurrency.js";
-import { appendEmptyState, appendInventoryImage } from "../utils/dom.js";
+import { appendInventoryTileText, createInventoryTile } from "../utils/dom.js";
+import { countSelected, pruneSelection, setItemsSelected } from "../utils/selection.js";
+import { processingModeIncludesCards } from "../services/processing-mode.js";
+import { syncProcessingView } from "../ui/processing-view.js";
 
 const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusProgress, hideProgress: hideSurplusProgress } = surplusStatus;
 
@@ -54,6 +57,55 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
     result.priceSource = priced ? price.priceSource : (noPrice ? "none" : "failed");
     result.priceLookupFailed = failed;
     applyItemRecommendation(result, gemSackPriceCents);
+  }
+
+  function createCardResult(group, inventoryCard, options = {}) {
+    const reservedCount = Math.max(0, Number(options.reservePerCard) || 0);
+    const surplusCount = Math.max(0, inventoryCard.totalCount - reservedCount);
+    if (surplusCount <= 0) return null;
+    const assets = selectSurplusAssets(inventoryCard.assets, surplusCount);
+    const assetSummary = summarizeAssetIds(assets);
+    return {
+      category: "card",
+      appid: group.appid,
+      isFoil: group.isFoil,
+      gameName: options.gameName || group.gameName || "",
+      level: options.level || 0,
+      targetLevel: options.targetLevel || 0,
+      badgeMaxed: !!options.badgeMaxed,
+      isUnlimitedLevelBadge: !!options.isUnlimitedLevelBadge,
+      keepMaxLevelCards: !!options.keepMaxLevelCards,
+      cardName: options.cardName || inventoryCard.name,
+      marketHashName: options.marketHashName || inventoryCard.marketHashName,
+      imageUrl: inventoryCard.imageUrl || "",
+      nameColor: inventoryCard.nameColor || "",
+      backgroundColor: inventoryCard.backgroundColor || "",
+      gemValue: inventoryCard.gemValue || 0,
+      totalGems: assets.reduce(
+        (sum, asset) => sum + (asset.selectedAmount || 0) * (asset.gemValue || inventoryCard.gemValue || 0),
+        0
+      ),
+      inventoryCount: inventoryCard.totalCount,
+      reservedCount,
+      surplusCount,
+      marketableCount: assets.reduce(
+        (sum, asset) => sum + (asset.marketable ? asset.selectedAmount : 0),
+        0
+      ),
+      tradableCount: assets.reduce(
+        (sum, asset) => sum + (asset.tradable ? asset.selectedAmount : 0),
+        0
+      ),
+      assets,
+      assetText: assetSummary.text,
+      assetTitle: assetSummary.title,
+    };
+  }
+
+  function getAllInventoryCardResults(group) {
+    return [...group.cardsByHash.values()]
+      .map(card => createCardResult(group, card))
+      .filter(Boolean);
   }
 
   export async function resolveSurplusForBadge(group, profileUrl, queue) {
@@ -78,55 +130,27 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
       const inventoryCard = findInventoryCardForBadgeCard(group, badgeCard);
       if (!inventoryCard) continue;
 
-      const surplusCount = Math.max(0, inventoryCard.totalCount - reservePerCard);
-      if (surplusCount <= 0) continue;
-
-      const surplusAssets = selectSurplusAssets(inventoryCard.assets, surplusCount);
-      const marketableCount = surplusAssets.reduce(
-        (sum, asset) => sum + (asset.marketable ? asset.selectedAmount : 0),
-        0
-      );
-      const tradableCount = surplusAssets.reduce(
-        (sum, asset) => sum + (asset.tradable ? asset.selectedAmount : 0),
-        0
-      );
-      const assetSummary = summarizeAssetIds(surplusAssets);
-      const totalGems = surplusAssets.reduce(
-        (sum, asset) => sum + (asset.selectedAmount || 0) * (asset.gemValue || inventoryCard.gemValue || 0),
-        0
-      );
-      results.push({
-        category: "card",
-        appid: group.appid,
-        isFoil: group.isFoil,
-        gameName: info.gameName || group.gameName || "",
+      const result = createCardResult(group, inventoryCard, {
+        gameName: info.gameName,
         level,
         targetLevel,
         badgeMaxed,
         isUnlimitedLevelBadge: !!info.isUnlimitedLevelBadge,
-        cardName: badgeCard.name || inventoryCard.name,
-        marketHashName: badgeCard.marketHashName || inventoryCard.marketHashName,
-        imageUrl: inventoryCard.imageUrl || "",
-        nameColor: inventoryCard.nameColor || "",
-        backgroundColor: inventoryCard.backgroundColor || "",
-        gemValue: inventoryCard.gemValue || 0,
-        totalGems,
-        inventoryCount: inventoryCard.totalCount,
-        reservedCount: reservePerCard,
-        surplusCount,
-        marketableCount,
-        tradableCount,
-        assets: surplusAssets,
-        assetText: assetSummary.text,
-        assetTitle: assetSummary.title,
+        keepMaxLevelCards: true,
+        reservePerCard,
+        cardName: badgeCard.name,
+        marketHashName: badgeCard.marketHashName,
       });
+      if (result) results.push(result);
     }
 
     return results;
   }
 
   export function getVisibleSurplusResults() {
+    if (!processingModeIncludesCards(state.cfg.surplusItemMode)) return [];
     return (state.surplusResults || []).filter(result => {
+      if (!state.cfg.surplusIncludeFoil && result.isFoil) return false;
       if (isItemCollected(result, "card")) return false;
       if (state.cfg.surplusOnlyRecommended && result.recommendationKey !== "grind") return false;
       if (state.cfg.surplusOnlyTradable && result.tradableCount <= 0) return false;
@@ -148,29 +172,18 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
   }
 
   export function getSelectedSurplusResults() {
-    const selected = state.selectedSurplusResults || new Set();
     return (state.surplusResults || []).filter(result =>
-      selected.has(getSurplusResultKey(result)) && !isItemCollected(result, "card")
+      state.selectedSurplusResults.has(getSurplusResultKey(result)) && !isItemCollected(result, "card")
     );
   }
 
   export function setAllVisibleSurplusSelection(selected) {
-    if (!state.selectedSurplusResults) state.selectedSurplusResults = new Set();
-    const visible = getVisibleSurplusResults();
-    for (const result of visible) {
-      const key = getSurplusResultKey(result);
-      if (selected) state.selectedSurplusResults.add(key);
-      else state.selectedSurplusResults.delete(key);
-    }
+    setItemsSelected(state.selectedSurplusResults, getVisibleSurplusResults(), getSurplusResultKey, selected);
     renderSurplusResults();
   }
 
   function pruneSelectedSurplusResults(visible) {
-    const selected = state.selectedSurplusResults || new Set();
-    const visibleKeys = new Set(visible.map(getSurplusResultKey));
-    for (const key of [...selected]) {
-      if (!visibleKeys.has(key)) selected.delete(key);
-    }
+    pruneSelection(state.selectedSurplusResults, visible, getSurplusResultKey);
   }
 
   function sortSurplusResults() {
@@ -193,8 +206,8 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
 
     const visible = getVisibleSurplusResults();
     if (visible.length === 0) {
-      row.style.display = "none";
       summary.textContent = "";
+      syncProcessingView();
       return;
     }
 
@@ -202,19 +215,15 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
     const surplusTotal = visible.reduce((sum, result) => sum + result.surplusCount, 0);
     const marketableTotal = visible.reduce((sum, result) => sum + result.marketableCount, 0);
     const tradableTotal = visible.reduce((sum, result) => sum + result.tradableCount, 0);
-    const selected = state.selectedSurplusResults || new Set();
-    const selectedCount = visible.reduce(
-      (count, result) => count + Number(selected.has(getSurplusResultKey(result))),
-      0
-    );
+    const selectedCount = countSelected(state.selectedSurplusResults, visible, getSurplusResultKey);
     summary.innerHTML =
-      `共 <b>${badgeCount}</b> 个徽章 · ` +
+      `共 <b>${badgeCount}</b> 个${state.cfg.surplusKeepMaxLevelCards ? "徽章" : "卡牌组"} · ` +
       `<b>${visible.length}</b> 种卡牌 · ` +
-      `多余 <b>${surplusTotal}</b> 张 · ` +
+      `${state.cfg.surplusKeepMaxLevelCards ? "多余 " : ""}<b>${surplusTotal}</b> 张 · ` +
       `可出售 <b>${marketableTotal}</b> 张 · ` +
       `可交易 <b>${tradableTotal}</b> 张 · ` +
       `已选择 <b>${selectedCount}</b> 项`;
-    row.style.display = "";
+    syncProcessingView();
   }
 
   export function renderSurplusResults() {
@@ -223,7 +232,6 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
     enableTileDragSelection(list, {
       isSelected: tile => state.selectedSurplusResults?.has(tile.dataset.key),
       setSelected: (tile, selected) => {
-        if (!state.selectedSurplusResults) state.selectedSurplusResults = new Set();
         if (selected) state.selectedSurplusResults.add(tile.dataset.key);
         else state.selectedSurplusResults.delete(tile.dataset.key);
       },
@@ -233,35 +241,29 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
       },
     });
     list.innerHTML = "";
-    list.classList.add("stch-inventory-grid");
 
     const visible = getVisibleSurplusResults();
     pruneSelectedSurplusResults(visible);
     if (visible.length === 0) {
-      appendEmptyState(list, state.surplusScanning
-        ? "正在检测多余卡牌..."
-        : state.surplusResults.length > 0
-          ? "当前筛选下没有多余卡牌"
-          : "尚未检测到多余卡牌");
       updateSurplusSummary();
       updateSurplusActionState();
+      syncProcessingView();
       return;
     }
 
     for (const result of visible) {
       const key = getSurplusResultKey(result);
-      const tile = document.createElement("div");
-      tile.className = "stch-inv-tile";
       const volumeZero = result.volume === 0;
-      tile.classList.toggle("stch-volume-zero", volumeZero);
-      tile.dataset.key = key;
-      tile.classList.toggle("selected", state.selectedSurplusResults?.has(key));
-      tile.title = [
+      const title = [
         `${result.gameName || "未知游戏"} · ${result.cardName || result.marketHashName || "未知卡牌"}`,
-        result.isUnlimitedLevelBadge
-          ? `特卖徽章 Lv${result.level}（Lv1 后可处理多余卡牌）`
-          : `徽章 Lv${result.level}/${result.targetLevel}`,
-        `库存 ${result.inventoryCount}，预留 ${result.reservedCount}，多余 ${result.surplusCount}`,
+        result.keepMaxLevelCards
+          ? result.isUnlimitedLevelBadge
+            ? `特卖徽章 Lv${result.level}（Lv1 后可处理多余卡牌）`
+            : `徽章 Lv${result.level}/${result.targetLevel}`
+          : "未预留满级卡牌",
+        result.keepMaxLevelCards
+          ? `库存 ${result.inventoryCount}，预留 ${result.reservedCount}，多余 ${result.surplusCount}`
+          : `库存 ${result.inventoryCount}`,
         `可出售 ${result.marketableCount}，可交易 ${result.tradableCount}`,
         result.volume === 0
           ? "市场成交量 0"
@@ -280,37 +282,27 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
         "按住并拖动可连续选择或取消",
         result.assetTitle ? `资产ID:\n${result.assetTitle}` : "",
       ].filter(Boolean).join("\n");
-      if (result.nameColor) tile.style.borderColor = result.nameColor;
-      if (result.backgroundColor) tile.style.backgroundColor = result.backgroundColor;
-
-      appendInventoryImage(
-        tile,
-        result.imageUrl,
-        result.cardName || result.marketHashName
-      );
-
-      const count = document.createElement("span");
-      count.className = "stch-inv-badge";
-      count.textContent = `x${result.surplusCount}`;
-      count.title = "多余数量";
-      tile.appendChild(count);
-
-      const action = document.createElement("span");
-      action.className = `stch-inv-badge stch-inv-badge-left ${result.recommendationClass || ""}`.trim();
-      action.textContent = result.recommendationLabel || "—";
-      action.title = result.recommendationReason || "";
-      tile.appendChild(action);
-
-      const name = document.createElement("div");
-      name.className = "stch-inv-name";
-      name.textContent = result.cardName || result.marketHashName || "未知卡牌";
-      tile.appendChild(name);
+      const label = result.cardName || result.marketHashName;
+      const tile = createInventoryTile({
+        key,
+        selected: state.selectedSurplusResults?.has(key),
+        title,
+        imageUrl: result.imageUrl,
+        label,
+        volumeZero,
+        nameColor: result.nameColor,
+        backgroundColor: result.backgroundColor,
+      });
+      appendInventoryTileText(tile, "span", "stch-inv-badge", `x${result.surplusCount}`, result.keepMaxLevelCards ? "多余数量" : "数量");
+      appendInventoryTileText(tile, "span", `stch-inv-badge stch-inv-badge-left ${result.recommendationClass || ""}`.trim(), result.recommendationLabel || "—", result.recommendationReason || "");
+      appendInventoryTileText(tile, "div", "stch-inv-name", label || "未知卡牌");
 
       list.appendChild(tile);
     }
 
     updateSurplusSummary();
     updateSurplusActionState();
+    syncProcessingView();
   }
 
   export async function startSurplusScan() {
@@ -323,8 +315,12 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
 
     const profileUrl = getProfileUrl();
     const steamId = getSteamId();
-    if (!profileUrl || !steamId) {
-      surplusLog("未找到 Steam 个人资料地址或 SteamID", "err");
+    if (!steamId) {
+      surplusLog("未找到 SteamID", "err");
+      return;
+    }
+    if (state.cfg.surplusKeepMaxLevelCards && !profileUrl) {
+      surplusLog("未找到 Steam 个人资料地址", "err");
       return;
     }
 
@@ -356,12 +352,15 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
       surplusLog("【阶段 1/3】正在读取 Steam 社区库存");
       setSurplusProgress(0, 1, "阶段1: 读取库存");
       const inventory = await loadCommunityInventoryCards(steamId, queue);
+      const groups = state.cfg.surplusIncludeFoil
+        ? inventory.groups
+        : inventory.groups.filter(group => !group.isFoil);
       if (state.surplusStopRequested) {
         surplusLog("已停止检测", "warn");
         return;
       }
 
-      if (inventory.groups.length === 0) {
+      if (groups.length === 0) {
         surplusLog("库存中没有检测到集换式卡牌", "warn");
         renderSurplusResults();
         return;
@@ -370,16 +369,18 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
       surplusLog(
         `库存读取完成：库存 ${inventory.totalInventoryCount || inventory.totalAssetsSeen} 件，` +
         `卡牌 ${inventory.totalCards} 张，${inventory.cardTypeCount} 种，` +
-        `${inventory.groups.length} 个徽章候选`,
+        `${groups.length} 个${state.cfg.surplusKeepMaxLevelCards ? "徽章候选" : "卡牌组"}`,
         "ok"
       );
-      surplusLog("【阶段 2/3】正在读取徽章等级并计算升满后剩余");
+      surplusLog(state.cfg.surplusKeepMaxLevelCards
+        ? "【阶段 2/3】正在读取徽章等级并计算升满后剩余"
+        : "【阶段 2/3】正在整理库存卡牌");
 
       let scanned = 0;
       let failed = 0;
       let completed = 0;
       await runWithConcurrency(
-        inventory.groups,
+        groups,
         getHtmlRequestConcurrency(cfg),
         async group => {
           if (state.surplusStopRequested) return;
@@ -387,23 +388,28 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
           const label = `${group.gameName || group.appid}${group.isFoil ? "（闪亮）" : ""}`;
           setSurplusProgress(
             completed,
-            inventory.groups.length,
-            `阶段2: ${completed + 1}/${inventory.groups.length} · ${label}`
+            groups.length,
+            `阶段2: ${completed + 1}/${groups.length} · ${label}`
           );
-          setSurplusStatus(`读取徽章: ${label}`);
+          setSurplusStatus(`${state.cfg.surplusKeepMaxLevelCards ? "读取徽章" : "整理卡牌"}: ${label}`);
 
           try {
-            const rows = await resolveSurplusForBadge(group, profileUrl, queue);
+            const rows = state.cfg.surplusKeepMaxLevelCards
+              ? await resolveSurplusForBadge(group, profileUrl, queue)
+              : getAllInventoryCardResults(group);
             if (rows.length === 0) {
               if (state.cfg.showNoResultLogs) {
-                surplusLog(`[${group.appid}] ${label}: 没有升满后剩余`, "info");
+                surplusLog(
+                  `[${group.appid}] ${label}: ${state.cfg.surplusKeepMaxLevelCards ? "没有升满后剩余" : "没有库存卡牌"}`,
+                  "info"
+                );
               }
               return;
             }
             state.surplusResults.push(...rows);
             const surplusCount = rows.reduce((sum, row) => sum + row.surplusCount, 0);
             surplusLog(
-              `[${group.appid}] ${label}: ${rows.length} 种卡牌，多余 ${surplusCount} 张`,
+              `[${group.appid}] ${label}: ${rows.length} 种卡牌，${state.cfg.surplusKeepMaxLevelCards ? "多余 " : ""}${surplusCount} 张`,
               "ok"
             );
           } catch (error) {
@@ -417,8 +423,8 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
             completed++;
             setSurplusProgress(
               completed,
-              inventory.groups.length,
-              `阶段2: ${completed}/${inventory.groups.length}`
+              groups.length,
+              `阶段2: ${completed}/${groups.length}`
             );
             if (completed === 1 || completed % 5 === 0) renderSurplusResults();
           }
@@ -502,8 +508,8 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
       } else {
         const totalSurplus = state.surplusResults.reduce((sum, result) => sum + result.surplusCount, 0);
         surplusLog(
-          `检测完成：读取 ${scanned} 个徽章，失败 ${failed} 个，` +
-          `找到 ${state.surplusResults.length} 种多余卡牌 / ${totalSurplus} 张`,
+          `检测完成：${state.cfg.surplusKeepMaxLevelCards ? "读取" : "整理"} ${scanned} 个${state.cfg.surplusKeepMaxLevelCards ? "徽章" : "卡牌组"}，失败 ${failed} 个，` +
+          `找到 ${state.surplusResults.length} 种${state.cfg.surplusKeepMaxLevelCards ? "多余" : ""}卡牌 / ${totalSurplus} 张`,
           failed ? "warn" : "ok"
         );
       }

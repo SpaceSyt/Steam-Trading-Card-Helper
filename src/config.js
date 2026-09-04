@@ -1,9 +1,10 @@
   import { DEFAULT_TAB_ORDER } from "./constants.js";
   import { normalizeTabColors, normalizeTabOrder } from "./services/tab-preferences.js";
+  import { normalizeProcessingMode } from "./services/processing-mode.js";
 
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 32;
+  export const CONFIG_SCHEMA_VERSION = 33;
 
   export const AUTOMATIC_PRICE_STRATEGY_CONFIG = Object.freeze({
     conservative: Object.freeze({
@@ -73,6 +74,8 @@
     surplusOnlyTradable: false,
     surplusOnlyRecommended: true,
     surplusItemMode: "card",
+    surplusIncludeFoil: false,
+    surplusKeepMaxLevelCards: true,
     surplusSellPriceSource: "lowest",
     surplusSellPriceAdjustment: 0,
     grindReserveCopies: 1,
@@ -118,6 +121,9 @@
     merged.showScanSellSetColumn = merged.showScanSellSetColumn !== false;
     merged.minimumPriceFallback = minimumPriceFallback;
     merged.surplusOnlyRecommended = legacyOnlyRecommended;
+    merged.surplusItemMode = normalizeProcessingMode(merged.surplusItemMode);
+    merged.surplusIncludeFoil = merged.surplusIncludeFoil === true;
+    merged.surplusKeepMaxLevelCards = merged.surplusKeepMaxLevelCards !== false;
     merged.tabOrder = normalizeTabOrder(merged.tabOrder);
     merged.tabColors = normalizeTabColors(merged.tabColors);
     const blacklistExpiryDays = Number(merged.blacklistExpiryDays);

@@ -443,6 +443,7 @@
       font-family: inherit;
     }
     .stch-game-row:hover { background: rgba(103,193,245,0.08); }
+    .stch-game-row.stch-order-covered { filter: grayscale(1); opacity: 0.45; }
     .stch-game-row .stch-appid {
       width: 56px;
       flex-shrink: 0;
@@ -609,6 +610,8 @@
       min-height: 0;
       max-height: none;
     }
+    .stch-processing-results { display: contents; }
+    .stch-processing-summary:empty { display: none; }
     .stch-surplus-main-toolbar {
       gap: 12px;
       flex-wrap: nowrap;
@@ -645,13 +648,10 @@
       color: #0e1621;
     }
     .stch-surplus-mode-panel {
-      display: none;
+      display: flex;
       flex-direction: column;
       flex: 1;
       min-height: 0;
-    }
-    .stch-surplus-mode-panel.active {
-      display: flex;
     }
     .stch-inventory-grid {
       display: grid;
@@ -793,11 +793,6 @@
       text-overflow: ellipsis;
       text-shadow: 0 1px 1px #000;
       z-index: 2;
-    }
-    .stch-grind-list {
-      flex: 1;
-      min-height: 0;
-      max-height: none;
     }
     .stch-scan-actions {
       display: flex;
@@ -1418,8 +1413,7 @@
 
     #stch-log,
     #stch-craft-log,
-    #stch-surplus-log,
-    #stch-grind-log {
+    #stch-surplus-log {
       margin-top: 0;
       flex: 1;
       min-height: 0;
@@ -1435,18 +1429,18 @@
       word-break: break-all;
     }
     #stch-craft-log,
-    #stch-surplus-log,
-    #stch-grind-log {
+    #stch-surplus-log {
       flex: 0 0 19vh;
     }
-    #stch-log .ok, #stch-craft-log .ok, #stch-surplus-log .ok, #stch-grind-log .ok { color: #75b022; }
-    #stch-log .warn, #stch-craft-log .warn, #stch-surplus-log .warn, #stch-grind-log .warn { color: #ffc902; }
-    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-surplus-log .warn-ip, #stch-grind-log .warn-ip { color: #fff; }
-    #stch-log .err, #stch-craft-log .err, #stch-surplus-log .err, #stch-grind-log .err { color: #c04040; }
-    #stch-log .info, #stch-craft-log .info, #stch-surplus-log .info, #stch-grind-log .info { color: #67c1f5; }
+    #stch-log .ok, #stch-craft-log .ok, #stch-surplus-log .ok { color: #75b022; }
+    #stch-log .warn, #stch-craft-log .warn, #stch-surplus-log .warn { color: #ffc902; }
+    #stch-log .warn-ip, #stch-craft-log .warn-ip, #stch-surplus-log .warn-ip { color: #fff; }
+    #stch-log .err, #stch-craft-log .err, #stch-surplus-log .err { color: #c04040; }
+    #stch-log .info, #stch-craft-log .info, #stch-surplus-log .info { color: #67c1f5; }
 
     .stch-progress {
       height: 20px;
+      flex-shrink: 0;
       background: #0e1621;
       border-radius: 2px;
       overflow: hidden;

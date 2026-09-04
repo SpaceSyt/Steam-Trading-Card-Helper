@@ -1,20 +1,24 @@
 import { state } from "../state.js";
 
 import { getSelectedResults, getSelectedOrderResults } from "../services/result-info.js";
+import {
+  normalizeProcessingMode,
+  processingModeIncludesCards,
+  processingModeIncludesDecorations,
+} from "../services/processing-mode.js";
 
   function getSurplusProcessingMode() {
     const value = document.getElementById("stch-surplus-item-mode")?.value
       || state.cfg.surplusItemMode
       || "card";
-    return ["card", "background", "emoticon"].includes(value) ? value : "card";
+    return normalizeProcessingMode(value);
   }
 
   function updateSurplusProcessingActionState() {
     const mode = getSurplusProcessingMode();
-    const selectedCount = mode === "card"
-      ? (state.selectedSurplusResults?.size || 0)
-      : (state.selectedGrindResults?.size || 0);
-    const list = document.getElementById(mode === "card" ? "stch-surplus-list" : "stch-grind-list");
+    const selectedCount = (processingModeIncludesCards(mode) ? state.selectedSurplusResults.size : 0)
+      + (processingModeIncludesDecorations(mode) ? state.selectedGrindResults.size : 0);
+    const list = document.getElementById("stch-processing-list");
     const visibleTiles = list ? [...list.querySelectorAll(".stch-inv-tile")] : [];
     const selectedVisibleCount = visibleTiles.filter(tile => tile.classList.contains("selected")).length;
     const allVisibleSelected = visibleTiles.length > 0 && selectedVisibleCount === visibleTiles.length;
@@ -31,7 +35,7 @@ import { getSelectedResults, getSelectedOrderResults } from "../services/result-
     );
     document.getElementById("stch-surplus-gem-btn")?.classList.toggle("disabled", disabled);
     document.getElementById("stch-surplus-collect-btn")?.classList.toggle("disabled", disabled);
-    ["stch-surplus-sell-price-source", "stch-surplus-sell-adjustment"].forEach(id => {
+    ["stch-surplus-sell-price-source", "stch-surplus-sell-adjustment", "stch-surplus-include-foil"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = isSharedActionBusy();
     });
@@ -82,7 +86,7 @@ import { getSelectedResults, getSelectedOrderResults } from "../services/result-
       "disabled",
       !detectionBusy
     );
-    ["stch-surplus-only-tradable", "stch-surplus-only-recommended", "stch-grind-reserve-copies", "stch-grind-include-points-shop", "stch-surplus-item-mode"].forEach(id => {
+    ["stch-surplus-only-tradable", "stch-surplus-only-recommended", "stch-grind-reserve-copies", "stch-grind-include-points-shop", "stch-surplus-item-mode", "stch-surplus-include-foil", "stch-surplus-keep-max-level-cards"].forEach(id => {
       const element = document.getElementById(id);
       if (element) element.disabled = probeBlocked;
     });

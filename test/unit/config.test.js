@@ -76,6 +76,9 @@ test("new ordering, sidebar, advanced, and blacklist settings normalize safely",
   assert.equal(defaults.parallelOrderPricingConcurrency, 4);
   assert.equal(defaults.parallelOtherRequestsEnabled, true);
   assert.equal(defaults.parallelOtherRequestsConcurrency, 8);
+  assert.equal(defaults.surplusItemMode, "card");
+  assert.equal(defaults.surplusIncludeFoil, false);
+  assert.equal(defaults.surplusKeepMaxLevelCards, true);
 
   const optedOut = normalizeConfig({
     minimumPriceFallback: false,
@@ -88,6 +91,9 @@ test("new ordering, sidebar, advanced, and blacklist settings normalize safely",
     parallelOrderPricingConcurrency: 8.9,
     parallelOtherRequestsEnabled: false,
     parallelOtherRequestsConcurrency: 12.9,
+    surplusItemMode: "all",
+    surplusIncludeFoil: true,
+    surplusKeepMaxLevelCards: false,
   });
   assert.equal(optedOut.minimumPriceFallback, false);
   assert.equal(optedOut.sidebarDisabled, true);
@@ -99,6 +105,9 @@ test("new ordering, sidebar, advanced, and blacklist settings normalize safely",
   assert.equal(optedOut.parallelOrderPricingConcurrency, 8);
   assert.equal(optedOut.parallelOtherRequestsEnabled, false);
   assert.equal(optedOut.parallelOtherRequestsConcurrency, 12);
+  assert.equal(optedOut.surplusItemMode, "all");
+  assert.equal(optedOut.surplusIncludeFoil, true);
+  assert.equal(optedOut.surplusKeepMaxLevelCards, false);
 
   assert.equal(normalizeConfig({ blacklistExpiryDays: 0 }).blacklistExpiryDays, 1);
   assert.equal(normalizeConfig({ blacklistExpiryDays: "invalid" }).blacklistExpiryDays, 7);
@@ -108,6 +117,7 @@ test("new ordering, sidebar, advanced, and blacklist settings normalize safely",
   assert.equal(normalizeConfig({ parallelOtherRequestsConcurrency: 0 }).parallelOtherRequestsConcurrency, 1);
   assert.equal(normalizeConfig({ parallelOtherRequestsConcurrency: 99 }).parallelOtherRequestsConcurrency, 20);
   assert.equal(normalizeConfig({ parallelOtherRequestsConcurrency: "invalid" }).parallelOtherRequestsConcurrency, 8);
+  assert.equal(normalizeConfig({ surplusItemMode: "invalid" }).surplusItemMode, "card");
 });
 
 test("an automatic pricing draft can temporarily override both strategy offsets", () => {

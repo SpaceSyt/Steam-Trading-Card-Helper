@@ -12,7 +12,8 @@ import { getResultKey, getSelectedOrderResults, getSelectedResults } from "../se
 
 import { pruneOrderCache, upsertOrderResult, getOrderCacheAgeDays } from "../services/order-cache.js";
 
-import { openMultibuy } from "../features/multibuy.js";
+import { getMultibuyQuantity, openMultibuy } from "../features/multibuy.js";
+import { getPendingOrderExpectedQuantity } from "../features/orders.js";
 
 import { updateBulkActionState, updateOrderActionState } from "./action-state.js";
 
@@ -215,8 +216,15 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
       return;
     }
     renderHeader(fragment, { source: "order", showCacheAge: true });
+    const activeOrderQuantities = new Map(state.activeBuyOrderGroups
+      .filter(group => group.appid === "753")
+      .map(group => [group.marketHashName, group.remainingQuantity]));
     getSortedOrderResults().forEach(info => {
-      renderDataRow(fragment, info, { source: "order", showCacheAge: true });
+      renderDataRow(fragment, info, {
+        source: "order",
+        showCacheAge: true,
+        activeOrderQuantities,
+      });
     });
     list.appendChild(fragment);
     updateOrderSummary({ prune: false });
@@ -253,6 +261,28 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     row.dataset.appid = info.appid;
     row.dataset.foil = info.isFoil ? 1 : 0;
     const targetLevel = getBadgeTargetLevel(info);
+    if (options.activeOrderQuantities) {
+      let requiresOrder = false;
+      const fullyCovered = info.cards.every(card => {
+        const targetQuantity = getMultibuyQuantity(
+          state.cfg.buyMode || "complete1",
+          info.level,
+          card.owned,
+          targetLevel
+        );
+        if (targetQuantity <= 0) return true;
+        requiresOrder = true;
+        if (!card.marketHashName) return false;
+        const pendingQuantity = state.pendingOrderQuantities.size
+          ? getPendingOrderExpectedQuantity(card.marketHashName)
+          : 0;
+        return Math.max(
+          options.activeOrderQuantities.get(card.marketHashName) || 0,
+          pendingQuantity
+        ) >= targetQuantity;
+      });
+      if (requiresOrder && fullyCovered) row.classList.add("stch-order-covered");
+    }
     const ownedCards = info.cards.reduce((sum, c) => sum + Math.min(c.owned, 1), 0);
     const minVol = info.minVolume || 0;
     const lv5Color = info.hasIncompletePricing || info.hasEstimated ? "color:#888" : minVol > 1 ? "color:#4caf50" : minVol === 1 ? "color:#c9a02c" : "";

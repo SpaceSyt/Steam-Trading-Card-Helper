@@ -26,6 +26,21 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
     return `${item?.classid || ""}_${item?.instanceid || ""}`;
   }
 
+  export function parseCommunityInventoryPage(data) {
+    const descriptions = new Map();
+    (Array.isArray(data?.descriptions) ? data.descriptions : []).forEach(description => {
+      descriptions.set(getDescriptionKey(description), description);
+    });
+    return {
+      assets: Array.isArray(data?.assets) ? data.assets : [],
+      descriptions,
+      totalInventoryCount: Number(data?.total_inventory_count) || 0,
+      nextAssetId: data?.more_items && data?.last_assetid
+        ? String(data.last_assetid)
+        : "",
+    };
+  }
+
   export function getDescriptionTags(description) {
     return Array.isArray(description?.tags) ? description.tags : [];
   }

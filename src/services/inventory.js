@@ -2,7 +2,7 @@ import { state } from "../state.js";
 
 import { unsafeWindow } from "../globals.js";
 
-import { addInventoryCard, getAssetAmount, getDescriptionKey } from "../parsers/inventory.js";
+import { addInventoryCard, getAssetAmount, getDescriptionKey, parseCommunityInventoryPage } from "../parsers/inventory.js";
 
 import { surplusStatus } from "../status-controllers.js";
 
@@ -32,13 +32,9 @@ const { setStatus: setSurplusStatus, log: surplusLog } = surplusStatus;
         throw new Error(data?.Error || data?.error || "Steam 未返回可用库存数据");
       }
 
-      totalInventoryCount = Number(data.total_inventory_count || totalInventoryCount) || totalInventoryCount;
-      const descriptions = new Map();
-      (Array.isArray(data.descriptions) ? data.descriptions : []).forEach(description => {
-        descriptions.set(getDescriptionKey(description), description);
-      });
-
-      const assets = Array.isArray(data.assets) ? data.assets : [];
+      const inventoryPage = parseCommunityInventoryPage(data);
+      totalInventoryCount = inventoryPage.totalInventoryCount || totalInventoryCount;
+      const { assets, descriptions } = inventoryPage;
       totalAssetsSeen += assets.length;
       for (const asset of assets) {
         const description = descriptions.get(getDescriptionKey(asset));
@@ -51,9 +47,7 @@ const { setStatus: setSurplusStatus, log: surplusLog } = surplusStatus;
         `库存第 ${page} 页：读取 ${assets.length} 件，累计卡牌 ${totalCards} 张`,
         "info"
       );
-      startAssetId = data.more_items && data.last_assetid
-        ? String(data.last_assetid)
-        : "";
+      startAssetId = inventoryPage.nextAssetId;
     } while (startAssetId && !state.surplusStopRequested);
 
     const groups = [...groupMap.values()].sort((left, right) => {

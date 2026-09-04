@@ -22,6 +22,8 @@
   export function appendInventoryImage(root, imageUrl, label) {
     const image = document.createElement(imageUrl ? "img" : "div");
     if (imageUrl) {
+      image.loading = "lazy";
+      image.decoding = "async";
       image.src = imageUrl;
       image.alt = label || "";
     } else {
@@ -29,6 +31,45 @@
       image.textContent = label || "?";
     }
     root.appendChild(image);
+  }
+
+  export function createInventoryTile({
+    key,
+    selected,
+    title,
+    imageUrl,
+    label,
+    className = "",
+    volumeZero = false,
+    nameColor = "",
+    backgroundColor = "",
+  }) {
+    const tile = document.createElement("div");
+    tile.className = `stch-inv-tile${className ? ` ${className}` : ""}`;
+    tile.dataset.key = key;
+    tile.classList.toggle("selected", selected);
+    tile.classList.toggle("stch-volume-zero", volumeZero);
+    tile.title = title;
+    if (nameColor) tile.style.borderColor = nameColor;
+    if (backgroundColor) tile.style.backgroundColor = backgroundColor;
+    appendInventoryImage(tile, imageUrl, label);
+    return tile;
+  }
+
+  export function appendInventoryTileText(root, tagName, className, text, title = "") {
+    const element = document.createElement(tagName);
+    element.className = className;
+    element.textContent = text;
+    element.title = title;
+    root.appendChild(element);
+  }
+
+  export function setStatusText(id, text, type = "") {
+    const element = document.getElementById(id);
+    if (!element) return;
+    element.textContent = text || "";
+    element.className = `stch-status-text${type ? ` ${type}` : ""}`;
+    element.style.display = text ? "" : "none";
   }
 
   export function getFirstText(root, selectors) {
