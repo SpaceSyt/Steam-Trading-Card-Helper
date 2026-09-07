@@ -179,6 +179,8 @@ const { setStatus: setOrderStatus } = orderStatus;
   }
 
   export function getOrderPriceSourceLabel(priceSource) {
+    if (priceSource === "instant") return "速售";
+    if (priceSource === "follow") return "跟价";
     if (priceSource === "conservative") return "保守";
     if (priceSource === "balanced") return "平衡";
     if (priceSource === "aggressive") return "抢单";

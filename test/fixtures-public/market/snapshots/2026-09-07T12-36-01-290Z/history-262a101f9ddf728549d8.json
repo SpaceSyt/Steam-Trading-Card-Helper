@@ -1,0 +1,4115 @@
+{
+  "ecurrency": 1,
+  "prices": [
+    {
+      "time": 1768348800,
+      "price_median": 0.08904366940259933,
+      "purchases": 833
+    },
+    {
+      "time": 1768435200,
+      "price_median": 0.10434014350175858,
+      "purchases": 1436
+    },
+    {
+      "time": 1768521600,
+      "price_median": 0.08714954555034637,
+      "purchases": 557
+    },
+    {
+      "time": 1768608000,
+      "price_median": 0.09001370519399643,
+      "purchases": 502
+    },
+    {
+      "time": 1768694400,
+      "price_median": 0.09540501981973648,
+      "purchases": 420
+    },
+    {
+      "time": 1768780800,
+      "price_median": 0.08556211739778519,
+      "purchases": 320
+    },
+    {
+      "time": 1768867200,
+      "price_median": 0.08350495249032974,
+      "purchases": 270
+    },
+    {
+      "time": 1768953600,
+      "price_median": 0.10384838283061981,
+      "purchases": 262
+    },
+    {
+      "time": 1769040000,
+      "price_median": 0.10080360621213913,
+      "purchases": 275
+    },
+    {
+      "time": 1769126400,
+      "price_median": 0.09067880362272263,
+      "purchases": 272
+    },
+    {
+      "time": 1769212800,
+      "price_median": 0.08420650660991669,
+      "purchases": 243
+    },
+    {
+      "time": 1769299200,
+      "price_median": 0.07973185926675797,
+      "purchases": 262
+    },
+    {
+      "time": 1769385600,
+      "price_median": 0.08213220536708832,
+      "purchases": 204
+    },
+    {
+      "time": 1769472000,
+      "price_median": 0.073632150888443,
+      "purchases": 197
+    },
+    {
+      "time": 1769558400,
+      "price_median": 0.07498333603143692,
+      "purchases": 172
+    },
+    {
+      "time": 1769644800,
+      "price_median": 0.0816325768828392,
+      "purchases": 190
+    },
+    {
+      "time": 1769731200,
+      "price_median": 0.07024820894002914,
+      "purchases": 196
+    },
+    {
+      "time": 1769817600,
+      "price_median": 0.07940554618835449,
+      "purchases": 201
+    },
+    {
+      "time": 1769904000,
+      "price_median": 0.07139337062835693,
+      "purchases": 197
+    },
+    {
+      "time": 1769990400,
+      "price_median": 0.07051272690296173,
+      "purchases": 131
+    },
+    {
+      "time": 1770076800,
+      "price_median": 0.06690391153097153,
+      "purchases": 130
+    },
+    {
+      "time": 1770163200,
+      "price_median": 0.06902504712343216,
+      "purchases": 161
+    },
+    {
+      "time": 1770249600,
+      "price_median": 0.0768197551369667,
+      "purchases": 142
+    },
+    {
+      "time": 1770336000,
+      "price_median": 0.07489503920078278,
+      "purchases": 163
+    },
+    {
+      "time": 1770422400,
+      "price_median": 0.07435986399650574,
+      "purchases": 143
+    },
+    {
+      "time": 1770508800,
+      "price_median": 0.0803118646144867,
+      "purchases": 156
+    },
+    {
+      "time": 1770595200,
+      "price_median": 0.06884320825338364,
+      "purchases": 120
+    },
+    {
+      "time": 1770681600,
+      "price_median": 0.07478843629360199,
+      "purchases": 150
+    },
+    {
+      "time": 1770768000,
+      "price_median": 0.06845160573720932,
+      "purchases": 142
+    },
+    {
+      "time": 1770854400,
+      "price_median": 0.06542008370161057,
+      "purchases": 96
+    },
+    {
+      "time": 1770940800,
+      "price_median": 0.06925728917121887,
+      "purchases": 131
+    },
+    {
+      "time": 1771027200,
+      "price_median": 0.06760261207818985,
+      "purchases": 146
+    },
+    {
+      "time": 1771113600,
+      "price_median": 0.07140506058931351,
+      "purchases": 174
+    },
+    {
+      "time": 1771200000,
+      "price_median": 0.0742034986615181,
+      "purchases": 138
+    },
+    {
+      "time": 1771286400,
+      "price_median": 0.07270940393209457,
+      "purchases": 120
+    },
+    {
+      "time": 1771372800,
+      "price_median": 0.0633157268166542,
+      "purchases": 125
+    },
+    {
+      "time": 1771459200,
+      "price_median": 0.065717414021492,
+      "purchases": 182
+    },
+    {
+      "time": 1771545600,
+      "price_median": 0.07573633641004562,
+      "purchases": 146
+    },
+    {
+      "time": 1771632000,
+      "price_median": 0.07184416055679321,
+      "purchases": 147
+    },
+    {
+      "time": 1771718400,
+      "price_median": 0.06988992542028427,
+      "purchases": 172
+    },
+    {
+      "time": 1771804800,
+      "price_median": 0.07882699370384216,
+      "purchases": 161
+    },
+    {
+      "time": 1771891200,
+      "price_median": 0.07914574444293976,
+      "purchases": 158
+    },
+    {
+      "time": 1771977600,
+      "price_median": 0.07995933294296265,
+      "purchases": 144
+    },
+    {
+      "time": 1772064000,
+      "price_median": 0.07139753550291061,
+      "purchases": 100
+    },
+    {
+      "time": 1772150400,
+      "price_median": 0.07569113373756409,
+      "purchases": 149
+    },
+    {
+      "time": 1772236800,
+      "price_median": 0.07240628451108932,
+      "purchases": 128
+    },
+    {
+      "time": 1772323200,
+      "price_median": 0.07006768137216568,
+      "purchases": 160
+    },
+    {
+      "time": 1772409600,
+      "price_median": 0.07005415856838226,
+      "purchases": 135
+    },
+    {
+      "time": 1772496000,
+      "price_median": 0.0753328874707222,
+      "purchases": 110
+    },
+    {
+      "time": 1772582400,
+      "price_median": 0.07578986883163452,
+      "purchases": 123
+    },
+    {
+      "time": 1772668800,
+      "price_median": 0.07684694230556488,
+      "purchases": 154
+    },
+    {
+      "time": 1772755200,
+      "price_median": 0.07618479430675507,
+      "purchases": 127
+    },
+    {
+      "time": 1772841600,
+      "price_median": 0.06995964795351028,
+      "purchases": 144
+    },
+    {
+      "time": 1772928000,
+      "price_median": 0.07707590609788895,
+      "purchases": 148
+    },
+    {
+      "time": 1773014400,
+      "price_median": 0.07329300791025162,
+      "purchases": 140
+    },
+    {
+      "time": 1773100800,
+      "price_median": 0.07372037321329117,
+      "purchases": 147
+    },
+    {
+      "time": 1773187200,
+      "price_median": 0.07566134631633759,
+      "purchases": 118
+    },
+    {
+      "time": 1773273600,
+      "price_median": 0.07259611785411835,
+      "purchases": 144
+    },
+    {
+      "time": 1773360000,
+      "price_median": 0.0806896910071373,
+      "purchases": 136
+    },
+    {
+      "time": 1773446400,
+      "price_median": 0.06956131011247635,
+      "purchases": 154
+    },
+    {
+      "time": 1773532800,
+      "price_median": 0.07384424656629562,
+      "purchases": 156
+    },
+    {
+      "time": 1773619200,
+      "price_median": 0.07557163387537003,
+      "purchases": 160
+    },
+    {
+      "time": 1773705600,
+      "price_median": 0.07721802592277527,
+      "purchases": 101
+    },
+    {
+      "time": 1773792000,
+      "price_median": 0.07581163942813873,
+      "purchases": 110
+    },
+    {
+      "time": 1773878400,
+      "price_median": 0.0681394711136818,
+      "purchases": 155
+    },
+    {
+      "time": 1773964800,
+      "price_median": 0.07697966694831848,
+      "purchases": 173
+    },
+    {
+      "time": 1774051200,
+      "price_median": 0.06716637313365936,
+      "purchases": 176
+    },
+    {
+      "time": 1774137600,
+      "price_median": 0.07196962833404541,
+      "purchases": 198
+    },
+    {
+      "time": 1774224000,
+      "price_median": 0.07401873171329498,
+      "purchases": 157
+    },
+    {
+      "time": 1774310400,
+      "price_median": 0.07266389578580856,
+      "purchases": 151
+    },
+    {
+      "time": 1774396800,
+      "price_median": 0.06753774732351303,
+      "purchases": 133
+    },
+    {
+      "time": 1774483200,
+      "price_median": 0.07426796108484268,
+      "purchases": 177
+    },
+    {
+      "time": 1774569600,
+      "price_median": 0.07650371640920639,
+      "purchases": 145
+    },
+    {
+      "time": 1774656000,
+      "price_median": 0.06554153561592102,
+      "purchases": 101
+    },
+    {
+      "time": 1774742400,
+      "price_median": 0.07481890171766281,
+      "purchases": 167
+    },
+    {
+      "time": 1774828800,
+      "price_median": 0.0786939337849617,
+      "purchases": 132
+    },
+    {
+      "time": 1774915200,
+      "price_median": 0.07610645890235901,
+      "purchases": 121
+    },
+    {
+      "time": 1775001600,
+      "price_median": 0.0717661902308464,
+      "purchases": 121
+    },
+    {
+      "time": 1775088000,
+      "price_median": 0.06951326131820679,
+      "purchases": 127
+    },
+    {
+      "time": 1775174400,
+      "price_median": 0.06919834017753601,
+      "purchases": 97
+    },
+    {
+      "time": 1775260800,
+      "price_median": 0.07854732871055603,
+      "purchases": 117
+    },
+    {
+      "time": 1775347200,
+      "price_median": 0.08076005429029465,
+      "purchases": 127
+    },
+    {
+      "time": 1775433600,
+      "price_median": 0.07443614304065704,
+      "purchases": 87
+    },
+    {
+      "time": 1775520000,
+      "price_median": 0.07522911578416824,
+      "purchases": 120
+    },
+    {
+      "time": 1775606400,
+      "price_median": 0.06328725069761276,
+      "purchases": 90
+    },
+    {
+      "time": 1775692800,
+      "price_median": 0.06080392748117447,
+      "purchases": 123
+    },
+    {
+      "time": 1775779200,
+      "price_median": 0.07954075932502747,
+      "purchases": 117
+    },
+    {
+      "time": 1775865600,
+      "price_median": 0.06918326020240784,
+      "purchases": 133
+    },
+    {
+      "time": 1775952000,
+      "price_median": 0.07209222763776779,
+      "purchases": 145
+    },
+    {
+      "time": 1776038400,
+      "price_median": 0.07708075642585754,
+      "purchases": 94
+    },
+    {
+      "time": 1776124800,
+      "price_median": 0.07704315334558487,
+      "purchases": 120
+    },
+    {
+      "time": 1776211200,
+      "price_median": 0.06772638857364655,
+      "purchases": 80
+    },
+    {
+      "time": 1776297600,
+      "price_median": 0.07160453498363495,
+      "purchases": 109
+    },
+    {
+      "time": 1776384000,
+      "price_median": 0.07895854115486145,
+      "purchases": 133
+    },
+    {
+      "time": 1776470400,
+      "price_median": 0.08375333249568939,
+      "purchases": 188
+    },
+    {
+      "time": 1776556800,
+      "price_median": 0.08422284573316574,
+      "purchases": 156
+    },
+    {
+      "time": 1776643200,
+      "price_median": 0.08515290915966034,
+      "purchases": 124
+    },
+    {
+      "time": 1776729600,
+      "price_median": 0.0922449380159378,
+      "purchases": 156
+    },
+    {
+      "time": 1776816000,
+      "price_median": 0.08359631150960922,
+      "purchases": 100
+    },
+    {
+      "time": 1776902400,
+      "price_median": 0.07871817797422409,
+      "purchases": 92
+    },
+    {
+      "time": 1776988800,
+      "price_median": 0.07897522300481796,
+      "purchases": 85
+    },
+    {
+      "time": 1777075200,
+      "price_median": 0.08330750465393066,
+      "purchases": 120
+    },
+    {
+      "time": 1777161600,
+      "price_median": 0.08711956441402435,
+      "purchases": 137
+    },
+    {
+      "time": 1777248000,
+      "price_median": 0.08684953302145004,
+      "purchases": 111
+    },
+    {
+      "time": 1777334400,
+      "price_median": 0.07663470506668091,
+      "purchases": 84
+    },
+    {
+      "time": 1777420800,
+      "price_median": 0.08544117212295532,
+      "purchases": 109
+    },
+    {
+      "time": 1777507200,
+      "price_median": 0.08552991598844528,
+      "purchases": 124
+    },
+    {
+      "time": 1777593600,
+      "price_median": 0.08701895922422409,
+      "purchases": 120
+    },
+    {
+      "time": 1777680000,
+      "price_median": 0.08171544969081879,
+      "purchases": 107
+    },
+    {
+      "time": 1777766400,
+      "price_median": 0.0900481790304184,
+      "purchases": 140
+    },
+    {
+      "time": 1777852800,
+      "price_median": 0.08089981228113174,
+      "purchases": 94
+    },
+    {
+      "time": 1777939200,
+      "price_median": 0.08981736749410629,
+      "purchases": 124
+    },
+    {
+      "time": 1778025600,
+      "price_median": 0.09366049617528915,
+      "purchases": 91
+    },
+    {
+      "time": 1778112000,
+      "price_median": 0.09328152984380722,
+      "purchases": 91
+    },
+    {
+      "time": 1778198400,
+      "price_median": 0.0949859470129013,
+      "purchases": 91
+    },
+    {
+      "time": 1778284800,
+      "price_median": 0.08860941976308823,
+      "purchases": 92
+    },
+    {
+      "time": 1778371200,
+      "price_median": 0.09192194789648056,
+      "purchases": 125
+    },
+    {
+      "time": 1778457600,
+      "price_median": 0.09547287225723267,
+      "purchases": 117
+    },
+    {
+      "time": 1778544000,
+      "price_median": 0.10006003826856613,
+      "purchases": 112
+    },
+    {
+      "time": 1778630400,
+      "price_median": 0.1004435196518898,
+      "purchases": 133
+    },
+    {
+      "time": 1778716800,
+      "price_median": 0.0885242372751236,
+      "purchases": 93
+    },
+    {
+      "time": 1778803200,
+      "price_median": 0.08678048849105835,
+      "purchases": 105
+    },
+    {
+      "time": 1778889600,
+      "price_median": 0.09553747624158859,
+      "purchases": 117
+    },
+    {
+      "time": 1778976000,
+      "price_median": 0.10806545615196228,
+      "purchases": 145
+    },
+    {
+      "time": 1779062400,
+      "price_median": 0.08821684867143631,
+      "purchases": 91
+    },
+    {
+      "time": 1779148800,
+      "price_median": 0.0959634855389595,
+      "purchases": 76
+    },
+    {
+      "time": 1779235200,
+      "price_median": 0.08556336909532547,
+      "purchases": 77
+    },
+    {
+      "time": 1779321600,
+      "price_median": 0.09059865027666092,
+      "purchases": 91
+    },
+    {
+      "time": 1779408000,
+      "price_median": 0.08963897824287415,
+      "purchases": 75
+    },
+    {
+      "time": 1779494400,
+      "price_median": 0.09433618187904358,
+      "purchases": 105
+    },
+    {
+      "time": 1779580800,
+      "price_median": 0.09982886910438538,
+      "purchases": 105
+    },
+    {
+      "time": 1779667200,
+      "price_median": 0.08847135305404663,
+      "purchases": 89
+    },
+    {
+      "time": 1779753600,
+      "price_median": 0.09182066470384598,
+      "purchases": 98
+    },
+    {
+      "time": 1779840000,
+      "price_median": 0.09179767966270447,
+      "purchases": 84
+    },
+    {
+      "time": 1779926400,
+      "price_median": 0.0822615697979927,
+      "purchases": 99
+    },
+    {
+      "time": 1780012800,
+      "price_median": 0.08532752096652985,
+      "purchases": 77
+    },
+    {
+      "time": 1780099200,
+      "price_median": 0.08733800798654556,
+      "purchases": 107
+    },
+    {
+      "time": 1780185600,
+      "price_median": 0.09859873354434967,
+      "purchases": 121
+    },
+    {
+      "time": 1780272000,
+      "price_median": 0.09661055356264114,
+      "purchases": 100
+    },
+    {
+      "time": 1780358400,
+      "price_median": 0.08421943336725235,
+      "purchases": 86
+    },
+    {
+      "time": 1780444800,
+      "price_median": 0.08961737900972366,
+      "purchases": 91
+    },
+    {
+      "time": 1780531200,
+      "price_median": 0.09461271017789841,
+      "purchases": 95
+    },
+    {
+      "time": 1780617600,
+      "price_median": 0.08896223455667496,
+      "purchases": 99
+    },
+    {
+      "time": 1780704000,
+      "price_median": 0.08458861708641052,
+      "purchases": 123
+    },
+    {
+      "time": 1780790400,
+      "price_median": 0.0929226279258728,
+      "purchases": 121
+    },
+    {
+      "time": 1780876800,
+      "price_median": 0.08925972133874893,
+      "purchases": 104
+    },
+    {
+      "time": 1780963200,
+      "price_median": 0.09166377037763596,
+      "purchases": 90
+    },
+    {
+      "time": 1781049600,
+      "price_median": 0.08506349474191666,
+      "purchases": 126
+    },
+    {
+      "time": 1781136000,
+      "price_median": 0.09147880971431732,
+      "purchases": 80
+    },
+    {
+      "time": 1781222400,
+      "price_median": 0.08949431031942368,
+      "purchases": 106
+    },
+    {
+      "time": 1781308800,
+      "price_median": 0.091854989528656,
+      "purchases": 97
+    },
+    {
+      "time": 1781395200,
+      "price_median": 0.09258787333965302,
+      "purchases": 104
+    },
+    {
+      "time": 1781481600,
+      "price_median": 0.08306092023849487,
+      "purchases": 102
+    },
+    {
+      "time": 1781568000,
+      "price_median": 0.08819027990102768,
+      "purchases": 93
+    },
+    {
+      "time": 1781654400,
+      "price_median": 0.08893601596355438,
+      "purchases": 80
+    },
+    {
+      "time": 1781740800,
+      "price_median": 0.08494433015584946,
+      "purchases": 81
+    },
+    {
+      "time": 1781827200,
+      "price_median": 0.08298708498477936,
+      "purchases": 86
+    },
+    {
+      "time": 1781913600,
+      "price_median": 0.08520962297916412,
+      "purchases": 78
+    },
+    {
+      "time": 1782000000,
+      "price_median": 0.08788866549730301,
+      "purchases": 106
+    },
+    {
+      "time": 1782086400,
+      "price_median": 0.08987168967723846,
+      "purchases": 75
+    },
+    {
+      "time": 1782172800,
+      "price_median": 0.07925055921077728,
+      "purchases": 79
+    },
+    {
+      "time": 1782259200,
+      "price_median": 0.08571720123291016,
+      "purchases": 86
+    },
+    {
+      "time": 1782345600,
+      "price_median": 0.0856885090470314,
+      "purchases": 161
+    },
+    {
+      "time": 1782432000,
+      "price_median": 0.07764284312725067,
+      "purchases": 191
+    },
+    {
+      "time": 1782518400,
+      "price_median": 0.08508753031492233,
+      "purchases": 178
+    },
+    {
+      "time": 1782604800,
+      "price_median": 0.0778873935341835,
+      "purchases": 168
+    },
+    {
+      "time": 1782691200,
+      "price_median": 0.07829493284225464,
+      "purchases": 173
+    },
+    {
+      "time": 1782777600,
+      "price_median": 0.07773204147815704,
+      "purchases": 160
+    },
+    {
+      "time": 1782864000,
+      "price_median": 0.08359846472740173,
+      "purchases": 142
+    },
+    {
+      "time": 1782950400,
+      "price_median": 0.07570645958185196,
+      "purchases": 155
+    },
+    {
+      "time": 1783036800,
+      "price_median": 0.08904549479484558,
+      "purchases": 141
+    },
+    {
+      "time": 1783123200,
+      "price_median": 0.07560716569423676,
+      "purchases": 133
+    },
+    {
+      "time": 1783209600,
+      "price_median": 0.08863304555416107,
+      "purchases": 154
+    },
+    {
+      "time": 1783296000,
+      "price_median": 0.07766707241535187,
+      "purchases": 117
+    },
+    {
+      "time": 1783382400,
+      "price_median": 0.07506686449050903,
+      "purchases": 126
+    },
+    {
+      "time": 1783468800,
+      "price_median": 0.08165843784809113,
+      "purchases": 150
+    },
+    {
+      "time": 1783555200,
+      "price_median": 0.0807015523314476,
+      "purchases": 144
+    },
+    {
+      "time": 1783641600,
+      "price_median": 0.08308398723602295,
+      "purchases": 120
+    },
+    {
+      "time": 1783728000,
+      "price_median": 0.08399378508329391,
+      "purchases": 101
+    },
+    {
+      "time": 1783814400,
+      "price_median": 0.08184192329645157,
+      "purchases": 106
+    },
+    {
+      "time": 1783900800,
+      "price_median": 0.08325999230146408,
+      "purchases": 55
+    },
+    {
+      "time": 1783987200,
+      "price_median": 0.07191219925880432,
+      "purchases": 70
+    },
+    {
+      "time": 1784073600,
+      "price_median": 0.07444185018539429,
+      "purchases": 69
+    },
+    {
+      "time": 1784160000,
+      "price_median": 0.08011400699615479,
+      "purchases": 86
+    },
+    {
+      "time": 1784246400,
+      "price_median": 0.07938523590564728,
+      "purchases": 98
+    },
+    {
+      "time": 1784332800,
+      "price_median": 0.07350276410579681,
+      "purchases": 81
+    },
+    {
+      "time": 1784419200,
+      "price_median": 0.0792938694357872,
+      "purchases": 83
+    },
+    {
+      "time": 1784505600,
+      "price_median": 0.08322515338659286,
+      "purchases": 86
+    },
+    {
+      "time": 1784592000,
+      "price_median": 0.07310448586940765,
+      "purchases": 76
+    },
+    {
+      "time": 1784678400,
+      "price_median": 0.0667836144566536,
+      "purchases": 55
+    },
+    {
+      "time": 1784764800,
+      "price_median": 0.07067766785621643,
+      "purchases": 63
+    },
+    {
+      "time": 1784851200,
+      "price_median": 0.0756361111998558,
+      "purchases": 75
+    },
+    {
+      "time": 1784937600,
+      "price_median": 0.07466191053390503,
+      "purchases": 57
+    },
+    {
+      "time": 1785024000,
+      "price_median": 0.07688557356595993,
+      "purchases": 90
+    },
+    {
+      "time": 1785110400,
+      "price_median": 0.07148249447345734,
+      "purchases": 78
+    },
+    {
+      "time": 1785196800,
+      "price_median": 0.07870930433273315,
+      "purchases": 66
+    },
+    {
+      "time": 1785283200,
+      "price_median": 0.07224962115287781,
+      "purchases": 74
+    },
+    {
+      "time": 1785369600,
+      "price_median": 0.0727153867483139,
+      "purchases": 57
+    },
+    {
+      "time": 1785456000,
+      "price_median": 0.07435458898544312,
+      "purchases": 92
+    },
+    {
+      "time": 1785542400,
+      "price_median": 0.07843126356601715,
+      "purchases": 75
+    },
+    {
+      "time": 1785628800,
+      "price_median": 0.08107873797416687,
+      "purchases": 118
+    },
+    {
+      "time": 1785715200,
+      "price_median": 0.07888072729110718,
+      "purchases": 76
+    },
+    {
+      "time": 1785801600,
+      "price_median": 0.08556637167930603,
+      "purchases": 76
+    },
+    {
+      "time": 1785888000,
+      "price_median": 0.08757318556308746,
+      "purchases": 95
+    },
+    {
+      "time": 1785974400,
+      "price_median": 0.08555234223604202,
+      "purchases": 68
+    },
+    {
+      "time": 1786060800,
+      "price_median": 0.08344209939241409,
+      "purchases": 22
+    },
+    {
+      "time": 1786107600,
+      "price_median": 0.0670437216758728,
+      "purchases": 3
+    },
+    {
+      "time": 1786111200,
+      "price_median": 0.09000000357627869,
+      "purchases": 5
+    },
+    {
+      "time": 1786114800,
+      "price_median": 0.06770424544811249,
+      "purchases": 3
+    },
+    {
+      "time": 1786118400,
+      "price_median": 0.051169682294130325,
+      "purchases": 1
+    },
+    {
+      "time": 1786122000,
+      "price_median": 0.054538436233997345,
+      "purchases": 1
+    },
+    {
+      "time": 1786125600,
+      "price_median": 0.06168022006750107,
+      "purchases": 5
+    },
+    {
+      "time": 1786129200,
+      "price_median": 0.06551012396812439,
+      "purchases": 3
+    },
+    {
+      "time": 1786132800,
+      "price_median": 0.07632753998041153,
+      "purchases": 4
+    },
+    {
+      "time": 1786136400,
+      "price_median": 0.09451363235712051,
+      "purchases": 7
+    },
+    {
+      "time": 1786140000,
+      "price_median": 0.092708520591259,
+      "purchases": 5
+    },
+    {
+      "time": 1786147200,
+      "price_median": 0.07259102165699005,
+      "purchases": 1
+    },
+    {
+      "time": 1786150800,
+      "price_median": 0.11160674691200256,
+      "purchases": 2
+    },
+    {
+      "time": 1786154400,
+      "price_median": 0.07500000298023224,
+      "purchases": 2
+    },
+    {
+      "time": 1786165200,
+      "price_median": 0.08353615552186966,
+      "purchases": 1
+    },
+    {
+      "time": 1786168800,
+      "price_median": 0.10000000149011612,
+      "purchases": 2
+    },
+    {
+      "time": 1786172400,
+      "price_median": 0.10000000149011612,
+      "purchases": 6
+    },
+    {
+      "time": 1786176000,
+      "price_median": 0.08258377760648727,
+      "purchases": 1
+    },
+    {
+      "time": 1786179600,
+      "price_median": 0.06611371040344238,
+      "purchases": 2
+    },
+    {
+      "time": 1786183200,
+      "price_median": 0.0577598512172699,
+      "purchases": 2
+    },
+    {
+      "time": 1786186800,
+      "price_median": 0.07619882375001907,
+      "purchases": 4
+    },
+    {
+      "time": 1786190400,
+      "price_median": 0.08113114535808563,
+      "purchases": 5
+    },
+    {
+      "time": 1786194000,
+      "price_median": 0.08832325041294098,
+      "purchases": 2
+    },
+    {
+      "time": 1786201200,
+      "price_median": 0.08449805527925491,
+      "purchases": 2
+    },
+    {
+      "time": 1786204800,
+      "price_median": 0.07977646589279175,
+      "purchases": 10
+    },
+    {
+      "time": 1786208400,
+      "price_median": 0.09255623072385788,
+      "purchases": 7
+    },
+    {
+      "time": 1786212000,
+      "price_median": 0.09903864562511444,
+      "purchases": 13
+    },
+    {
+      "time": 1786215600,
+      "price_median": 0.09075676649808884,
+      "purchases": 5
+    },
+    {
+      "time": 1786226400,
+      "price_median": 0.0823773667216301,
+      "purchases": 2
+    },
+    {
+      "time": 1786230000,
+      "price_median": 0.09179370105266571,
+      "purchases": 3
+    },
+    {
+      "time": 1786233600,
+      "price_median": 0.06191616505384445,
+      "purchases": 1
+    },
+    {
+      "time": 1786237200,
+      "price_median": 0.06670382618904114,
+      "purchases": 4
+    },
+    {
+      "time": 1786240800,
+      "price_median": 0.06730017811059952,
+      "purchases": 1
+    },
+    {
+      "time": 1786244400,
+      "price_median": 0.08500000089406967,
+      "purchases": 2
+    },
+    {
+      "time": 1786248000,
+      "price_median": 0.06692762672901154,
+      "purchases": 2
+    },
+    {
+      "time": 1786258800,
+      "price_median": 0.09000000357627869,
+      "purchases": 2
+    },
+    {
+      "time": 1786262400,
+      "price_median": 0.07781915366649628,
+      "purchases": 2
+    },
+    {
+      "time": 1786266000,
+      "price_median": 0.0671018660068512,
+      "purchases": 6
+    },
+    {
+      "time": 1786269600,
+      "price_median": 0.08614423125982285,
+      "purchases": 4
+    },
+    {
+      "time": 1786273200,
+      "price_median": 0.08326616883277893,
+      "purchases": 7
+    },
+    {
+      "time": 1786276800,
+      "price_median": 0.09903864562511444,
+      "purchases": 6
+    },
+    {
+      "time": 1786280400,
+      "price_median": 0.0838095173239708,
+      "purchases": 2
+    },
+    {
+      "time": 1786284000,
+      "price_median": 0.11160674691200256,
+      "purchases": 5
+    },
+    {
+      "time": 1786287600,
+      "price_median": 0.07259102165699005,
+      "purchases": 4
+    },
+    {
+      "time": 1786291200,
+      "price_median": 0.07549335062503815,
+      "purchases": 4
+    },
+    {
+      "time": 1786294800,
+      "price_median": 0.09255623072385788,
+      "purchases": 5
+    },
+    {
+      "time": 1786298400,
+      "price_median": 0.09255623072385788,
+      "purchases": 4
+    },
+    {
+      "time": 1786302000,
+      "price_median": 0.08990287035703659,
+      "purchases": 3
+    },
+    {
+      "time": 1786305600,
+      "price_median": 0.09113655984401703,
+      "purchases": 4
+    },
+    {
+      "time": 1786309200,
+      "price_median": 0.09103166311979294,
+      "purchases": 4
+    },
+    {
+      "time": 1786312800,
+      "price_median": 0.08368752151727676,
+      "purchases": 4
+    },
+    {
+      "time": 1786316400,
+      "price_median": 0.061657730489969254,
+      "purchases": 2
+    },
+    {
+      "time": 1786320000,
+      "price_median": 0.0879276841878891,
+      "purchases": 2
+    },
+    {
+      "time": 1786330800,
+      "price_median": 0.08098670095205307,
+      "purchases": 1
+    },
+    {
+      "time": 1786334400,
+      "price_median": 0.09000000357627869,
+      "purchases": 1
+    },
+    {
+      "time": 1786341600,
+      "price_median": 0.06191616505384445,
+      "purchases": 1
+    },
+    {
+      "time": 1786345200,
+      "price_median": 0.08538943529129028,
+      "purchases": 1
+    },
+    {
+      "time": 1786348800,
+      "price_median": 0.07682131975889206,
+      "purchases": 2
+    },
+    {
+      "time": 1786352400,
+      "price_median": 0.09000000357627869,
+      "purchases": 1
+    },
+    {
+      "time": 1786356000,
+      "price_median": 0.08331568539142609,
+      "purchases": 7
+    },
+    {
+      "time": 1786359600,
+      "price_median": 0.06730017811059952,
+      "purchases": 4
+    },
+    {
+      "time": 1786363200,
+      "price_median": 0.08473264425992966,
+      "purchases": 6
+    },
+    {
+      "time": 1786366800,
+      "price_median": 0.09075676649808884,
+      "purchases": 6
+    },
+    {
+      "time": 1786370400,
+      "price_median": 0.10412576049566269,
+      "purchases": 5
+    },
+    {
+      "time": 1786374000,
+      "price_median": 0.09451363235712051,
+      "purchases": 5
+    },
+    {
+      "time": 1786381200,
+      "price_median": 0.06460817158222198,
+      "purchases": 1
+    },
+    {
+      "time": 1786384800,
+      "price_median": 0.07898522168397903,
+      "purchases": 2
+    },
+    {
+      "time": 1786388400,
+      "price_median": 0.08831706643104553,
+      "purchases": 6
+    },
+    {
+      "time": 1786392000,
+      "price_median": 0.08968512713909149,
+      "purchases": 4
+    },
+    {
+      "time": 1786395600,
+      "price_median": 0.0789329782128334,
+      "purchases": 2
+    },
+    {
+      "time": 1786399200,
+      "price_median": 0.09221892058849335,
+      "purchases": 6
+    },
+    {
+      "time": 1786402800,
+      "price_median": 0.09238027781248093,
+      "purchases": 1
+    },
+    {
+      "time": 1786406400,
+      "price_median": 0.08832420408725739,
+      "purchases": 3
+    },
+    {
+      "time": 1786410000,
+      "price_median": 0.07683967798948288,
+      "purchases": 3
+    },
+    {
+      "time": 1786413600,
+      "price_median": 0.12392496317625046,
+      "purchases": 1
+    },
+    {
+      "time": 1786424400,
+      "price_median": 0.06345954537391663,
+      "purchases": 1
+    },
+    {
+      "time": 1786428000,
+      "price_median": 0.07683967798948288,
+      "purchases": 3
+    },
+    {
+      "time": 1786431600,
+      "price_median": 0.09238027781248093,
+      "purchases": 1
+    },
+    {
+      "time": 1786435200,
+      "price_median": 0.07154738157987595,
+      "purchases": 2
+    },
+    {
+      "time": 1786438800,
+      "price_median": 0.07545156031847,
+      "purchases": 5
+    },
+    {
+      "time": 1786442400,
+      "price_median": 0.08056902140378952,
+      "purchases": 3
+    },
+    {
+      "time": 1786446000,
+      "price_median": 0.05888074263930321,
+      "purchases": 2
+    },
+    {
+      "time": 1786456800,
+      "price_median": 0.11125335097312927,
+      "purchases": 3
+    },
+    {
+      "time": 1786460400,
+      "price_median": 0.06707791984081268,
+      "purchases": 2
+    },
+    {
+      "time": 1786464000,
+      "price_median": 0.07000000029802322,
+      "purchases": 3
+    },
+    {
+      "time": 1786467600,
+      "price_median": 0.07901638001203537,
+      "purchases": 12
+    },
+    {
+      "time": 1786471200,
+      "price_median": 0.09021793305873871,
+      "purchases": 7
+    },
+    {
+      "time": 1786474800,
+      "price_median": 0.08773542195558548,
+      "purchases": 6
+    },
+    {
+      "time": 1786478400,
+      "price_median": 0.07500000298023224,
+      "purchases": 4
+    },
+    {
+      "time": 1786482000,
+      "price_median": 0.09083442389965057,
+      "purchases": 1
+    },
+    {
+      "time": 1786485600,
+      "price_median": 0.08696398884057999,
+      "purchases": 1
+    },
+    {
+      "time": 1786492800,
+      "price_median": 0.07500000298023224,
+      "purchases": 4
+    },
+    {
+      "time": 1786496400,
+      "price_median": 0.07999999821186066,
+      "purchases": 2
+    },
+    {
+      "time": 1786500000,
+      "price_median": 0.06538224220275879,
+      "purchases": 2
+    },
+    {
+      "time": 1786503600,
+      "price_median": 0.053592000156641006,
+      "purchases": 1
+    },
+    {
+      "time": 1786510800,
+      "price_median": 0.08830338716506958,
+      "purchases": 5
+    },
+    {
+      "time": 1786514400,
+      "price_median": 0.054644953459501266,
+      "purchases": 1
+    },
+    {
+      "time": 1786518000,
+      "price_median": 0.09083442389965057,
+      "purchases": 3
+    },
+    {
+      "time": 1786521600,
+      "price_median": 0.08472064882516861,
+      "purchases": 2
+    },
+    {
+      "time": 1786525200,
+      "price_median": 0.0912468358874321,
+      "purchases": 7
+    },
+    {
+      "time": 1786528800,
+      "price_median": 0.06579750776290894,
+      "purchases": 2
+    },
+    {
+      "time": 1786536000,
+      "price_median": 0.06456311792135239,
+      "purchases": 4
+    },
+    {
+      "time": 1786539600,
+      "price_median": 0.08145983517169952,
+      "purchases": 4
+    },
+    {
+      "time": 1786543200,
+      "price_median": 0.09000000357627869,
+      "purchases": 11
+    },
+    {
+      "time": 1786546800,
+      "price_median": 0.09230830520391464,
+      "purchases": 7
+    },
+    {
+      "time": 1786550400,
+      "price_median": 0.06470894068479538,
+      "purchases": 3
+    },
+    {
+      "time": 1786554000,
+      "price_median": 0.06173323094844818,
+      "purchases": 1
+    },
+    {
+      "time": 1786557600,
+      "price_median": 0.07257077842950821,
+      "purchases": 1
+    },
+    {
+      "time": 1786561200,
+      "price_median": 0.09000000357627869,
+      "purchases": 9
+    },
+    {
+      "time": 1786564800,
+      "price_median": 0.08685886114835739,
+      "purchases": 5
+    },
+    {
+      "time": 1786568400,
+      "price_median": 0.07572776824235916,
+      "purchases": 2
+    },
+    {
+      "time": 1786572000,
+      "price_median": 0.07529307156801224,
+      "purchases": 4
+    },
+    {
+      "time": 1786575600,
+      "price_median": 0.09000000357627869,
+      "purchases": 8
+    },
+    {
+      "time": 1786579200,
+      "price_median": 0.08876460045576096,
+      "purchases": 4
+    },
+    {
+      "time": 1786582800,
+      "price_median": 0.10000000149011612,
+      "purchases": 1
+    },
+    {
+      "time": 1786586400,
+      "price_median": 0.0616735965013504,
+      "purchases": 2
+    },
+    {
+      "time": 1786590000,
+      "price_median": 0.10000000149011612,
+      "purchases": 3
+    },
+    {
+      "time": 1786600800,
+      "price_median": 0.10000000149011612,
+      "purchases": 1
+    },
+    {
+      "time": 1786604400,
+      "price_median": 0.10000000149011612,
+      "purchases": 1
+    },
+    {
+      "time": 1786608000,
+      "price_median": 0.09108704328536987,
+      "purchases": 1
+    },
+    {
+      "time": 1786611600,
+      "price_median": 0.08814835548400879,
+      "purchases": 7
+    },
+    {
+      "time": 1786615200,
+      "price_median": 0.0927431508898735,
+      "purchases": 2
+    },
+    {
+      "time": 1786618800,
+      "price_median": 0.09094194322824478,
+      "purchases": 5
+    },
+    {
+      "time": 1786622400,
+      "price_median": 0.09108704328536987,
+      "purchases": 4
+    },
+    {
+      "time": 1786626000,
+      "price_median": 0.0616735965013504,
+      "purchases": 1
+    },
+    {
+      "time": 1786629600,
+      "price_median": 0.09108704328536987,
+      "purchases": 4
+    },
+    {
+      "time": 1786633200,
+      "price_median": 0.07767768204212189,
+      "purchases": 2
+    },
+    {
+      "time": 1786636800,
+      "price_median": 0.09253671020269394,
+      "purchases": 19
+    },
+    {
+      "time": 1786640400,
+      "price_median": 0.10816754400730133,
+      "purchases": 3
+    },
+    {
+      "time": 1786644000,
+      "price_median": 0.0935070738196373,
+      "purchases": 2
+    },
+    {
+      "time": 1786647600,
+      "price_median": 0.0616735965013504,
+      "purchases": 5
+    },
+    {
+      "time": 1786651200,
+      "price_median": 0.09183456748723984,
+      "purchases": 11
+    },
+    {
+      "time": 1786654800,
+      "price_median": 0.09373040497303009,
+      "purchases": 7
+    },
+    {
+      "time": 1786658400,
+      "price_median": 0.0635911375284195,
+      "purchases": 2
+    },
+    {
+      "time": 1786662000,
+      "price_median": 0.09180817008018494,
+      "purchases": 5
+    },
+    {
+      "time": 1786669200,
+      "price_median": 0.08466069400310516,
+      "purchases": 6
+    },
+    {
+      "time": 1786676400,
+      "price_median": 0.09420693665742874,
+      "purchases": 1
+    },
+    {
+      "time": 1786683600,
+      "price_median": 0.08104153722524643,
+      "purchases": 1
+    },
+    {
+      "time": 1786690800,
+      "price_median": 0.06159426271915436,
+      "purchases": 1
+    },
+    {
+      "time": 1786694400,
+      "price_median": 0.07322385907173157,
+      "purchases": 2
+    },
+    {
+      "time": 1786698000,
+      "price_median": 0.06427227705717087,
+      "purchases": 3
+    },
+    {
+      "time": 1786701600,
+      "price_median": 0.07760563492774963,
+      "purchases": 1
+    },
+    {
+      "time": 1786705200,
+      "price_median": 0.0815301388502121,
+      "purchases": 1
+    },
+    {
+      "time": 1786712400,
+      "price_median": 0.06673375517129898,
+      "purchases": 2
+    },
+    {
+      "time": 1786716000,
+      "price_median": 0.06233101338148117,
+      "purchases": 4
+    },
+    {
+      "time": 1786719600,
+      "price_median": 0.07854831218719482,
+      "purchases": 2
+    },
+    {
+      "time": 1786723200,
+      "price_median": 0.07395949214696884,
+      "purchases": 2
+    },
+    {
+      "time": 1786726800,
+      "price_median": 0.09000000357627869,
+      "purchases": 7
+    },
+    {
+      "time": 1786730400,
+      "price_median": 0.08915949612855911,
+      "purchases": 10
+    },
+    {
+      "time": 1786741200,
+      "price_median": 0.09127640724182129,
+      "purchases": 10
+    },
+    {
+      "time": 1786744800,
+      "price_median": 0.0948529988527298,
+      "purchases": 7
+    },
+    {
+      "time": 1786748400,
+      "price_median": 0.10000000149011612,
+      "purchases": 8
+    },
+    {
+      "time": 1786752000,
+      "price_median": 0.09359437972307205,
+      "purchases": 1
+    },
+    {
+      "time": 1786755600,
+      "price_median": 0.061734892427921295,
+      "purchases": 1
+    },
+    {
+      "time": 1786759200,
+      "price_median": 0.05636663734912872,
+      "purchases": 1
+    },
+    {
+      "time": 1786762800,
+      "price_median": 0.0949999988079071,
+      "purchases": 2
+    },
+    {
+      "time": 1786766400,
+      "price_median": 0.10000000149011612,
+      "purchases": 4
+    },
+    {
+      "time": 1786770000,
+      "price_median": 0.09202753752470016,
+      "purchases": 7
+    },
+    {
+      "time": 1786777200,
+      "price_median": 0.09269724786281586,
+      "purchases": 3
+    },
+    {
+      "time": 1786780800,
+      "price_median": 0.09000000357627869,
+      "purchases": 5
+    },
+    {
+      "time": 1786784400,
+      "price_median": 0.09422080963850021,
+      "purchases": 3
+    },
+    {
+      "time": 1786788000,
+      "price_median": 0.07149595022201538,
+      "purchases": 4
+    },
+    {
+      "time": 1786791600,
+      "price_median": 0.06441901624202728,
+      "purchases": 3
+    },
+    {
+      "time": 1786795200,
+      "price_median": 0.08237066119909286,
+      "purchases": 4
+    },
+    {
+      "time": 1786798800,
+      "price_median": 0.06441901624202728,
+      "purchases": 3
+    },
+    {
+      "time": 1786802400,
+      "price_median": 0.08500000089406967,
+      "purchases": 6
+    },
+    {
+      "time": 1786806000,
+      "price_median": 0.08236429840326309,
+      "purchases": 1
+    },
+    {
+      "time": 1786809600,
+      "price_median": 0.08307740837335587,
+      "purchases": 1
+    },
+    {
+      "time": 1786813200,
+      "price_median": 0.09000000357627869,
+      "purchases": 8
+    },
+    {
+      "time": 1786816800,
+      "price_median": 0.07133980095386505,
+      "purchases": 2
+    },
+    {
+      "time": 1786820400,
+      "price_median": 0.07623569667339325,
+      "purchases": 2
+    },
+    {
+      "time": 1786824000,
+      "price_median": 0.07999999821186066,
+      "purchases": 6
+    },
+    {
+      "time": 1786827600,
+      "price_median": 0.06833978742361069,
+      "purchases": 3
+    },
+    {
+      "time": 1786831200,
+      "price_median": 0.07000000029802322,
+      "purchases": 1
+    },
+    {
+      "time": 1786834800,
+      "price_median": 0.08094470947980881,
+      "purchases": 1
+    },
+    {
+      "time": 1786842000,
+      "price_median": 0.07622932642698288,
+      "purchases": 6
+    },
+    {
+      "time": 1786845600,
+      "price_median": 0.0947655588388443,
+      "purchases": 4
+    },
+    {
+      "time": 1786849200,
+      "price_median": 0.05956617742776871,
+      "purchases": 4
+    },
+    {
+      "time": 1786860000,
+      "price_median": 0.07594450563192368,
+      "purchases": 2
+    },
+    {
+      "time": 1786863600,
+      "price_median": 0.07079041004180908,
+      "purchases": 2
+    },
+    {
+      "time": 1786867200,
+      "price_median": 0.0947655588388443,
+      "purchases": 9
+    },
+    {
+      "time": 1786870800,
+      "price_median": 0.07221762835979462,
+      "purchases": 2
+    },
+    {
+      "time": 1786874400,
+      "price_median": 0.07341596484184265,
+      "purchases": 6
+    },
+    {
+      "time": 1786878000,
+      "price_median": 0.08130747079849243,
+      "purchases": 2
+    },
+    {
+      "time": 1786881600,
+      "price_median": 0.09508144110441208,
+      "purchases": 2
+    },
+    {
+      "time": 1786885200,
+      "price_median": 0.08027074486017227,
+      "purchases": 2
+    },
+    {
+      "time": 1786888800,
+      "price_median": 0.06332316994667053,
+      "purchases": 9
+    },
+    {
+      "time": 1786892400,
+      "price_median": 0.07802660763263702,
+      "purchases": 3
+    },
+    {
+      "time": 1786896000,
+      "price_median": 0.07948566228151321,
+      "purchases": 2
+    },
+    {
+      "time": 1786899600,
+      "price_median": 0.061734892427921295,
+      "purchases": 7
+    },
+    {
+      "time": 1786903200,
+      "price_median": 0.08094470947980881,
+      "purchases": 5
+    },
+    {
+      "time": 1786906800,
+      "price_median": 0.07000371068716049,
+      "purchases": 5
+    },
+    {
+      "time": 1786910400,
+      "price_median": 0.08885631710290909,
+      "purchases": 6
+    },
+    {
+      "time": 1786914000,
+      "price_median": 0.0925082415342331,
+      "purchases": 1
+    },
+    {
+      "time": 1786917600,
+      "price_median": 0.10000000149011612,
+      "purchases": 11
+    },
+    {
+      "time": 1786921200,
+      "price_median": 0.09350594878196716,
+      "purchases": 6
+    },
+    {
+      "time": 1786924800,
+      "price_median": 0.09700874984264374,
+      "purchases": 3
+    },
+    {
+      "time": 1786928400,
+      "price_median": 0.06462135910987854,
+      "purchases": 2
+    },
+    {
+      "time": 1786932000,
+      "price_median": 0.10407176613807678,
+      "purchases": 3
+    },
+    {
+      "time": 1786935600,
+      "price_median": 0.1005755215883255,
+      "purchases": 1
+    },
+    {
+      "time": 1786939200,
+      "price_median": 0.08999459445476532,
+      "purchases": 8
+    },
+    {
+      "time": 1786942800,
+      "price_median": 0.09569300711154938,
+      "purchases": 1
+    },
+    {
+      "time": 1786950000,
+      "price_median": 0.11334975063800812,
+      "purchases": 2
+    },
+    {
+      "time": 1786953600,
+      "price_median": 0.061734892427921295,
+      "purchases": 1
+    },
+    {
+      "time": 1786957200,
+      "price_median": 0.08920013159513474,
+      "purchases": 6
+    },
+    {
+      "time": 1786960800,
+      "price_median": 0.09288991987705231,
+      "purchases": 6
+    },
+    {
+      "time": 1786964400,
+      "price_median": 0.07677893340587616,
+      "purchases": 2
+    },
+    {
+      "time": 1786968000,
+      "price_median": 0.06441901624202728,
+      "purchases": 3
+    },
+    {
+      "time": 1786971600,
+      "price_median": 0.11182604730129242,
+      "purchases": 2
+    },
+    {
+      "time": 1786975200,
+      "price_median": 0.06680621206760406,
+      "purchases": 4
+    },
+    {
+      "time": 1786978800,
+      "price_median": 0.09126026928424835,
+      "purchases": 3
+    },
+    {
+      "time": 1786982400,
+      "price_median": 0.0925082415342331,
+      "purchases": 5
+    },
+    {
+      "time": 1786986000,
+      "price_median": 0.0948529988527298,
+      "purchases": 10
+    },
+    {
+      "time": 1786989600,
+      "price_median": 0.0933208242058754,
+      "purchases": 4
+    },
+    {
+      "time": 1786993200,
+      "price_median": 0.10153453052043915,
+      "purchases": 6
+    },
+    {
+      "time": 1786996800,
+      "price_median": 0.10434168577194214,
+      "purchases": 6
+    },
+    {
+      "time": 1787000400,
+      "price_median": 0.0930425375699997,
+      "purchases": 1
+    },
+    {
+      "time": 1787004000,
+      "price_median": 0.08868461847305298,
+      "purchases": 2
+    },
+    {
+      "time": 1787007600,
+      "price_median": 0.09274816513061523,
+      "purchases": 7
+    },
+    {
+      "time": 1787011200,
+      "price_median": 0.047130975872278214,
+      "purchases": 2
+    },
+    {
+      "time": 1787022000,
+      "price_median": 0.061871159821748734,
+      "purchases": 2
+    },
+    {
+      "time": 1787025600,
+      "price_median": 0.09245623648166656,
+      "purchases": 7
+    },
+    {
+      "time": 1787029200,
+      "price_median": 0.07656005024909973,
+      "purchases": 3
+    },
+    {
+      "time": 1787032800,
+      "price_median": 0.06461559981107712,
+      "purchases": 1
+    },
+    {
+      "time": 1787036400,
+      "price_median": 0.0843874141573906,
+      "purchases": 1
+    },
+    {
+      "time": 1787040000,
+      "price_median": 0.09274816513061523,
+      "purchases": 5
+    },
+    {
+      "time": 1787043600,
+      "price_median": 0.09262745827436447,
+      "purchases": 13
+    },
+    {
+      "time": 1787047200,
+      "price_median": 0.09415752440690994,
+      "purchases": 9
+    },
+    {
+      "time": 1787050800,
+      "price_median": 0.11149170249700546,
+      "purchases": 1
+    },
+    {
+      "time": 1787054400,
+      "price_median": 0.09000000357627869,
+      "purchases": 1
+    },
+    {
+      "time": 1787058000,
+      "price_median": 0.08922835439443588,
+      "purchases": 6
+    },
+    {
+      "time": 1787061600,
+      "price_median": 0.09868275374174118,
+      "purchases": 9
+    },
+    {
+      "time": 1787065200,
+      "price_median": 0.09245623648166656,
+      "purchases": 9
+    },
+    {
+      "time": 1787068800,
+      "price_median": 0.10434168577194214,
+      "purchases": 2
+    },
+    {
+      "time": 1787072400,
+      "price_median": 0.06649874895811081,
+      "purchases": 1
+    },
+    {
+      "time": 1787076000,
+      "price_median": 0.08005986362695694,
+      "purchases": 7
+    },
+    {
+      "time": 1787083200,
+      "price_median": 0.09000000357627869,
+      "purchases": 10
+    },
+    {
+      "time": 1787086800,
+      "price_median": 0.10000000149011612,
+      "purchases": 3
+    },
+    {
+      "time": 1787097600,
+      "price_median": 0.08668143302202225,
+      "purchases": 2
+    },
+    {
+      "time": 1787104800,
+      "price_median": 0.06456121802330017,
+      "purchases": 3
+    },
+    {
+      "time": 1787108400,
+      "price_median": 0.07999999821186066,
+      "purchases": 7
+    },
+    {
+      "time": 1787112000,
+      "price_median": 0.09374973177909851,
+      "purchases": 8
+    },
+    {
+      "time": 1787119200,
+      "price_median": 0.09245623648166656,
+      "purchases": 7
+    },
+    {
+      "time": 1787122800,
+      "price_median": 0.08655119687318802,
+      "purchases": 1
+    },
+    {
+      "time": 1787130000,
+      "price_median": 0.08356479555368423,
+      "purchases": 1
+    },
+    {
+      "time": 1787133600,
+      "price_median": 0.09719645231962204,
+      "purchases": 4
+    },
+    {
+      "time": 1787137200,
+      "price_median": 0.0935705378651619,
+      "purchases": 4
+    },
+    {
+      "time": 1787144400,
+      "price_median": 0.08534421771764755,
+      "purchases": 7
+    },
+    {
+      "time": 1787148000,
+      "price_median": 0.10847145318984985,
+      "purchases": 3
+    },
+    {
+      "time": 1787151600,
+      "price_median": 0.10847145318984985,
+      "purchases": 3
+    },
+    {
+      "time": 1787155200,
+      "price_median": 0.10434168577194214,
+      "purchases": 10
+    },
+    {
+      "time": 1787162400,
+      "price_median": 0.08611182123422623,
+      "purchases": 6
+    },
+    {
+      "time": 1787166000,
+      "price_median": 0.09321744740009308,
+      "purchases": 8
+    },
+    {
+      "time": 1787169600,
+      "price_median": 0.09704559296369553,
+      "purchases": 6
+    },
+    {
+      "time": 1787173200,
+      "price_median": 0.10000000149011612,
+      "purchases": 2
+    },
+    {
+      "time": 1787176800,
+      "price_median": 0.09549623727798462,
+      "purchases": 5
+    },
+    {
+      "time": 1787187600,
+      "price_median": 0.09386488050222397,
+      "purchases": 11
+    },
+    {
+      "time": 1787191200,
+      "price_median": 0.06469705700874329,
+      "purchases": 1
+    },
+    {
+      "time": 1787194800,
+      "price_median": 0.10000000149011612,
+      "purchases": 12
+    },
+    {
+      "time": 1787198400,
+      "price_median": 0.09750329703092575,
+      "purchases": 4
+    },
+    {
+      "time": 1787205600,
+      "price_median": 0.05700155347585678,
+      "purchases": 2
+    },
+    {
+      "time": 1787209200,
+      "price_median": 0.09719957411289215,
+      "purchases": 1
+    },
+    {
+      "time": 1787212800,
+      "price_median": 0.09130869060754776,
+      "purchases": 5
+    },
+    {
+      "time": 1787220000,
+      "price_median": 0.0847940742969513,
+      "purchases": 5
+    },
+    {
+      "time": 1787223600,
+      "price_median": 0.09704559296369553,
+      "purchases": 10
+    },
+    {
+      "time": 1787227200,
+      "price_median": 0.08714619278907776,
+      "purchases": 1
+    },
+    {
+      "time": 1787234400,
+      "price_median": 0.08233612030744553,
+      "purchases": 5
+    },
+    {
+      "time": 1787238000,
+      "price_median": 0.08016937971115112,
+      "purchases": 6
+    },
+    {
+      "time": 1787245200,
+      "price_median": 0.07971206307411194,
+      "purchases": 2
+    },
+    {
+      "time": 1787252400,
+      "price_median": 0.09000000357627869,
+      "purchases": 1
+    },
+    {
+      "time": 1787256000,
+      "price_median": 0.08656444400548935,
+      "purchases": 3
+    },
+    {
+      "time": 1787263200,
+      "price_median": 0.09000000357627869,
+      "purchases": 5
+    },
+    {
+      "time": 1787266800,
+      "price_median": 0.09248221665620804,
+      "purchases": 6
+    },
+    {
+      "time": 1787274000,
+      "price_median": 0.10000000149011612,
+      "purchases": 7
+    },
+    {
+      "time": 1787288400,
+      "price_median": 0.059975799173116684,
+      "purchases": 2
+    },
+    {
+      "time": 1787295600,
+      "price_median": 0.07419893890619278,
+      "purchases": 3
+    },
+    {
+      "time": 1787302800,
+      "price_median": 0.08354736119508743,
+      "purchases": 4
+    },
+    {
+      "time": 1787306400,
+      "price_median": 0.05501454696059227,
+      "purchases": 1
+    },
+    {
+      "time": 1787317200,
+      "price_median": 0.09345994889736176,
+      "purchases": 4
+    },
+    {
+      "time": 1787320800,
+      "price_median": 0.07999999821186066,
+      "purchases": 3
+    },
+    {
+      "time": 1787324400,
+      "price_median": 0.09172997623682022,
+      "purchases": 4
+    },
+    {
+      "time": 1787328000,
+      "price_median": 0.062231335788965225,
+      "purchases": 1
+    },
+    {
+      "time": 1787331600,
+      "price_median": 0.06489425152540207,
+      "purchases": 3
+    },
+    {
+      "time": 1787335200,
+      "price_median": 0.0755966380238533,
+      "purchases": 1
+    },
+    {
+      "time": 1787342400,
+      "price_median": 0.07000000029802322,
+      "purchases": 3
+    },
+    {
+      "time": 1787346000,
+      "price_median": 0.0644218698143959,
+      "purchases": 9
+    },
+    {
+      "time": 1787349600,
+      "price_median": 0.06497575342655182,
+      "purchases": 1
+    },
+    {
+      "time": 1787353200,
+      "price_median": 0.07907380163669586,
+      "purchases": 5
+    },
+    {
+      "time": 1787356800,
+      "price_median": 0.07693761587142944,
+      "purchases": 2
+    },
+    {
+      "time": 1787360400,
+      "price_median": 0.09000000357627869,
+      "purchases": 1
+    },
+    {
+      "time": 1787374800,
+      "price_median": 0.06487110257148743,
+      "purchases": 1
+    },
+    {
+      "time": 1787378400,
+      "price_median": 0.07365717738866806,
+      "purchases": 2
+    },
+    {
+      "time": 1787382000,
+      "price_median": 0.08050977438688278,
+      "purchases": 1
+    },
+    {
+      "time": 1787385600,
+      "price_median": 0.09612216055393219,
+      "purchases": 2
+    },
+    {
+      "time": 1787389200,
+      "price_median": 0.0892135426402092,
+      "purchases": 5
+    },
+    {
+      "time": 1787392800,
+      "price_median": 0.08016549050807953,
+      "purchases": 1
+    },
+    {
+      "time": 1787396400,
+      "price_median": 0.06451757252216339,
+      "purchases": 4
+    },
+    {
+      "time": 1787400000,
+      "price_median": 0.1050974652171135,
+      "purchases": 1
+    },
+    {
+      "time": 1787403600,
+      "price_median": 0.09030498564243317,
+      "purchases": 3
+    },
+    {
+      "time": 1787407200,
+      "price_median": 0.0913800522685051,
+      "purchases": 4
+    },
+    {
+      "time": 1787410800,
+      "price_median": 0.0928041934967041,
+      "purchases": 13
+    },
+    {
+      "time": 1787418000,
+      "price_median": 0.05685378238558769,
+      "purchases": 3
+    },
+    {
+      "time": 1787421600,
+      "price_median": 0.08883899450302124,
+      "purchases": 4
+    },
+    {
+      "time": 1787425200,
+      "price_median": 0.07908216863870621,
+      "purchases": 1
+    },
+    {
+      "time": 1787428800,
+      "price_median": 0.0832541286945343,
+      "purchases": 2
+    },
+    {
+      "time": 1787432400,
+      "price_median": 0.0872243195772171,
+      "purchases": 6
+    },
+    {
+      "time": 1787439600,
+      "price_median": 0.06333281844854355,
+      "purchases": 4
+    },
+    {
+      "time": 1787443200,
+      "price_median": 0.06355462223291397,
+      "purchases": 5
+    },
+    {
+      "time": 1787446800,
+      "price_median": 0.07268693298101425,
+      "purchases": 2
+    },
+    {
+      "time": 1787450400,
+      "price_median": 0.07521653920412064,
+      "purchases": 1
+    },
+    {
+      "time": 1787454000,
+      "price_median": 0.09341996163129807,
+      "purchases": 3
+    },
+    {
+      "time": 1787461200,
+      "price_median": 0.06451757252216339,
+      "purchases": 2
+    },
+    {
+      "time": 1787468400,
+      "price_median": 0.08004511892795563,
+      "purchases": 1
+    },
+    {
+      "time": 1787472000,
+      "price_median": 0.05957840383052826,
+      "purchases": 2
+    },
+    {
+      "time": 1787475600,
+      "price_median": 0.06468647718429565,
+      "purchases": 4
+    },
+    {
+      "time": 1787479200,
+      "price_median": 0.08575887978076935,
+      "purchases": 8
+    },
+    {
+      "time": 1787482800,
+      "price_median": 0.08967460691928864,
+      "purchases": 7
+    },
+    {
+      "time": 1787490000,
+      "price_median": 0.09064558148384094,
+      "purchases": 4
+    },
+    {
+      "time": 1787493600,
+      "price_median": 0.08268571645021439,
+      "purchases": 2
+    },
+    {
+      "time": 1787497200,
+      "price_median": 0.09015607833862305,
+      "purchases": 7
+    },
+    {
+      "time": 1787500800,
+      "price_median": 0.0872243195772171,
+      "purchases": 5
+    },
+    {
+      "time": 1787504400,
+      "price_median": 0.07312016934156418,
+      "purchases": 2
+    },
+    {
+      "time": 1787508000,
+      "price_median": 0.07453689724206924,
+      "purchases": 4
+    },
+    {
+      "time": 1787511600,
+      "price_median": 0.06367498636245728,
+      "purchases": 1
+    },
+    {
+      "time": 1787515200,
+      "price_median": 0.06824899464845657,
+      "purchases": 3
+    },
+    {
+      "time": 1787518800,
+      "price_median": 0.08801697939634323,
+      "purchases": 7
+    },
+    {
+      "time": 1787522400,
+      "price_median": 0.0928041934967041,
+      "purchases": 9
+    },
+    {
+      "time": 1787526000,
+      "price_median": 0.09367071837186813,
+      "purchases": 6
+    },
+    {
+      "time": 1787536800,
+      "price_median": 0.09577743709087372,
+      "purchases": 2
+    },
+    {
+      "time": 1787540400,
+      "price_median": 0.10000000149011612,
+      "purchases": 5
+    },
+    {
+      "time": 1787544000,
+      "price_median": 0.06226842850446701,
+      "purchases": 3
+    },
+    {
+      "time": 1787547600,
+      "price_median": 0.05004661902785301,
+      "purchases": 1
+    },
+    {
+      "time": 1787551200,
+      "price_median": 0.10000000149011612,
+      "purchases": 7
+    },
+    {
+      "time": 1787558400,
+      "price_median": 0.09985511004924774,
+      "purchases": 1
+    },
+    {
+      "time": 1787562000,
+      "price_median": 0.09000000357627869,
+      "purchases": 5
+    },
+    {
+      "time": 1787569200,
+      "price_median": 0.09204898029565811,
+      "purchases": 5
+    },
+    {
+      "time": 1787572800,
+      "price_median": 0.09341996163129807,
+      "purchases": 8
+    },
+    {
+      "time": 1787576400,
+      "price_median": 0.060806047171354294,
+      "purchases": 4
+    },
+    {
+      "time": 1787580000,
+      "price_median": 0.0870376005768776,
+      "purchases": 2
+    },
+    {
+      "time": 1787583600,
+      "price_median": 0.09015607833862305,
+      "purchases": 2
+    },
+    {
+      "time": 1787587200,
+      "price_median": 0.09273447096347809,
+      "purchases": 10
+    },
+    {
+      "time": 1787590800,
+      "price_median": 0.10000000149011612,
+      "purchases": 7
+    },
+    {
+      "time": 1787594400,
+      "price_median": 0.09341996163129807,
+      "purchases": 7
+    },
+    {
+      "time": 1787598000,
+      "price_median": 0.07956364750862122,
+      "purchases": 7
+    },
+    {
+      "time": 1787601600,
+      "price_median": 0.10501649230718613,
+      "purchases": 16
+    },
+    {
+      "time": 1787605200,
+      "price_median": 0.060059137642383575,
+      "purchases": 2
+    },
+    {
+      "time": 1787608800,
+      "price_median": 0.06253109127283096,
+      "purchases": 2
+    },
+    {
+      "time": 1787612400,
+      "price_median": 0.06772160530090332,
+      "purchases": 7
+    },
+    {
+      "time": 1787616000,
+      "price_median": 0.11193880438804626,
+      "purchases": 5
+    },
+    {
+      "time": 1787623200,
+      "price_median": 0.062303878366947174,
+      "purchases": 1
+    },
+    {
+      "time": 1787626800,
+      "price_median": 0.0847407802939415,
+      "purchases": 2
+    },
+    {
+      "time": 1787634000,
+      "price_median": 0.08888521790504456,
+      "purchases": 1
+    },
+    {
+      "time": 1787637600,
+      "price_median": 0.08838018774986267,
+      "purchases": 1
+    },
+    {
+      "time": 1787644800,
+      "price_median": 0.09334798902273178,
+      "purchases": 8
+    },
+    {
+      "time": 1787648400,
+      "price_median": 0.13432656228542328,
+      "purchases": 3
+    },
+    {
+      "time": 1787652000,
+      "price_median": 0.08167948573827744,
+      "purchases": 2
+    },
+    {
+      "time": 1787655600,
+      "price_median": 0.08961370587348938,
+      "purchases": 12
+    },
+    {
+      "time": 1787659200,
+      "price_median": 0.0893925204873085,
+      "purchases": 1
+    },
+    {
+      "time": 1787662800,
+      "price_median": 0.08838018774986267,
+      "purchases": 1
+    },
+    {
+      "time": 1787666400,
+      "price_median": 0.081098772585392,
+      "purchases": 5
+    },
+    {
+      "time": 1787670000,
+      "price_median": 0.0794815644621849,
+      "purchases": 5
+    },
+    {
+      "time": 1787673600,
+      "price_median": 0.10096940398216248,
+      "purchases": 2
+    },
+    {
+      "time": 1787677200,
+      "price_median": 0.06360923498868942,
+      "purchases": 3
+    },
+    {
+      "time": 1787680800,
+      "price_median": 0.08167948573827744,
+      "purchases": 6
+    },
+    {
+      "time": 1787684400,
+      "price_median": 0.07000000029802322,
+      "purchases": 3
+    },
+    {
+      "time": 1787688000,
+      "price_median": 0.05419197678565979,
+      "purchases": 1
+    },
+    {
+      "time": 1787691600,
+      "price_median": 0.07199576497077942,
+      "purchases": 5
+    },
+    {
+      "time": 1787698800,
+      "price_median": 0.06503036618232727,
+      "purchases": 1
+    },
+    {
+      "time": 1787702400,
+      "price_median": 0.07577014714479446,
+      "purchases": 8
+    },
+    {
+      "time": 1787709600,
+      "price_median": 0.06692034006118774,
+      "purchases": 2
+    },
+    {
+      "time": 1787720400,
+      "price_median": 0.059981297701597214,
+      "purchases": 2
+    },
+    {
+      "time": 1787724000,
+      "price_median": 0.07077613472938538,
+      "purchases": 1
+    },
+    {
+      "time": 1787727600,
+      "price_median": 0.07091046124696732,
+      "purchases": 1
+    },
+    {
+      "time": 1787731200,
+      "price_median": 0.06545069813728333,
+      "purchases": 1
+    },
+    {
+      "time": 1787734800,
+      "price_median": 0.06763239204883575,
+      "purchases": 1
+    },
+    {
+      "time": 1787738400,
+      "price_median": 0.06751168519258499,
+      "purchases": 4
+    },
+    {
+      "time": 1787742000,
+      "price_median": 0.054410334676504135,
+      "purchases": 2
+    },
+    {
+      "time": 1787745600,
+      "price_median": 0.0803612619638443,
+      "purchases": 6
+    },
+    {
+      "time": 1787749200,
+      "price_median": 0.08944929391145706,
+      "purchases": 7
+    },
+    {
+      "time": 1787752800,
+      "price_median": 0.09000000357627869,
+      "purchases": 3
+    },
+    {
+      "time": 1787756400,
+      "price_median": 0.0916309803724289,
+      "purchases": 4
+    },
+    {
+      "time": 1787760000,
+      "price_median": 0.06802031397819519,
+      "purchases": 9
+    },
+    {
+      "time": 1787763600,
+      "price_median": 0.09000000357627869,
+      "purchases": 6
+    },
+    {
+      "time": 1787767200,
+      "price_median": 0.06999299675226212,
+      "purchases": 4
+    },
+    {
+      "time": 1787770800,
+      "price_median": 0.12316853553056717,
+      "purchases": 2
+    },
+    {
+      "time": 1787774400,
+      "price_median": 0.09161001443862915,
+      "purchases": 2
+    },
+    {
+      "time": 1787778000,
+      "price_median": 0.08766358345746994,
+      "purchases": 7
+    },
+    {
+      "time": 1787781600,
+      "price_median": 0.07913415133953094,
+      "purchases": 1
+    },
+    {
+      "time": 1787785200,
+      "price_median": 0.06019999086856842,
+      "purchases": 2
+    },
+    {
+      "time": 1787788800,
+      "price_median": 0.09000000357627869,
+      "purchases": 3
+    },
+    {
+      "time": 1787792400,
+      "price_median": 0.07903030514717102,
+      "purchases": 1
+    },
+    {
+      "time": 1787796000,
+      "price_median": 0.09322002530097961,
+      "purchases": 1
+    },
+    {
+      "time": 1787799600,
+      "price_median": 0.05771999806165695,
+      "purchases": 1
+    },
+    {
+      "time": 1787806800,
+      "price_median": 0.06349686533212662,
+      "purchases": 3
+    },
+    {
+      "time": 1787814000,
+      "price_median": 0.0623224601149559,
+      "purchases": 1
+    },
+    {
+      "time": 1787817600,
+      "price_median": 0.07999999821186066,
+      "purchases": 5
+    },
+    {
+      "time": 1787821200,
+      "price_median": 0.07451598346233368,
+      "purchases": 2
+    },
+    {
+      "time": 1787824800,
+      "price_median": 0.0670408084988594,
+      "purchases": 4
+    },
+    {
+      "time": 1787828400,
+      "price_median": 0.0739336758852005,
+      "purchases": 3
+    },
+    {
+      "time": 1787832000,
+      "price_median": 0.06618994474411011,
+      "purchases": 4
+    },
+    {
+      "time": 1787842800,
+      "price_median": 0.06290966272354126,
+      "purchases": 4
+    },
+    {
+      "time": 1787846400,
+      "price_median": 0.06991501897573471,
+      "purchases": 5
+    },
+    {
+      "time": 1787850000,
+      "price_median": 0.07632305473089218,
+      "purchases": 4
+    },
+    {
+      "time": 1787853600,
+      "price_median": 0.058674998581409454,
+      "purchases": 2
+    },
+    {
+      "time": 1787857200,
+      "price_median": 0.0739336758852005,
+      "purchases": 5
+    },
+    {
+      "time": 1787860800,
+      "price_median": 0.06332449615001678,
+      "purchases": 5
+    },
+    {
+      "time": 1787864400,
+      "price_median": 0.07563696056604385,
+      "purchases": 1
+    },
+    {
+      "time": 1787868000,
+      "price_median": 0.06877632439136505,
+      "purchases": 3
+    },
+    {
+      "time": 1787871600,
+      "price_median": 0.07999999821186066,
+      "purchases": 7
+    },
+    {
+      "time": 1787875200,
+      "price_median": 0.09000000357627869,
+      "purchases": 4
+    },
+    {
+      "time": 1787878800,
+      "price_median": 0.09047538042068481,
+      "purchases": 8
+    },
+    {
+      "time": 1787882400,
+      "price_median": 0.09322002530097961,
+      "purchases": 4
+    },
+    {
+      "time": 1787893200,
+      "price_median": 0.06596475839614868,
+      "purchases": 2
+    },
+    {
+      "time": 1787896800,
+      "price_median": 0.056544337421655655,
+      "purchases": 10
+    },
+    {
+      "time": 1787900400,
+      "price_median": 0.08985451608896255,
+      "purchases": 5
+    },
+    {
+      "time": 1787907600,
+      "price_median": 0.0807776227593422,
+      "purchases": 1
+    },
+    {
+      "time": 1787911200,
+      "price_median": 0.06618784368038177,
+      "purchases": 2
+    },
+    {
+      "time": 1787922000,
+      "price_median": 0.08616279810667038,
+      "purchases": 13
+    },
+    {
+      "time": 1787925600,
+      "price_median": 0.08728824555873871,
+      "purchases": 5
+    },
+    {
+      "time": 1787929200,
+      "price_median": 0.06497577577829361,
+      "purchases": 4
+    },
+    {
+      "time": 1787936400,
+      "price_median": 0.06254294514656067,
+      "purchases": 2
+    },
+    {
+      "time": 1787943600,
+      "price_median": 0.08156752586364746,
+      "purchases": 1
+    },
+    {
+      "time": 1787947200,
+      "price_median": 0.0804654136300087,
+      "purchases": 1
+    },
+    {
+      "time": 1787950800,
+      "price_median": 0.06169014796614647,
+      "purchases": 3
+    },
+    {
+      "time": 1787954400,
+      "price_median": 0.05835235118865967,
+      "purchases": 2
+    },
+    {
+      "time": 1787965200,
+      "price_median": 0.06528731435537338,
+      "purchases": 2
+    },
+    {
+      "time": 1787968800,
+      "price_median": 0.07702327519655228,
+      "purchases": 1
+    },
+    {
+      "time": 1787972400,
+      "price_median": 0.1121523454785347,
+      "purchases": 6
+    },
+    {
+      "time": 1787976000,
+      "price_median": 0.07214641571044922,
+      "purchases": 3
+    },
+    {
+      "time": 1787979600,
+      "price_median": 0.07999999821186066,
+      "purchases": 3
+    },
+    {
+      "time": 1787990400,
+      "price_median": 0.07186144590377808,
+      "purchases": 1
+    },
+    {
+      "time": 1787994000,
+      "price_median": 0.06858603656291962,
+      "purchases": 5
+    },
+    {
+      "time": 1787997600,
+      "price_median": 0.07999999821186066,
+      "purchases": 6
+    },
+    {
+      "time": 1788001200,
+      "price_median": 0.06823847442865372,
+      "purchases": 3
+    },
+    {
+      "time": 1788004800,
+      "price_median": 0.07600075006484985,
+      "purchases": 1
+    },
+    {
+      "time": 1788008400,
+      "price_median": 0.07220908254384995,
+      "purchases": 1
+    },
+    {
+      "time": 1788012000,
+      "price_median": 0.07999999821186066,
+      "purchases": 3
+    },
+    {
+      "time": 1788015600,
+      "price_median": 0.07999999821186066,
+      "purchases": 6
+    },
+    {
+      "time": 1788019200,
+      "price_median": 0.07000000029802322,
+      "purchases": 3
+    },
+    {
+      "time": 1788022800,
+      "price_median": 0.0799398124217987,
+      "purchases": 11
+    },
+    {
+      "time": 1788026400,
+      "price_median": 0.05992227420210838,
+      "purchases": 6
+    },
+    {
+      "time": 1788030000,
+      "price_median": 0.06818055361509323,
+      "purchases": 4
+    },
+    {
+      "time": 1788033600,
+      "price_median": 0.08143755793571472,
+      "purchases": 4
+    },
+    {
+      "time": 1788037200,
+      "price_median": 0.08395296335220337,
+      "purchases": 14
+    },
+    {
+      "time": 1788040800,
+      "price_median": 0.06169014796614647,
+      "purchases": 1
+    },
+    {
+      "time": 1788044400,
+      "price_median": 0.08715014159679413,
+      "purchases": 9
+    },
+    {
+      "time": 1788048000,
+      "price_median": 0.07999999821186066,
+      "purchases": 3
+    },
+    {
+      "time": 1788055200,
+      "price_median": 0.08912912011146545,
+      "purchases": 4
+    },
+    {
+      "time": 1788062400,
+      "price_median": 0.07171691209077835,
+      "purchases": 4
+    },
+    {
+      "time": 1788066000,
+      "price_median": 0.09000000357627869,
+      "purchases": 1
+    },
+    {
+      "time": 1788069600,
+      "price_median": 0.09000000357627869,
+      "purchases": 4
+    },
+    {
+      "time": 1788073200,
+      "price_median": 0.09311605244874954,
+      "purchases": 1
+    },
+    {
+      "time": 1788076800,
+      "price_median": 0.0698370411992073,
+      "purchases": 7
+    },
+    {
+      "time": 1788080400,
+      "price_median": 0.08665939420461655,
+      "purchases": 3
+    },
+    {
+      "time": 1788084000,
+      "price_median": 0.0875856801867485,
+      "purchases": 2
+    },
+    {
+      "time": 1788087600,
+      "price_median": 0.08147654682397842,
+      "purchases": 9
+    },
+    {
+      "time": 1788091200,
+      "price_median": 0.08689109981060028,
+      "purchases": 3
+    },
+    {
+      "time": 1788094800,
+      "price_median": 0.08700694888830185,
+      "purchases": 7
+    },
+    {
+      "time": 1788098400,
+      "price_median": 0.08832559734582901,
+      "purchases": 2
+    },
+    {
+      "time": 1788102000,
+      "price_median": 0.08665118366479874,
+      "purchases": 7
+    },
+    {
+      "time": 1788105600,
+      "price_median": 0.08143755793571472,
+      "purchases": 5
+    },
+    {
+      "time": 1788109200,
+      "price_median": 0.0865757018327713,
+      "purchases": 3
+    },
+    {
+      "time": 1788112800,
+      "price_median": 0.09000000357627869,
+      "purchases": 13
+    },
+    {
+      "time": 1788116400,
+      "price_median": 0.06169014796614647,
+      "purchases": 3
+    },
+    {
+      "time": 1788120000,
+      "price_median": 0.08126378059387207,
+      "purchases": 4
+    },
+    {
+      "time": 1788123600,
+      "price_median": 0.08804965019226074,
+      "purchases": 21
+    },
+    {
+      "time": 1788127200,
+      "price_median": 0.09000000357627869,
+      "purchases": 5
+    },
+    {
+      "time": 1788130800,
+      "price_median": 0.07584507763385773,
+      "purchases": 2
+    },
+    {
+      "time": 1788134400,
+      "price_median": 0.06951288133859634,
+      "purchases": 1
+    },
+    {
+      "time": 1788138000,
+      "price_median": 0.09000000357627869,
+      "purchases": 1
+    },
+    {
+      "time": 1788141600,
+      "price_median": 0.0581544004380703,
+      "purchases": 2
+    },
+    {
+      "time": 1788145200,
+      "price_median": 0.08611349761486053,
+      "purchases": 5
+    },
+    {
+      "time": 1788148800,
+      "price_median": 0.0581544004380703,
+      "purchases": 1
+    },
+    {
+      "time": 1788152400,
+      "price_median": 0.09041088074445724,
+      "purchases": 1
+    },
+    {
+      "time": 1788156000,
+      "price_median": 0.09020543843507767,
+      "purchases": 2
+    },
+    {
+      "time": 1788159600,
+      "price_median": 0.07000000029802322,
+      "purchases": 3
+    },
+    {
+      "time": 1788166800,
+      "price_median": 0.07154034078121185,
+      "purchases": 4
+    },
+    {
+      "time": 1788170400,
+      "price_median": 0.1121523454785347,
+      "purchases": 3
+    },
+    {
+      "time": 1788174000,
+      "price_median": 0.09000000357627869,
+      "purchases": 3
+    },
+    {
+      "time": 1788177600,
+      "price_median": 0.07977946102619171,
+      "purchases": 4
+    },
+    {
+      "time": 1788181200,
+      "price_median": 0.06737282127141953,
+      "purchases": 2
+    },
+    {
+      "time": 1788184800,
+      "price_median": 0.06334234774112701,
+      "purchases": 8
+    },
+    {
+      "time": 1788188400,
+      "price_median": 0.07049529254436493,
+      "purchases": 2
+    },
+    {
+      "time": 1788192000,
+      "price_median": 0.07731366157531738,
+      "purchases": 6
+    },
+    {
+      "time": 1788195600,
+      "price_median": 0.0873451977968216,
+      "purchases": 4
+    },
+    {
+      "time": 1788199200,
+      "price_median": 0.09000000357627869,
+      "purchases": 5
+    },
+    {
+      "time": 1788202800,
+      "price_median": 0.07482384145259857,
+      "purchases": 2
+    },
+    {
+      "time": 1788206400,
+      "price_median": 0.05840479955077171,
+      "purchases": 2
+    },
+    {
+      "time": 1788210000,
+      "price_median": 0.08782832324504852,
+      "purchases": 1
+    },
+    {
+      "time": 1788213600,
+      "price_median": 0.08987559378147125,
+      "purchases": 2
+    },
+    {
+      "time": 1788217200,
+      "price_median": 0.08692383766174316,
+      "purchases": 4
+    },
+    {
+      "time": 1788220800,
+      "price_median": 0.07999999821186066,
+      "purchases": 1
+    },
+    {
+      "time": 1788224400,
+      "price_median": 0.09000000357627869,
+      "purchases": 1
+    },
+    {
+      "time": 1788228000,
+      "price_median": 0.10737460106611252,
+      "purchases": 2
+    },
+    {
+      "time": 1788231600,
+      "price_median": 0.06156786531209946,
+      "purchases": 1
+    },
+    {
+      "time": 1788235200,
+      "price_median": 0.07404205948114395,
+      "purchases": 4
+    },
+    {
+      "time": 1788238800,
+      "price_median": 0.08946753293275833,
+      "purchases": 1
+    },
+    {
+      "time": 1788249600,
+      "price_median": 0.07517597079277039,
+      "purchases": 5
+    },
+    {
+      "time": 1788256800,
+      "price_median": 0.07999999821186066,
+      "purchases": 1
+    },
+    {
+      "time": 1788260400,
+      "price_median": 0.08284460753202438,
+      "purchases": 1
+    },
+    {
+      "time": 1788264000,
+      "price_median": 0.10344836115837097,
+      "purchases": 8
+    },
+    {
+      "time": 1788267600,
+      "price_median": 0.0913437008857727,
+      "purchases": 4
+    },
+    {
+      "time": 1788271200,
+      "price_median": 0.08635635673999786,
+      "purchases": 5
+    },
+    {
+      "time": 1788278400,
+      "price_median": 0.08737608045339584,
+      "purchases": 7
+    },
+    {
+      "time": 1788282000,
+      "price_median": 0.08534465730190277,
+      "purchases": 2
+    },
+    {
+      "time": 1788285600,
+      "price_median": 0.08262277394533157,
+      "purchases": 4
+    },
+    {
+      "time": 1788289200,
+      "price_median": 0.09000000357627869,
+      "purchases": 13
+    },
+    {
+      "time": 1788292800,
+      "price_median": 0.08763238042593002,
+      "purchases": 4
+    },
+    {
+      "time": 1788296400,
+      "price_median": 0.09000000357627869,
+      "purchases": 10
+    },
+    {
+      "time": 1788300000,
+      "price_median": 0.07796487957239151,
+      "purchases": 1
+    },
+    {
+      "time": 1788307200,
+      "price_median": 0.07999999821186066,
+      "purchases": 1
+    },
+    {
+      "time": 1788318000,
+      "price_median": 0.08763157576322556,
+      "purchases": 1
+    },
+    {
+      "time": 1788328800,
+      "price_median": 0.0719386637210846,
+      "purchases": 5
+    },
+    {
+      "time": 1788336000,
+      "price_median": 0.09269218146800995,
+      "purchases": 1
+    },
+    {
+      "time": 1788339600,
+      "price_median": 0.08689891546964645,
+      "purchases": 2
+    },
+    {
+      "time": 1788343200,
+      "price_median": 0.04992784187197685,
+      "purchases": 1
+    },
+    {
+      "time": 1788346800,
+      "price_median": 0.07531239837408066,
+      "purchases": 2
+    },
+    {
+      "time": 1788350400,
+      "price_median": 0.07999999821186066,
+      "purchases": 1
+    },
+    {
+      "time": 1788357600,
+      "price_median": 0.07810600101947784,
+      "purchases": 7
+    },
+    {
+      "time": 1788361200,
+      "price_median": 0.11214130371809006,
+      "purchases": 8
+    },
+    {
+      "time": 1788368400,
+      "price_median": 0.06181992590427399,
+      "purchases": 2
+    },
+    {
+      "time": 1788372000,
+      "price_median": 0.09269218146800995,
+      "purchases": 6
+    },
+    {
+      "time": 1788375600,
+      "price_median": 0.07080060988664627,
+      "purchases": 2
+    },
+    {
+      "time": 1788379200,
+      "price_median": 0.08114951103925705,
+      "purchases": 3
+    },
+    {
+      "time": 1788382800,
+      "price_median": 0.08134633302688599,
+      "purchases": 3
+    },
+    {
+      "time": 1788386400,
+      "price_median": 0.08397602289915085,
+      "purchases": 3
+    },
+    {
+      "time": 1788390000,
+      "price_median": 0.08334274590015411,
+      "purchases": 1
+    },
+    {
+      "time": 1788393600,
+      "price_median": 0.05872479826211929,
+      "purchases": 1
+    },
+    {
+      "time": 1788397200,
+      "price_median": 0.060147982090711594,
+      "purchases": 2
+    },
+    {
+      "time": 1788400800,
+      "price_median": 0.05872479826211929,
+      "purchases": 3
+    },
+    {
+      "time": 1788404400,
+      "price_median": 0.06578558683395386,
+      "purchases": 2
+    },
+    {
+      "time": 1788408000,
+      "price_median": 0.05621714890003204,
+      "purchases": 1
+    },
+    {
+      "time": 1788411600,
+      "price_median": 0.06814843416213989,
+      "purchases": 2
+    },
+    {
+      "time": 1788415200,
+      "price_median": 0.06490382552146912,
+      "purchases": 2
+    },
+    {
+      "time": 1788418800,
+      "price_median": 0.06952513754367828,
+      "purchases": 3
+    },
+    {
+      "time": 1788422400,
+      "price_median": 0.06946355104446411,
+      "purchases": 4
+    },
+    {
+      "time": 1788429600,
+      "price_median": 0.07571248710155487,
+      "purchases": 2
+    },
+    {
+      "time": 1788433200,
+      "price_median": 0.06952513754367828,
+      "purchases": 5
+    },
+    {
+      "time": 1788436800,
+      "price_median": 0.05872479826211929,
+      "purchases": 1
+    },
+    {
+      "time": 1788440400,
+      "price_median": 0.08111266046762466,
+      "purchases": 4
+    },
+    {
+      "time": 1788444000,
+      "price_median": 0.072279192507267,
+      "purchases": 1
+    },
+    {
+      "time": 1788447600,
+      "price_median": 0.06828508526086807,
+      "purchases": 1
+    },
+    {
+      "time": 1788451200,
+      "price_median": 0.08776766061782837,
+      "purchases": 8
+    },
+    {
+      "time": 1788454800,
+      "price_median": 0.08834123611450195,
+      "purchases": 17
+    },
+    {
+      "time": 1788458400,
+      "price_median": 0.08621468394994736,
+      "purchases": 6
+    },
+    {
+      "time": 1788462000,
+      "price_median": 0.09000000357627869,
+      "purchases": 6
+    },
+    {
+      "time": 1788465600,
+      "price_median": 0.07125849276781082,
+      "purchases": 2
+    },
+    {
+      "time": 1788469200,
+      "price_median": 0.08418359607458115,
+      "purchases": 13
+    },
+    {
+      "time": 1788472800,
+      "price_median": 0.09000000357627869,
+      "purchases": 2
+    },
+    {
+      "time": 1788476400,
+      "price_median": 0.07835188508033752,
+      "purchases": 1
+    },
+    {
+      "time": 1788483600,
+      "price_median": 0.08556743711233139,
+      "purchases": 2
+    },
+    {
+      "time": 1788490800,
+      "price_median": 0.07999999821186066,
+      "purchases": 5
+    },
+    {
+      "time": 1788494400,
+      "price_median": 0.0729190781712532,
+      "purchases": 2
+    },
+    {
+      "time": 1788498000,
+      "price_median": 0.06179298460483551,
+      "purchases": 1
+    },
+    {
+      "time": 1788501600,
+      "price_median": 0.07522623986005783,
+      "purchases": 2
+    },
+    {
+      "time": 1788505200,
+      "price_median": 0.05894879996776581,
+      "purchases": 1
+    },
+    {
+      "time": 1788512400,
+      "price_median": 0.05894879996776581,
+      "purchases": 2
+    },
+    {
+      "time": 1788516000,
+      "price_median": 0.06179298460483551,
+      "purchases": 3
+    },
+    {
+      "time": 1788519600,
+      "price_median": 0.0845295637845993,
+      "purchases": 4
+    },
+    {
+      "time": 1788523200,
+      "price_median": 0.06407040357589722,
+      "purchases": 4
+    },
+    {
+      "time": 1788526800,
+      "price_median": 0.07979102432727814,
+      "purchases": 2
+    },
+    {
+      "time": 1788534000,
+      "price_median": 0.0801474004983902,
+      "purchases": 3
+    },
+    {
+      "time": 1788537600,
+      "price_median": 0.07089649140834808,
+      "purchases": 4
+    },
+    {
+      "time": 1788541200,
+      "price_median": 0.06919199973344803,
+      "purchases": 1
+    },
+    {
+      "time": 1788544800,
+      "price_median": 0.09000000357627869,
+      "purchases": 7
+    },
+    {
+      "time": 1788548400,
+      "price_median": 0.07000000029802322,
+      "purchases": 1
+    },
+    {
+      "time": 1788552000,
+      "price_median": 0.06965109705924988,
+      "purchases": 1
+    },
+    {
+      "time": 1788555600,
+      "price_median": 0.07021528482437134,
+      "purchases": 3
+    },
+    {
+      "time": 1788559200,
+      "price_median": 0.061871159821748734,
+      "purchases": 3
+    },
+    {
+      "time": 1788562800,
+      "price_median": 0.055209945887327194,
+      "purchases": 3
+    },
+    {
+      "time": 1788566400,
+      "price_median": 0.09000000357627869,
+      "purchases": 6
+    },
+    {
+      "time": 1788570000,
+      "price_median": 0.09000000357627869,
+      "purchases": 7
+    },
+    {
+      "time": 1788573600,
+      "price_median": 0.09000000357627869,
+      "purchases": 1
+    },
+    {
+      "time": 1788577200,
+      "price_median": 0.05933680012822151,
+      "purchases": 1
+    },
+    {
+      "time": 1788580800,
+      "price_median": 0.08577385544776917,
+      "purchases": 1
+    },
+    {
+      "time": 1788588000,
+      "price_median": 0.08311151713132858,
+      "purchases": 2
+    },
+    {
+      "time": 1788591600,
+      "price_median": 0.07999999821186066,
+      "purchases": 1
+    },
+    {
+      "time": 1788595200,
+      "price_median": 0.07999999821186066,
+      "purchases": 3
+    },
+    {
+      "time": 1788602400,
+      "price_median": 0.07999999821186066,
+      "purchases": 5
+    },
+    {
+      "time": 1788606000,
+      "price_median": 0.06962615251541138,
+      "purchases": 2
+    },
+    {
+      "time": 1788609600,
+      "price_median": 0.0928681269288063,
+      "purchases": 6
+    },
+    {
+      "time": 1788613200,
+      "price_median": 0.0928681269288063,
+      "purchases": 3
+    },
+    {
+      "time": 1788616800,
+      "price_median": 0.06243051961064339,
+      "purchases": 2
+    },
+    {
+      "time": 1788620400,
+      "price_median": 0.064978688955307,
+      "purchases": 3
+    },
+    {
+      "time": 1788624000,
+      "price_median": 0.07000000029802322,
+      "purchases": 5
+    },
+    {
+      "time": 1788627600,
+      "price_median": 0.07941839843988419,
+      "purchases": 7
+    },
+    {
+      "time": 1788631200,
+      "price_median": 0.08125961571931839,
+      "purchases": 1
+    },
+    {
+      "time": 1788634800,
+      "price_median": 0.07935642451047897,
+      "purchases": 4
+    },
+    {
+      "time": 1788638400,
+      "price_median": 0.08125961571931839,
+      "purchases": 10
+    },
+    {
+      "time": 1788642000,
+      "price_median": 0.12407500296831131,
+      "purchases": 4
+    },
+    {
+      "time": 1788645600,
+      "price_median": 0.07000000029802322,
+      "purchases": 1
+    },
+    {
+      "time": 1788649200,
+      "price_median": 0.06967197358608246,
+      "purchases": 2
+    },
+    {
+      "time": 1788656400,
+      "price_median": 0.06965109705924988,
+      "purchases": 1
+    },
+    {
+      "time": 1788660000,
+      "price_median": 0.07999999821186066,
+      "purchases": 9
+    },
+    {
+      "time": 1788663600,
+      "price_median": 0.08402806520462036,
+      "purchases": 1
+    },
+    {
+      "time": 1788667200,
+      "price_median": 0.08550789207220078,
+      "purchases": 1
+    },
+    {
+      "time": 1788670800,
+      "price_median": 0.05649106204509735,
+      "purchases": 3
+    },
+    {
+      "time": 1788674400,
+      "price_median": 0.07998615503311157,
+      "purchases": 1
+    },
+    {
+      "time": 1788681600,
+      "price_median": 0.07998615503311157,
+      "purchases": 1
+    },
+    {
+      "time": 1788685200,
+      "price_median": 0.07801833003759384,
+      "purchases": 5
+    },
+    {
+      "time": 1788688800,
+      "price_median": 0.07686083018779755,
+      "purchases": 2
+    },
+    {
+      "time": 1788696000,
+      "price_median": 0.06478162109851837,
+      "purchases": 7
+    },
+    {
+      "time": 1788699600,
+      "price_median": 0.08339156955480576,
+      "purchases": 8
+    },
+    {
+      "time": 1788703200,
+      "price_median": 0.07673785090446472,
+      "purchases": 5
+    },
+    {
+      "time": 1788706800,
+      "price_median": 0.09000000357627869,
+      "purchases": 9
+    },
+    {
+      "time": 1788710400,
+      "price_median": 0.08102793991565704,
+      "purchases": 3
+    },
+    {
+      "time": 1788714000,
+      "price_median": 0.09000000357627869,
+      "purchases": 9
+    },
+    {
+      "time": 1788717600,
+      "price_median": 0.06499502062797546,
+      "purchases": 4
+    },
+    {
+      "time": 1788721200,
+      "price_median": 0.05111096054315567,
+      "purchases": 3
+    },
+    {
+      "time": 1788724800,
+      "price_median": 0.0780169814825058,
+      "purchases": 3
+    },
+    {
+      "time": 1788732000,
+      "price_median": 0.06285452842712402,
+      "purchases": 1
+    },
+    {
+      "time": 1788746400,
+      "price_median": 0.08500000089406967,
+      "purchases": 10
+    },
+    {
+      "time": 1788757200,
+      "price_median": 0.07999999821186066,
+      "purchases": 1
+    },
+    {
+      "time": 1788760800,
+      "price_median": 0.09455562382936478,
+      "purchases": 4
+    },
+    {
+      "time": 1788764400,
+      "price_median": 0.07545535266399384,
+      "purchases": 2
+    },
+    {
+      "time": 1788768000,
+      "price_median": 0.08137519657611847,
+      "purchases": 3
+    },
+    {
+      "time": 1788775200,
+      "price_median": 0.08125961571931839,
+      "purchases": 1
+    }
+  ]
+}

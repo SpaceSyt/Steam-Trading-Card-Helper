@@ -1,0 +1,21 @@
+{
+  "samples": 74,
+  "distinctItems": 37,
+  "catalogCards": 90,
+  "files": 114,
+  "bytes": 17247030,
+  "uniqueHistoryFiles": 38,
+  "historyPoints": 160489,
+  "historyFirst": "2013-05-15T00:00:00.000Z",
+  "historyLast": "2026-09-07T11:00:00.000Z",
+  "invalid": [],
+  "minimumIntervalSeconds": 117.485,
+  "maximumIntervalSeconds": 119.138,
+  "changedOrderbooks": 15,
+  "userscriptBytes": 334276,
+  "emptyBuySamples": 2,
+  "notes": [
+    "Two samples explicitly contain null best bid, zero bids and empty bid levels; these are valid empty books.",
+    "files and bytes were measured before writing this validation file."
+  ]
+}

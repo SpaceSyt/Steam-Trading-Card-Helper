@@ -51,7 +51,7 @@ test("automatic pricing uses strategy offsets without a second persisted adjustm
     priceSource: "aggressive",
     adjustment: 0,
     strategyRule: {
-      wallAnchor: "top",
+      wallAnchor: undefined,
       wallOffsetMinor: 1,
       noWallOffsetMinor: 1,
     },

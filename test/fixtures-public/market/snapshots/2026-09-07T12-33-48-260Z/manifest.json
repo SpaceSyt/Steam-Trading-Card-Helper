@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-09-07T12:33:48.260Z",
+  "authentication": "none",
+  "delayMs": 1500,
+  "rounds": 2,
+  "intervalMs": 120000,
+  "catalog": [],
+  "samples": [
+    {
+      "file": "round-1-001.json",
+      "round": 1,
+      "marketHashName": "753-Sack of Gems",
+      "fetchedAt": "2026-09-07T12:34:06.597Z",
+      "currencyId": 1,
+      "bytes": 586567
+    },
+    {
+      "file": "round-2-001.json",
+      "round": 2,
+      "marketHashName": "753-Sack of Gems",
+      "fetchedAt": "2026-09-07T12:36:05.351Z",
+      "currencyId": 1,
+      "bytes": 586567
+    }
+  ],
+  "errors": [
+    {
+      "phase": "catalog",
+      "appid": "570",
+      "isFoil": false,
+      "message": "No public market links in badge HTML"
+    },
+    {
+      "phase": "catalog",
+      "appid": "570",
+      "isFoil": true,
+      "message": "No public market links in badge HTML"
+    },
+    {
+      "phase": "catalog",
+      "appid": "440",
+      "isFoil": false,
+      "message": "No public market links in badge HTML"
+    },
+    {
+      "phase": "catalog",
+      "appid": "440",
+      "isFoil": true,
+      "message": "No public market links in badge HTML"
+    },
+    {
+      "phase": "catalog",
+      "appid": "730",
+      "isFoil": false,
+      "message": "No public market links in badge HTML"
+    },
+    {
+      "phase": "catalog",
+      "appid": "730",
+      "isFoil": true,
+      "message": "No public market links in badge HTML"
+    },
+    {
+      "phase": "catalog",
+      "appid": "8870",
+      "isFoil": false,
+      "message": "No public market links in badge HTML"
+    },
+    {
+      "phase": "catalog",
+      "appid": "8870",
+      "isFoil": true,
+      "message": "No public market links in badge HTML"
+    },
+    {
+      "phase": "catalog",
+      "appid": "620",
+      "isFoil": false,
+      "message": "No public market links in badge HTML"
+    },
+    {
+      "phase": "catalog",
+      "appid": "620",
+      "isFoil": true,
+      "message": "No public market links in badge HTML"
+    },
+    {
+      "phase": "catalog",
+      "appid": "292030",
+      "isFoil": false,
+      "message": "No public market links in badge HTML"
+    },
+    {
+      "phase": "catalog",
+      "appid": "292030",
+      "isFoil": true,
+      "message": "No public market links in badge HTML"
+    }
+  ],
+  "completedAt": "2026-09-07T12:36:05.359Z"
+}

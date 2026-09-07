@@ -1,0 +1,2604 @@
+{
+  "startedAt": "2026-09-07T14:00:13.039Z",
+  "currencyId": 23,
+  "currencyCode": "CNY",
+  "sourceManifest": "fixtures-public/market/snapshots/2026-09-07T12-36-01-290Z/manifest.json",
+  "authentication": "none",
+  "assumptions": [
+    "Priceoverview accepts an explicit currency but supplies no order depth.",
+    "Seller proceeds use the project default fee model. Native sale submission uses seller proceeds, so some requested prices round to the same actual listing price.",
+    "No execution-speed or profit-optimality claim can be made from these quotes alone."
+  ],
+  "samples": [
+    {
+      "marketHashName": "753-Sack of Gems",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=753-Sack+of+Gems",
+      "fetchedAt": "2026-09-07T14:00:13.236Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 4.68",
+        "median_price": "¥ 4.72",
+        "volume": "6,735"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 466,
+          "referenceMinor": 466,
+          "minimumClamped": false,
+          "sellerNetMinor": 406,
+          "actualBuyerMinor": 466,
+          "netChangeMinor": -2,
+          "netChangePercent": -0.49019607843137253,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 467,
+          "referenceMinor": 467,
+          "minimumClamped": false,
+          "sellerNetMinor": 407,
+          "actualBuyerMinor": 467,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.24509803921568626,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 468,
+          "referenceMinor": 468,
+          "minimumClamped": false,
+          "sellerNetMinor": 408,
+          "actualBuyerMinor": 468,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 469,
+          "referenceMinor": 469,
+          "minimumClamped": false,
+          "sellerNetMinor": 409,
+          "actualBuyerMinor": 469,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.24509803921568626,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 470,
+          "referenceMinor": 470,
+          "minimumClamped": false,
+          "sellerNetMinor": 409,
+          "actualBuyerMinor": 469,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.24509803921568626,
+          "actualPriceChangeMinor": 1
+        }
+      ]
+    },
+    {
+      "marketHashName": "1657630-Batty Slime",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=1657630-Batty+Slime",
+      "fetchedAt": "2026-09-07T14:00:16.907Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.55",
+        "median_price": "¥ 0.48",
+        "volume": "67"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 53,
+          "referenceMinor": 53,
+          "minimumClamped": false,
+          "sellerNetMinor": 39,
+          "actualBuyerMinor": 53,
+          "netChangeMinor": -2,
+          "netChangePercent": -4.878048780487805,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 54,
+          "referenceMinor": 54,
+          "minimumClamped": false,
+          "sellerNetMinor": 40,
+          "actualBuyerMinor": 54,
+          "netChangeMinor": -1,
+          "netChangePercent": -2.4390243902439024,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 55,
+          "referenceMinor": 55,
+          "minimumClamped": false,
+          "sellerNetMinor": 41,
+          "actualBuyerMinor": 55,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 56,
+          "referenceMinor": 56,
+          "minimumClamped": false,
+          "sellerNetMinor": 42,
+          "actualBuyerMinor": 56,
+          "netChangeMinor": 1,
+          "netChangePercent": 2.4390243902439024,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 57,
+          "referenceMinor": 57,
+          "minimumClamped": false,
+          "sellerNetMinor": 43,
+          "actualBuyerMinor": 57,
+          "netChangeMinor": 2,
+          "netChangePercent": 4.878048780487805,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "1657630-Shadow Slime",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=1657630-Shadow+Slime",
+      "fetchedAt": "2026-09-07T14:00:20.549Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.56",
+        "median_price": "¥ 0.52",
+        "volume": "82"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 54,
+          "referenceMinor": 54,
+          "minimumClamped": false,
+          "sellerNetMinor": 40,
+          "actualBuyerMinor": 54,
+          "netChangeMinor": -2,
+          "netChangePercent": -4.761904761904762,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 55,
+          "referenceMinor": 55,
+          "minimumClamped": false,
+          "sellerNetMinor": 41,
+          "actualBuyerMinor": 55,
+          "netChangeMinor": -1,
+          "netChangePercent": -2.380952380952381,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 56,
+          "referenceMinor": 56,
+          "minimumClamped": false,
+          "sellerNetMinor": 42,
+          "actualBuyerMinor": 56,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 57,
+          "referenceMinor": 57,
+          "minimumClamped": false,
+          "sellerNetMinor": 43,
+          "actualBuyerMinor": 57,
+          "netChangeMinor": 1,
+          "netChangePercent": 2.380952380952381,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 58,
+          "referenceMinor": 58,
+          "minimumClamped": false,
+          "sellerNetMinor": 44,
+          "actualBuyerMinor": 58,
+          "netChangeMinor": 2,
+          "netChangePercent": 4.761904761904762,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "1657630-Tabby Slime",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=1657630-Tabby+Slime",
+      "fetchedAt": "2026-09-07T14:00:24.190Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.55",
+        "median_price": "¥ 0.51",
+        "volume": "72"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 53,
+          "referenceMinor": 53,
+          "minimumClamped": false,
+          "sellerNetMinor": 39,
+          "actualBuyerMinor": 53,
+          "netChangeMinor": -2,
+          "netChangePercent": -4.878048780487805,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 54,
+          "referenceMinor": 54,
+          "minimumClamped": false,
+          "sellerNetMinor": 40,
+          "actualBuyerMinor": 54,
+          "netChangeMinor": -1,
+          "netChangePercent": -2.4390243902439024,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 55,
+          "referenceMinor": 55,
+          "minimumClamped": false,
+          "sellerNetMinor": 41,
+          "actualBuyerMinor": 55,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 56,
+          "referenceMinor": 56,
+          "minimumClamped": false,
+          "sellerNetMinor": 42,
+          "actualBuyerMinor": 56,
+          "netChangeMinor": 1,
+          "netChangePercent": 2.4390243902439024,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 57,
+          "referenceMinor": 57,
+          "minimumClamped": false,
+          "sellerNetMinor": 43,
+          "actualBuyerMinor": 57,
+          "netChangeMinor": 2,
+          "netChangePercent": 4.878048780487805,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "1657630-Batty Slime (Foil)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=1657630-Batty+Slime+%28Foil%29",
+      "fetchedAt": "2026-09-07T14:00:27.816Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 6.01",
+        "median_price": "¥ 5.99",
+        "volume": "2"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 599,
+          "referenceMinor": 599,
+          "minimumClamped": false,
+          "sellerNetMinor": 521,
+          "actualBuyerMinor": 599,
+          "netChangeMinor": -2,
+          "netChangePercent": -0.3824091778202677,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 600,
+          "referenceMinor": 600,
+          "minimumClamped": false,
+          "sellerNetMinor": 522,
+          "actualBuyerMinor": 600,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.19120458891013384,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 601,
+          "referenceMinor": 601,
+          "minimumClamped": false,
+          "sellerNetMinor": 523,
+          "actualBuyerMinor": 601,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 602,
+          "referenceMinor": 602,
+          "minimumClamped": false,
+          "sellerNetMinor": 524,
+          "actualBuyerMinor": 602,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.19120458891013384,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 603,
+          "referenceMinor": 603,
+          "minimumClamped": false,
+          "sellerNetMinor": 525,
+          "actualBuyerMinor": 603,
+          "netChangeMinor": 2,
+          "netChangePercent": 0.3824091778202677,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "1657630-Flutter Slime (Foil)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=1657630-Flutter+Slime+%28Foil%29",
+      "fetchedAt": "2026-09-07T14:00:31.454Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 6.24",
+        "median_price": "¥ 6.15",
+        "volume": "2"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 622,
+          "referenceMinor": 622,
+          "minimumClamped": false,
+          "sellerNetMinor": 541,
+          "actualBuyerMinor": 622,
+          "netChangeMinor": -2,
+          "netChangePercent": -0.3683241252302026,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 623,
+          "referenceMinor": 623,
+          "minimumClamped": false,
+          "sellerNetMinor": 542,
+          "actualBuyerMinor": 623,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.1841620626151013,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 624,
+          "referenceMinor": 624,
+          "minimumClamped": false,
+          "sellerNetMinor": 543,
+          "actualBuyerMinor": 624,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 625,
+          "referenceMinor": 625,
+          "minimumClamped": false,
+          "sellerNetMinor": 544,
+          "actualBuyerMinor": 625,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.1841620626151013,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 626,
+          "referenceMinor": 626,
+          "minimumClamped": false,
+          "sellerNetMinor": 545,
+          "actualBuyerMinor": 626,
+          "netChangeMinor": 2,
+          "netChangePercent": 0.3683241252302026,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "1657630-Pink Slime (Foil Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=1657630-Pink+Slime+%28Foil+Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:00:35.185Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 4.90",
+        "median_price": "¥ 4.89",
+        "volume": "2"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 488,
+          "referenceMinor": 488,
+          "minimumClamped": false,
+          "sellerNetMinor": 425,
+          "actualBuyerMinor": 488,
+          "netChangeMinor": -2,
+          "netChangePercent": -0.468384074941452,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 489,
+          "referenceMinor": 489,
+          "minimumClamped": false,
+          "sellerNetMinor": 426,
+          "actualBuyerMinor": 489,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.234192037470726,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 490,
+          "referenceMinor": 490,
+          "minimumClamped": false,
+          "sellerNetMinor": 427,
+          "actualBuyerMinor": 490,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 491,
+          "referenceMinor": 491,
+          "minimumClamped": false,
+          "sellerNetMinor": 428,
+          "actualBuyerMinor": 491,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.234192037470726,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 492,
+          "referenceMinor": 492,
+          "minimumClamped": false,
+          "sellerNetMinor": 429,
+          "actualBuyerMinor": 492,
+          "netChangeMinor": 2,
+          "netChangePercent": 0.468384074941452,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "570-Tusk (Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=570-Tusk+%28Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:00:38.952Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.25",
+        "median_price": "¥ 0.32",
+        "volume": "2,351"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 23,
+          "referenceMinor": 23,
+          "minimumClamped": false,
+          "sellerNetMinor": 9,
+          "actualBuyerMinor": 23,
+          "netChangeMinor": -2,
+          "netChangePercent": -18.181818181818183,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 24,
+          "referenceMinor": 24,
+          "minimumClamped": false,
+          "sellerNetMinor": 10,
+          "actualBuyerMinor": 24,
+          "netChangeMinor": -1,
+          "netChangePercent": -9.090909090909092,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 25,
+          "referenceMinor": 25,
+          "minimumClamped": false,
+          "sellerNetMinor": 11,
+          "actualBuyerMinor": 25,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 26,
+          "referenceMinor": 26,
+          "minimumClamped": false,
+          "sellerNetMinor": 12,
+          "actualBuyerMinor": 26,
+          "netChangeMinor": 1,
+          "netChangePercent": 9.090909090909092,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 27,
+          "referenceMinor": 27,
+          "minimumClamped": false,
+          "sellerNetMinor": 13,
+          "actualBuyerMinor": 27,
+          "netChangeMinor": 2,
+          "netChangePercent": 18.181818181818183,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "570-Vengeful Spirit (Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=570-Vengeful+Spirit+%28Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:00:42.590Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.30",
+        "median_price": "¥ 0.31",
+        "volume": "2,283"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 28,
+          "referenceMinor": 28,
+          "minimumClamped": false,
+          "sellerNetMinor": 14,
+          "actualBuyerMinor": 28,
+          "netChangeMinor": -2,
+          "netChangePercent": -12.5,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 29,
+          "referenceMinor": 29,
+          "minimumClamped": false,
+          "sellerNetMinor": 15,
+          "actualBuyerMinor": 29,
+          "netChangeMinor": -1,
+          "netChangePercent": -6.25,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 30,
+          "referenceMinor": 30,
+          "minimumClamped": false,
+          "sellerNetMinor": 16,
+          "actualBuyerMinor": 30,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 31,
+          "referenceMinor": 31,
+          "minimumClamped": false,
+          "sellerNetMinor": 17,
+          "actualBuyerMinor": 31,
+          "netChangeMinor": 1,
+          "netChangePercent": 6.25,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 32,
+          "referenceMinor": 32,
+          "minimumClamped": false,
+          "sellerNetMinor": 18,
+          "actualBuyerMinor": 32,
+          "netChangeMinor": 2,
+          "netChangePercent": 12.5,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "570-Bounty Hunter (Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=570-Bounty+Hunter+%28Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:00:46.245Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.21",
+        "median_price": "¥ 0.28",
+        "volume": "2,018"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 19,
+          "referenceMinor": 21,
+          "minimumClamped": true,
+          "sellerNetMinor": 7,
+          "actualBuyerMinor": 21,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 20,
+          "referenceMinor": 21,
+          "minimumClamped": true,
+          "sellerNetMinor": 7,
+          "actualBuyerMinor": 21,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 21,
+          "referenceMinor": 21,
+          "minimumClamped": false,
+          "sellerNetMinor": 7,
+          "actualBuyerMinor": 21,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 22,
+          "referenceMinor": 22,
+          "minimumClamped": false,
+          "sellerNetMinor": 8,
+          "actualBuyerMinor": 22,
+          "netChangeMinor": 1,
+          "netChangePercent": 14.285714285714285,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 23,
+          "referenceMinor": 23,
+          "minimumClamped": false,
+          "sellerNetMinor": 9,
+          "actualBuyerMinor": 23,
+          "netChangeMinor": 2,
+          "netChangePercent": 28.57142857142857,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "570-Vengeful Spirit (Foil Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=570-Vengeful+Spirit+%28Foil+Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:00:49.949Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 1.53",
+        "median_price": "¥ 1.55",
+        "volume": "40"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 151,
+          "referenceMinor": 151,
+          "minimumClamped": false,
+          "sellerNetMinor": 131,
+          "actualBuyerMinor": 151,
+          "netChangeMinor": -2,
+          "netChangePercent": -1.5037593984962405,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 152,
+          "referenceMinor": 152,
+          "minimumClamped": false,
+          "sellerNetMinor": 132,
+          "actualBuyerMinor": 152,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.7518796992481203,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 153,
+          "referenceMinor": 153,
+          "minimumClamped": false,
+          "sellerNetMinor": 133,
+          "actualBuyerMinor": 153,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 154,
+          "referenceMinor": 154,
+          "minimumClamped": false,
+          "sellerNetMinor": 134,
+          "actualBuyerMinor": 154,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.7518796992481203,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 155,
+          "referenceMinor": 155,
+          "minimumClamped": false,
+          "sellerNetMinor": 135,
+          "actualBuyerMinor": 155,
+          "netChangeMinor": 2,
+          "netChangePercent": 1.5037593984962405,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "570-Bounty Hunter (Foil Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=570-Bounty+Hunter+%28Foil+Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:00:53.600Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 1.25",
+        "median_price": "¥ 1.24",
+        "volume": "40"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 123,
+          "referenceMinor": 123,
+          "minimumClamped": false,
+          "sellerNetMinor": 106,
+          "actualBuyerMinor": 123,
+          "netChangeMinor": -2,
+          "netChangePercent": -1.8518518518518516,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 124,
+          "referenceMinor": 124,
+          "minimumClamped": false,
+          "sellerNetMinor": 107,
+          "actualBuyerMinor": 124,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.9259259259259258,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 125,
+          "referenceMinor": 125,
+          "minimumClamped": false,
+          "sellerNetMinor": 108,
+          "actualBuyerMinor": 125,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 126,
+          "referenceMinor": 126,
+          "minimumClamped": false,
+          "sellerNetMinor": 109,
+          "actualBuyerMinor": 126,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.9259259259259258,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 127,
+          "referenceMinor": 127,
+          "minimumClamped": false,
+          "sellerNetMinor": 109,
+          "actualBuyerMinor": 126,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.9259259259259258,
+          "actualPriceChangeMinor": 1
+        }
+      ]
+    },
+    {
+      "marketHashName": "570-Tidehunter (Foil Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=570-Tidehunter+%28Foil+Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:00:57.267Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 1.41",
+        "median_price": "¥ 1.35",
+        "volume": "45"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 139,
+          "referenceMinor": 139,
+          "minimumClamped": false,
+          "sellerNetMinor": 120,
+          "actualBuyerMinor": 139,
+          "netChangeMinor": -2,
+          "netChangePercent": -1.639344262295082,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 140,
+          "referenceMinor": 140,
+          "minimumClamped": false,
+          "sellerNetMinor": 121,
+          "actualBuyerMinor": 140,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.819672131147541,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 141,
+          "referenceMinor": 141,
+          "minimumClamped": false,
+          "sellerNetMinor": 122,
+          "actualBuyerMinor": 141,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 142,
+          "referenceMinor": 142,
+          "minimumClamped": false,
+          "sellerNetMinor": 123,
+          "actualBuyerMinor": 142,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.819672131147541,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 143,
+          "referenceMinor": 143,
+          "minimumClamped": false,
+          "sellerNetMinor": 124,
+          "actualBuyerMinor": 143,
+          "netChangeMinor": 2,
+          "netChangePercent": 1.639344262295082,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "440-ENGINEER (Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=440-ENGINEER+%28Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:01:00.890Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.40",
+        "median_price": "¥ 0.41",
+        "volume": "506"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 38,
+          "referenceMinor": 38,
+          "minimumClamped": false,
+          "sellerNetMinor": 24,
+          "actualBuyerMinor": 38,
+          "netChangeMinor": -2,
+          "netChangePercent": -7.6923076923076925,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 39,
+          "referenceMinor": 39,
+          "minimumClamped": false,
+          "sellerNetMinor": 25,
+          "actualBuyerMinor": 39,
+          "netChangeMinor": -1,
+          "netChangePercent": -3.8461538461538463,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 40,
+          "referenceMinor": 40,
+          "minimumClamped": false,
+          "sellerNetMinor": 26,
+          "actualBuyerMinor": 40,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 41,
+          "referenceMinor": 41,
+          "minimumClamped": false,
+          "sellerNetMinor": 27,
+          "actualBuyerMinor": 41,
+          "netChangeMinor": 1,
+          "netChangePercent": 3.8461538461538463,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 42,
+          "referenceMinor": 42,
+          "minimumClamped": false,
+          "sellerNetMinor": 28,
+          "actualBuyerMinor": 42,
+          "netChangeMinor": 2,
+          "netChangePercent": 7.6923076923076925,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "440-SCOUT (Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=440-SCOUT+%28Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:01:04.568Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.37",
+        "median_price": "¥ 0.37",
+        "volume": "491"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 35,
+          "referenceMinor": 35,
+          "minimumClamped": false,
+          "sellerNetMinor": 21,
+          "actualBuyerMinor": 35,
+          "netChangeMinor": -2,
+          "netChangePercent": -8.695652173913043,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 36,
+          "referenceMinor": 36,
+          "minimumClamped": false,
+          "sellerNetMinor": 22,
+          "actualBuyerMinor": 36,
+          "netChangeMinor": -1,
+          "netChangePercent": -4.3478260869565215,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 37,
+          "referenceMinor": 37,
+          "minimumClamped": false,
+          "sellerNetMinor": 23,
+          "actualBuyerMinor": 37,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 38,
+          "referenceMinor": 38,
+          "minimumClamped": false,
+          "sellerNetMinor": 24,
+          "actualBuyerMinor": 38,
+          "netChangeMinor": 1,
+          "netChangePercent": 4.3478260869565215,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 39,
+          "referenceMinor": 39,
+          "minimumClamped": false,
+          "sellerNetMinor": 25,
+          "actualBuyerMinor": 39,
+          "netChangeMinor": 2,
+          "netChangePercent": 8.695652173913043,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "440-PYRO (Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=440-PYRO+%28Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:01:08.197Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.36",
+        "median_price": "¥ 0.35",
+        "volume": "483"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 34,
+          "referenceMinor": 34,
+          "minimumClamped": false,
+          "sellerNetMinor": 20,
+          "actualBuyerMinor": 34,
+          "netChangeMinor": -2,
+          "netChangePercent": -9.090909090909092,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 35,
+          "referenceMinor": 35,
+          "minimumClamped": false,
+          "sellerNetMinor": 21,
+          "actualBuyerMinor": 35,
+          "netChangeMinor": -1,
+          "netChangePercent": -4.545454545454546,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 36,
+          "referenceMinor": 36,
+          "minimumClamped": false,
+          "sellerNetMinor": 22,
+          "actualBuyerMinor": 36,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 37,
+          "referenceMinor": 37,
+          "minimumClamped": false,
+          "sellerNetMinor": 23,
+          "actualBuyerMinor": 37,
+          "netChangeMinor": 1,
+          "netChangePercent": 4.545454545454546,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 38,
+          "referenceMinor": 38,
+          "minimumClamped": false,
+          "sellerNetMinor": 24,
+          "actualBuyerMinor": 38,
+          "netChangeMinor": 2,
+          "netChangePercent": 9.090909090909092,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "440-HEAVY (Foil Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=440-HEAVY+%28Foil+Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:01:11.871Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 6.85",
+        "median_price": "¥ 7.13",
+        "volume": "5"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 683,
+          "referenceMinor": 683,
+          "minimumClamped": false,
+          "sellerNetMinor": 595,
+          "actualBuyerMinor": 683,
+          "netChangeMinor": -2,
+          "netChangePercent": -0.33500837520938026,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 684,
+          "referenceMinor": 684,
+          "minimumClamped": false,
+          "sellerNetMinor": 596,
+          "actualBuyerMinor": 684,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.16750418760469013,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 685,
+          "referenceMinor": 685,
+          "minimumClamped": false,
+          "sellerNetMinor": 597,
+          "actualBuyerMinor": 685,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 686,
+          "referenceMinor": 686,
+          "minimumClamped": false,
+          "sellerNetMinor": 598,
+          "actualBuyerMinor": 686,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.16750418760469013,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 687,
+          "referenceMinor": 687,
+          "minimumClamped": false,
+          "sellerNetMinor": 599,
+          "actualBuyerMinor": 687,
+          "netChangeMinor": 2,
+          "netChangePercent": 0.33500837520938026,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "440-ENGINEER (Foil Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=440-ENGINEER+%28Foil+Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:01:15.691Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 7.31",
+        "median_price": "¥ 7.26",
+        "volume": "7"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 729,
+          "referenceMinor": 729,
+          "minimumClamped": false,
+          "sellerNetMinor": 635,
+          "actualBuyerMinor": 729,
+          "netChangeMinor": -2,
+          "netChangePercent": -0.3139717425431711,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 730,
+          "referenceMinor": 730,
+          "minimumClamped": false,
+          "sellerNetMinor": 636,
+          "actualBuyerMinor": 730,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.15698587127158556,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 731,
+          "referenceMinor": 731,
+          "minimumClamped": false,
+          "sellerNetMinor": 637,
+          "actualBuyerMinor": 731,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 732,
+          "referenceMinor": 732,
+          "minimumClamped": false,
+          "sellerNetMinor": 638,
+          "actualBuyerMinor": 732,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.15698587127158556,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 733,
+          "referenceMinor": 733,
+          "minimumClamped": false,
+          "sellerNetMinor": 639,
+          "actualBuyerMinor": 733,
+          "netChangeMinor": 2,
+          "netChangePercent": 0.3139717425431711,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "440-DEMOMAN (Foil Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=440-DEMOMAN+%28Foil+Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:01:19.337Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 4.99",
+        "median_price": "¥ 5.02",
+        "volume": "8"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 497,
+          "referenceMinor": 497,
+          "minimumClamped": false,
+          "sellerNetMinor": 433,
+          "actualBuyerMinor": 497,
+          "netChangeMinor": -2,
+          "netChangePercent": -0.45977011494252873,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 498,
+          "referenceMinor": 498,
+          "minimumClamped": false,
+          "sellerNetMinor": 434,
+          "actualBuyerMinor": 498,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.22988505747126436,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 499,
+          "referenceMinor": 499,
+          "minimumClamped": false,
+          "sellerNetMinor": 435,
+          "actualBuyerMinor": 499,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 500,
+          "referenceMinor": 500,
+          "minimumClamped": false,
+          "sellerNetMinor": 436,
+          "actualBuyerMinor": 500,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.22988505747126436,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 501,
+          "referenceMinor": 501,
+          "minimumClamped": false,
+          "sellerNetMinor": 437,
+          "actualBuyerMinor": 501,
+          "netChangeMinor": 2,
+          "netChangePercent": 0.45977011494252873,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "730-SWAT",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=730-SWAT",
+      "fetchedAt": "2026-09-07T14:01:22.979Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.39",
+        "median_price": "¥ 0.30",
+        "volume": "10,765"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 37,
+          "referenceMinor": 37,
+          "minimumClamped": false,
+          "sellerNetMinor": 23,
+          "actualBuyerMinor": 37,
+          "netChangeMinor": -2,
+          "netChangePercent": -8,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 38,
+          "referenceMinor": 38,
+          "minimumClamped": false,
+          "sellerNetMinor": 24,
+          "actualBuyerMinor": 38,
+          "netChangeMinor": -1,
+          "netChangePercent": -4,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 39,
+          "referenceMinor": 39,
+          "minimumClamped": false,
+          "sellerNetMinor": 25,
+          "actualBuyerMinor": 39,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 40,
+          "referenceMinor": 40,
+          "minimumClamped": false,
+          "sellerNetMinor": 26,
+          "actualBuyerMinor": 40,
+          "netChangeMinor": 1,
+          "netChangePercent": 4,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 41,
+          "referenceMinor": 41,
+          "minimumClamped": false,
+          "sellerNetMinor": 27,
+          "actualBuyerMinor": 41,
+          "netChangeMinor": 2,
+          "netChangePercent": 8,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "730-IDF",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=730-IDF",
+      "fetchedAt": "2026-09-07T14:01:26.637Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.30",
+        "median_price": "¥ 0.30",
+        "volume": "11,048"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 28,
+          "referenceMinor": 28,
+          "minimumClamped": false,
+          "sellerNetMinor": 14,
+          "actualBuyerMinor": 28,
+          "netChangeMinor": -2,
+          "netChangePercent": -12.5,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 29,
+          "referenceMinor": 29,
+          "minimumClamped": false,
+          "sellerNetMinor": 15,
+          "actualBuyerMinor": 29,
+          "netChangeMinor": -1,
+          "netChangePercent": -6.25,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 30,
+          "referenceMinor": 30,
+          "minimumClamped": false,
+          "sellerNetMinor": 16,
+          "actualBuyerMinor": 30,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 31,
+          "referenceMinor": 31,
+          "minimumClamped": false,
+          "sellerNetMinor": 17,
+          "actualBuyerMinor": 31,
+          "netChangeMinor": 1,
+          "netChangePercent": 6.25,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 32,
+          "referenceMinor": 32,
+          "minimumClamped": false,
+          "sellerNetMinor": 18,
+          "actualBuyerMinor": 32,
+          "netChangeMinor": 2,
+          "netChangePercent": 12.5,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "730-Balkan",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=730-Balkan",
+      "fetchedAt": "2026-09-07T14:01:30.266Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.36",
+        "median_price": "¥ 0.28",
+        "volume": "11,091"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 34,
+          "referenceMinor": 34,
+          "minimumClamped": false,
+          "sellerNetMinor": 20,
+          "actualBuyerMinor": 34,
+          "netChangeMinor": -2,
+          "netChangePercent": -9.090909090909092,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 35,
+          "referenceMinor": 35,
+          "minimumClamped": false,
+          "sellerNetMinor": 21,
+          "actualBuyerMinor": 35,
+          "netChangeMinor": -1,
+          "netChangePercent": -4.545454545454546,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 36,
+          "referenceMinor": 36,
+          "minimumClamped": false,
+          "sellerNetMinor": 22,
+          "actualBuyerMinor": 36,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 37,
+          "referenceMinor": 37,
+          "minimumClamped": false,
+          "sellerNetMinor": 23,
+          "actualBuyerMinor": 37,
+          "netChangeMinor": 1,
+          "netChangePercent": 4.545454545454546,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 38,
+          "referenceMinor": 38,
+          "minimumClamped": false,
+          "sellerNetMinor": 24,
+          "actualBuyerMinor": 38,
+          "netChangeMinor": 2,
+          "netChangePercent": 9.090909090909092,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "730-Balkan (Foil)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=730-Balkan+%28Foil%29",
+      "fetchedAt": "2026-09-07T14:01:33.991Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 2.00",
+        "median_price": "¥ 2.00",
+        "volume": "347"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 198,
+          "referenceMinor": 198,
+          "minimumClamped": false,
+          "sellerNetMinor": 173,
+          "actualBuyerMinor": 198,
+          "netChangeMinor": -2,
+          "netChangePercent": -1.1428571428571428,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 199,
+          "referenceMinor": 199,
+          "minimumClamped": false,
+          "sellerNetMinor": 174,
+          "actualBuyerMinor": 199,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.5714285714285714,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 200,
+          "referenceMinor": 200,
+          "minimumClamped": false,
+          "sellerNetMinor": 175,
+          "actualBuyerMinor": 200,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 201,
+          "referenceMinor": 201,
+          "minimumClamped": false,
+          "sellerNetMinor": 176,
+          "actualBuyerMinor": 201,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.5714285714285714,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 202,
+          "referenceMinor": 202,
+          "minimumClamped": false,
+          "sellerNetMinor": 177,
+          "actualBuyerMinor": 202,
+          "netChangeMinor": 2,
+          "netChangePercent": 1.1428571428571428,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "730-IDF (Foil)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=730-IDF+%28Foil%29",
+      "fetchedAt": "2026-09-07T14:01:37.771Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 2.12",
+        "median_price": "¥ 2.13",
+        "volume": "196"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 210,
+          "referenceMinor": 210,
+          "minimumClamped": false,
+          "sellerNetMinor": 183,
+          "actualBuyerMinor": 210,
+          "netChangeMinor": -2,
+          "netChangePercent": -1.0810810810810811,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 211,
+          "referenceMinor": 211,
+          "minimumClamped": false,
+          "sellerNetMinor": 184,
+          "actualBuyerMinor": 211,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.5405405405405406,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 212,
+          "referenceMinor": 212,
+          "minimumClamped": false,
+          "sellerNetMinor": 185,
+          "actualBuyerMinor": 212,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 213,
+          "referenceMinor": 213,
+          "minimumClamped": false,
+          "sellerNetMinor": 186,
+          "actualBuyerMinor": 213,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.5405405405405406,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 214,
+          "referenceMinor": 214,
+          "minimumClamped": false,
+          "sellerNetMinor": 187,
+          "actualBuyerMinor": 214,
+          "netChangeMinor": 2,
+          "netChangePercent": 1.0810810810810811,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "730-Anarchist (Foil)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=730-Anarchist+%28Foil%29",
+      "fetchedAt": "2026-09-07T14:01:41.427Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 2.11",
+        "median_price": "¥ 2.08",
+        "volume": "214"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 209,
+          "referenceMinor": 209,
+          "minimumClamped": false,
+          "sellerNetMinor": 182,
+          "actualBuyerMinor": 209,
+          "netChangeMinor": -2,
+          "netChangePercent": -1.0869565217391304,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 210,
+          "referenceMinor": 210,
+          "minimumClamped": false,
+          "sellerNetMinor": 183,
+          "actualBuyerMinor": 210,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.5434782608695652,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 211,
+          "referenceMinor": 211,
+          "minimumClamped": false,
+          "sellerNetMinor": 184,
+          "actualBuyerMinor": 211,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 212,
+          "referenceMinor": 212,
+          "minimumClamped": false,
+          "sellerNetMinor": 185,
+          "actualBuyerMinor": 212,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.5434782608695652,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 213,
+          "referenceMinor": 213,
+          "minimumClamped": false,
+          "sellerNetMinor": 186,
+          "actualBuyerMinor": 213,
+          "netChangeMinor": 2,
+          "netChangePercent": 1.0869565217391304,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "8870-Boys of Silence (Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=8870-Boys+of+Silence+%28Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:01:45.065Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.45",
+        "median_price": "¥ 0.33",
+        "volume": "86"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 43,
+          "referenceMinor": 43,
+          "minimumClamped": false,
+          "sellerNetMinor": 29,
+          "actualBuyerMinor": 43,
+          "netChangeMinor": -2,
+          "netChangePercent": -6.451612903225806,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 44,
+          "referenceMinor": 44,
+          "minimumClamped": false,
+          "sellerNetMinor": 30,
+          "actualBuyerMinor": 44,
+          "netChangeMinor": -1,
+          "netChangePercent": -3.225806451612903,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 45,
+          "referenceMinor": 45,
+          "minimumClamped": false,
+          "sellerNetMinor": 31,
+          "actualBuyerMinor": 45,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 46,
+          "referenceMinor": 46,
+          "minimumClamped": false,
+          "sellerNetMinor": 32,
+          "actualBuyerMinor": 46,
+          "netChangeMinor": 1,
+          "netChangePercent": 3.225806451612903,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 47,
+          "referenceMinor": 47,
+          "minimumClamped": false,
+          "sellerNetMinor": 33,
+          "actualBuyerMinor": 47,
+          "netChangeMinor": 2,
+          "netChangePercent": 6.451612903225806,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "8870-Motorized Patriot",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=8870-Motorized+Patriot",
+      "fetchedAt": "2026-09-07T14:01:48.688Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.52",
+        "median_price": "¥ 0.45",
+        "volume": "79"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 50,
+          "referenceMinor": 50,
+          "minimumClamped": false,
+          "sellerNetMinor": 36,
+          "actualBuyerMinor": 50,
+          "netChangeMinor": -2,
+          "netChangePercent": -5.263157894736842,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 51,
+          "referenceMinor": 51,
+          "minimumClamped": false,
+          "sellerNetMinor": 37,
+          "actualBuyerMinor": 51,
+          "netChangeMinor": -1,
+          "netChangePercent": -2.631578947368421,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 52,
+          "referenceMinor": 52,
+          "minimumClamped": false,
+          "sellerNetMinor": 38,
+          "actualBuyerMinor": 52,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 53,
+          "referenceMinor": 53,
+          "minimumClamped": false,
+          "sellerNetMinor": 39,
+          "actualBuyerMinor": 53,
+          "netChangeMinor": 1,
+          "netChangePercent": 2.631578947368421,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 54,
+          "referenceMinor": 54,
+          "minimumClamped": false,
+          "sellerNetMinor": 40,
+          "actualBuyerMinor": 54,
+          "netChangeMinor": 2,
+          "netChangePercent": 5.263157894736842,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "8870-Lutece Twins (Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=8870-Lutece+Twins+%28Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:01:52.306Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.43",
+        "median_price": "¥ 0.30",
+        "volume": "80"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 41,
+          "referenceMinor": 41,
+          "minimumClamped": false,
+          "sellerNetMinor": 27,
+          "actualBuyerMinor": 41,
+          "netChangeMinor": -2,
+          "netChangePercent": -6.896551724137931,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 42,
+          "referenceMinor": 42,
+          "minimumClamped": false,
+          "sellerNetMinor": 28,
+          "actualBuyerMinor": 42,
+          "netChangeMinor": -1,
+          "netChangePercent": -3.4482758620689653,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 43,
+          "referenceMinor": 43,
+          "minimumClamped": false,
+          "sellerNetMinor": 29,
+          "actualBuyerMinor": 43,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 44,
+          "referenceMinor": 44,
+          "minimumClamped": false,
+          "sellerNetMinor": 30,
+          "actualBuyerMinor": 44,
+          "netChangeMinor": 1,
+          "netChangePercent": 3.4482758620689653,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 45,
+          "referenceMinor": 45,
+          "minimumClamped": false,
+          "sellerNetMinor": 31,
+          "actualBuyerMinor": 45,
+          "netChangeMinor": 2,
+          "netChangePercent": 6.896551724137931,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "8870-Boys of Silence (Foil Trading Card)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=8870-Boys+of+Silence+%28Foil+Trading+Card%29",
+      "fetchedAt": "2026-09-07T14:01:55.933Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 2.55",
+        "median_price": "¥ 2.68",
+        "volume": "2"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 253,
+          "referenceMinor": 253,
+          "minimumClamped": false,
+          "sellerNetMinor": 220,
+          "actualBuyerMinor": 253,
+          "netChangeMinor": -2,
+          "netChangePercent": -0.9009009009009009,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 254,
+          "referenceMinor": 254,
+          "minimumClamped": false,
+          "sellerNetMinor": 221,
+          "actualBuyerMinor": 254,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.45045045045045046,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 255,
+          "referenceMinor": 255,
+          "minimumClamped": false,
+          "sellerNetMinor": 222,
+          "actualBuyerMinor": 255,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 256,
+          "referenceMinor": 256,
+          "minimumClamped": false,
+          "sellerNetMinor": 223,
+          "actualBuyerMinor": 256,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.45045045045045046,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 257,
+          "referenceMinor": 257,
+          "minimumClamped": false,
+          "sellerNetMinor": 224,
+          "actualBuyerMinor": 257,
+          "netChangeMinor": 2,
+          "netChangePercent": 0.9009009009009009,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "8870-Fireman (Foil)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=8870-Fireman+%28Foil%29",
+      "fetchedAt": "2026-09-07T14:01:59.672Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 4.26",
+        "median_price": "¥ 4.26",
+        "volume": "2"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 424,
+          "referenceMinor": 424,
+          "minimumClamped": false,
+          "sellerNetMinor": 369,
+          "actualBuyerMinor": 423,
+          "netChangeMinor": -2,
+          "netChangePercent": -0.5390835579514826,
+          "actualPriceChangeMinor": -3
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 425,
+          "referenceMinor": 425,
+          "minimumClamped": false,
+          "sellerNetMinor": 370,
+          "actualBuyerMinor": 425,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.2695417789757413,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 426,
+          "referenceMinor": 426,
+          "minimumClamped": false,
+          "sellerNetMinor": 371,
+          "actualBuyerMinor": 426,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 427,
+          "referenceMinor": 427,
+          "minimumClamped": false,
+          "sellerNetMinor": 372,
+          "actualBuyerMinor": 427,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.2695417789757413,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 428,
+          "referenceMinor": 428,
+          "minimumClamped": false,
+          "sellerNetMinor": 373,
+          "actualBuyerMinor": 428,
+          "netChangeMinor": 2,
+          "netChangePercent": 0.5390835579514826,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "8870-Elizabeth (Foil)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=8870-Elizabeth+%28Foil%29",
+      "fetchedAt": "2026-09-07T14:02:03.371Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 3.95",
+        "median_price": "¥ 4.02",
+        "volume": "2"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 393,
+          "referenceMinor": 393,
+          "minimumClamped": false,
+          "sellerNetMinor": 342,
+          "actualBuyerMinor": 393,
+          "netChangeMinor": -2,
+          "netChangePercent": -0.5813953488372093,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 394,
+          "referenceMinor": 394,
+          "minimumClamped": false,
+          "sellerNetMinor": 343,
+          "actualBuyerMinor": 394,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.29069767441860467,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 395,
+          "referenceMinor": 395,
+          "minimumClamped": false,
+          "sellerNetMinor": 344,
+          "actualBuyerMinor": 395,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 396,
+          "referenceMinor": 396,
+          "minimumClamped": false,
+          "sellerNetMinor": 345,
+          "actualBuyerMinor": 396,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.29069767441860467,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 397,
+          "referenceMinor": 397,
+          "minimumClamped": false,
+          "sellerNetMinor": 346,
+          "actualBuyerMinor": 397,
+          "netChangeMinor": 2,
+          "netChangePercent": 0.5813953488372093,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "620-Underground",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=620-Underground",
+      "fetchedAt": "2026-09-07T14:02:07.014Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.50",
+        "median_price": "¥ 0.51",
+        "volume": "261"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 48,
+          "referenceMinor": 48,
+          "minimumClamped": false,
+          "sellerNetMinor": 34,
+          "actualBuyerMinor": 48,
+          "netChangeMinor": -2,
+          "netChangePercent": -5.555555555555555,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 49,
+          "referenceMinor": 49,
+          "minimumClamped": false,
+          "sellerNetMinor": 35,
+          "actualBuyerMinor": 49,
+          "netChangeMinor": -1,
+          "netChangePercent": -2.7777777777777777,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 50,
+          "referenceMinor": 50,
+          "minimumClamped": false,
+          "sellerNetMinor": 36,
+          "actualBuyerMinor": 50,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 51,
+          "referenceMinor": 51,
+          "minimumClamped": false,
+          "sellerNetMinor": 37,
+          "actualBuyerMinor": 51,
+          "netChangeMinor": 1,
+          "netChangePercent": 2.7777777777777777,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 52,
+          "referenceMinor": 52,
+          "minimumClamped": false,
+          "sellerNetMinor": 38,
+          "actualBuyerMinor": 52,
+          "netChangeMinor": 2,
+          "netChangePercent": 5.555555555555555,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "620-Mannequin",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=620-Mannequin",
+      "fetchedAt": "2026-09-07T14:02:10.768Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.41",
+        "median_price": "¥ 0.59",
+        "volume": "254"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 39,
+          "referenceMinor": 39,
+          "minimumClamped": false,
+          "sellerNetMinor": 25,
+          "actualBuyerMinor": 39,
+          "netChangeMinor": -2,
+          "netChangePercent": -7.4074074074074066,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 40,
+          "referenceMinor": 40,
+          "minimumClamped": false,
+          "sellerNetMinor": 26,
+          "actualBuyerMinor": 40,
+          "netChangeMinor": -1,
+          "netChangePercent": -3.7037037037037033,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 41,
+          "referenceMinor": 41,
+          "minimumClamped": false,
+          "sellerNetMinor": 27,
+          "actualBuyerMinor": 41,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 42,
+          "referenceMinor": 42,
+          "minimumClamped": false,
+          "sellerNetMinor": 28,
+          "actualBuyerMinor": 42,
+          "netChangeMinor": 1,
+          "netChangePercent": 3.7037037037037033,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 43,
+          "referenceMinor": 43,
+          "minimumClamped": false,
+          "sellerNetMinor": 29,
+          "actualBuyerMinor": 43,
+          "netChangeMinor": 2,
+          "netChangePercent": 7.4074074074074066,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "620-Destruction",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=620-Destruction",
+      "fetchedAt": "2026-09-07T14:02:14.456Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 0.41",
+        "median_price": "¥ 0.50",
+        "volume": "254"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 39,
+          "referenceMinor": 39,
+          "minimumClamped": false,
+          "sellerNetMinor": 25,
+          "actualBuyerMinor": 39,
+          "netChangeMinor": -2,
+          "netChangePercent": -7.4074074074074066,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 40,
+          "referenceMinor": 40,
+          "minimumClamped": false,
+          "sellerNetMinor": 26,
+          "actualBuyerMinor": 40,
+          "netChangeMinor": -1,
+          "netChangePercent": -3.7037037037037033,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 41,
+          "referenceMinor": 41,
+          "minimumClamped": false,
+          "sellerNetMinor": 27,
+          "actualBuyerMinor": 41,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 42,
+          "referenceMinor": 42,
+          "minimumClamped": false,
+          "sellerNetMinor": 28,
+          "actualBuyerMinor": 42,
+          "netChangeMinor": 1,
+          "netChangePercent": 3.7037037037037033,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 43,
+          "referenceMinor": 43,
+          "minimumClamped": false,
+          "sellerNetMinor": 29,
+          "actualBuyerMinor": 43,
+          "netChangeMinor": 2,
+          "netChangePercent": 7.4074074074074066,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "620-Destruction (Foil)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=620-Destruction+%28Foil%29",
+      "fetchedAt": "2026-09-07T14:02:18.133Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 1.42",
+        "median_price": "¥ 1.49",
+        "volume": "6"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 140,
+          "referenceMinor": 140,
+          "minimumClamped": false,
+          "sellerNetMinor": 121,
+          "actualBuyerMinor": 140,
+          "netChangeMinor": -2,
+          "netChangePercent": -1.6260162601626018,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 141,
+          "referenceMinor": 141,
+          "minimumClamped": false,
+          "sellerNetMinor": 122,
+          "actualBuyerMinor": 141,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.8130081300813009,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 142,
+          "referenceMinor": 142,
+          "minimumClamped": false,
+          "sellerNetMinor": 123,
+          "actualBuyerMinor": 142,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 143,
+          "referenceMinor": 143,
+          "minimumClamped": false,
+          "sellerNetMinor": 124,
+          "actualBuyerMinor": 143,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.8130081300813009,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 144,
+          "referenceMinor": 144,
+          "minimumClamped": false,
+          "sellerNetMinor": 125,
+          "actualBuyerMinor": 144,
+          "netChangeMinor": 2,
+          "netChangePercent": 1.6260162601626018,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "620-Finale (Foil)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=620-Finale+%28Foil%29",
+      "fetchedAt": "2026-09-07T14:02:21.780Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 1.57",
+        "median_price": "¥ 1.57",
+        "volume": "9"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 155,
+          "referenceMinor": 155,
+          "minimumClamped": false,
+          "sellerNetMinor": 135,
+          "actualBuyerMinor": 155,
+          "netChangeMinor": -2,
+          "netChangePercent": -1.4598540145985401,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 156,
+          "referenceMinor": 156,
+          "minimumClamped": false,
+          "sellerNetMinor": 136,
+          "actualBuyerMinor": 156,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.7299270072992701,
+          "actualPriceChangeMinor": -1
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 157,
+          "referenceMinor": 157,
+          "minimumClamped": false,
+          "sellerNetMinor": 137,
+          "actualBuyerMinor": 157,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 158,
+          "referenceMinor": 158,
+          "minimumClamped": false,
+          "sellerNetMinor": 138,
+          "actualBuyerMinor": 158,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.7299270072992701,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 159,
+          "referenceMinor": 159,
+          "minimumClamped": false,
+          "sellerNetMinor": 139,
+          "actualBuyerMinor": 159,
+          "netChangeMinor": 2,
+          "netChangePercent": 1.4598540145985401,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    },
+    {
+      "marketHashName": "620-Underground (Foil)",
+      "sourceUrl": "https://steamcommunity.com/market/priceoverview/?appid=753&currency=23&market_hash_name=620-Underground+%28Foil%29",
+      "fetchedAt": "2026-09-07T14:02:25.481Z",
+      "currencyEvidence": "Explicit request parameter and currency-formatted priceoverview response; no eCurrency field in this endpoint.",
+      "response": {
+        "success": true,
+        "lowest_price": "¥ 1.72",
+        "median_price": "¥ 1.73",
+        "volume": "8"
+      },
+      "offsets": [
+        {
+          "offsetMinor": -2,
+          "requestedMinor": 170,
+          "referenceMinor": 170,
+          "minimumClamped": false,
+          "sellerNetMinor": 149,
+          "actualBuyerMinor": 170,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.6666666666666667,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": -1,
+          "requestedMinor": 171,
+          "referenceMinor": 171,
+          "minimumClamped": false,
+          "sellerNetMinor": 149,
+          "actualBuyerMinor": 170,
+          "netChangeMinor": -1,
+          "netChangePercent": -0.6666666666666667,
+          "actualPriceChangeMinor": -2
+        },
+        {
+          "offsetMinor": 0,
+          "requestedMinor": 172,
+          "referenceMinor": 172,
+          "minimumClamped": false,
+          "sellerNetMinor": 150,
+          "actualBuyerMinor": 172,
+          "netChangeMinor": 0,
+          "netChangePercent": 0,
+          "actualPriceChangeMinor": 0
+        },
+        {
+          "offsetMinor": 1,
+          "requestedMinor": 173,
+          "referenceMinor": 173,
+          "minimumClamped": false,
+          "sellerNetMinor": 151,
+          "actualBuyerMinor": 173,
+          "netChangeMinor": 1,
+          "netChangePercent": 0.6666666666666667,
+          "actualPriceChangeMinor": 1
+        },
+        {
+          "offsetMinor": 2,
+          "requestedMinor": 174,
+          "referenceMinor": 174,
+          "minimumClamped": false,
+          "sellerNetMinor": 152,
+          "actualBuyerMinor": 174,
+          "netChangeMinor": 2,
+          "netChangePercent": 1.3333333333333335,
+          "actualPriceChangeMinor": 2
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "completedAt": "2026-09-07T14:02:28.992Z",
+  "summary": [
+    {
+      "offsetMinor": -2,
+      "samples": 37,
+      "minimumClamped": 1,
+      "unchangedActualPrice": 1,
+      "medianAbsoluteNetChangePercent": 1.639344262295082,
+      "maximumAbsoluteNetChangePercent": 18.181818181818183
+    },
+    {
+      "offsetMinor": -1,
+      "samples": 37,
+      "minimumClamped": 1,
+      "unchangedActualPrice": 1,
+      "medianAbsoluteNetChangePercent": 0.819672131147541,
+      "maximumAbsoluteNetChangePercent": 9.090909090909092
+    },
+    {
+      "offsetMinor": 1,
+      "samples": 37,
+      "minimumClamped": 0,
+      "unchangedActualPrice": 0,
+      "medianAbsoluteNetChangePercent": 0.9259259259259258,
+      "maximumAbsoluteNetChangePercent": 14.285714285714285
+    },
+    {
+      "offsetMinor": 2,
+      "samples": 37,
+      "minimumClamped": 0,
+      "unchangedActualPrice": 0,
+      "medianAbsoluteNetChangePercent": 1.639344262295082,
+      "maximumAbsoluteNetChangePercent": 28.57142857142857
+    }
+  ],
+  "reanalyzedAt": "2026-09-07T14:05:31.470Z"
+}

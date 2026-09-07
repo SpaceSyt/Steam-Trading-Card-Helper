@@ -305,18 +305,17 @@ export const DEFAULT_AUTOMATIC_BUY_PRICE_RULES = Object.freeze({
 });
 
 function normalizeStrategyRule(strategy, input, sell) {
-  const defaults = DEFAULT_AUTOMATIC_BUY_PRICE_RULES[strategy];
   const fallback = sell ? {
-    wallAnchor: defaults.wallAnchor === "top" ? "bottom" : "top",
-    wallOffsetMinor: -defaults.wallOffsetMinor || 0,
-    noWallOffsetMinor: -defaults.noWallOffsetMinor || 0,
-  } : defaults;
+    wallAnchor: "bottom",
+    wallOffsetMinor: strategy === "follow" ? -1 : 0,
+    noWallOffsetMinor: strategy === "follow" ? -1 : 0,
+  } : DEFAULT_AUTOMATIC_BUY_PRICE_RULES[strategy];
   const rule = input && typeof input === "object" ? input : {};
   const integerOrFallback = (value, fallbackValue) => (
     Number.isSafeInteger(Number(value)) ? Number(value) : fallbackValue
   );
   return {
-    wallAnchor: ["top", "bottom"].includes(rule.wallAnchor)
+    wallAnchor: (sell ? ["bottom", "previous"] : ["top", "bottom"]).includes(rule.wallAnchor)
       ? rule.wallAnchor
       : fallback.wallAnchor,
     wallOffsetMinor: integerOrFallback(rule.wallOffsetMinor, fallback.wallOffsetMinor),
@@ -338,21 +337,23 @@ export function calculateAutomaticSellPrice(depth, options = {}) {
 }
 
 function calculateAutomaticPrice(depth, options, sell) {
-  const strategy = AUTOMATIC_BUY_PRICE_STRATEGIES.includes(options.strategy)
+  const strategy = (sell ? ["instant", "follow", "conservative"] : AUTOMATIC_BUY_PRICE_STRATEGIES).includes(options.strategy)
     ? options.strategy
-    : "balanced";
+    : sell ? "follow" : "balanced";
   const highestBuyMinor = normalizePositiveInteger(
     depth?.highestBuyMinor ?? depth?.amtMaxBuyOrder
   );
   const lowestSellMinor = normalizePositiveInteger(
     depth?.lowestSellMinor ?? depth?.amtMinSellOrder
   );
-  const bestPriceMinor = sell ? lowestSellMinor : highestBuyMinor;
+  const instant = sell && strategy === "instant";
+  const bestPriceMinor = sell && !instant ? lowestSellMinor : highestBuyMinor;
   if (bestPriceMinor === null) return null;
   const minimumPriceMinor = normalizePositiveInteger(options.minimumPriceMinor) ?? 1;
+  if (instant && highestBuyMinor < minimumPriceMinor) return null;
 
   const detection = detectBuyOrderWalls(
-    (sell ? depth?.sellLevels ?? depth?.rgCompactSellOrders : depth?.buyLevels ?? depth?.rgCompactBuyOrders) ?? [],
+    (instant ? [] : sell ? depth?.sellLevels ?? depth?.rgCompactSellOrders : depth?.buyLevels ?? depth?.rgCompactBuyOrders) ?? [],
     {
       ...options.wallOptions,
       sell,
@@ -363,14 +364,14 @@ function calculateAutomaticPrice(depth, options, sell) {
   const cluster = detection.nearestCluster;
   const effectiveBestPriceMinor = detection.bestPriceMinor ?? bestPriceMinor;
   const strategyRule = normalizeStrategyRule(strategy, options.strategyRule, sell);
-  const wallReferencePriceMinor = cluster
-    ? strategyRule.wallAnchor === "bottom"
-      ? cluster.bottomPriceMinor
-      : cluster.topPriceMinor
+  const useWall = cluster && (sell ? strategy === "conservative" : strategy !== "aggressive");
+  const wallReferencePriceMinor = useWall
+    ? sell
+      ? cluster.bottomPriceMinor - (strategyRule.wallAnchor === "previous" ? 1 : 0)
+      : strategyRule.wallAnchor === "bottom" ? cluster.bottomPriceMinor : cluster.topPriceMinor
     : null;
-  const strategyBasePriceMinor = cluster
-    ? wallReferencePriceMinor + strategyRule.wallOffsetMinor
-    : effectiveBestPriceMinor + strategyRule.noWallOffsetMinor;
+  const strategyBasePriceMinor = (wallReferencePriceMinor ?? effectiveBestPriceMinor)
+    + (cluster && !sell ? strategyRule.wallOffsetMinor : strategyRule.noWallOffsetMinor);
 
   const adjustmentMinor = Number.isSafeInteger(Number(options.adjustmentMinor))
     ? Number(options.adjustmentMinor)
@@ -381,7 +382,7 @@ function calculateAutomaticPrice(depth, options, sell) {
     : lowestSellMinor - 1;
   const adjustedPriceMinor = strategyBasePriceMinor + adjustmentMinor;
   let finalPriceMinor = Math.max(minimumPriceMinor, adjustedPriceMinor);
-  const buyGuardMinor = highestBuyMinor === null ? null : highestBuyMinor + 1;
+  const buyGuardMinor = instant || highestBuyMinor === null ? null : highestBuyMinor + 1;
   if (sell) finalPriceMinor = Math.max(finalPriceMinor, buyGuardMinor ?? 0);
   else if (sellGuardMinor !== null) finalPriceMinor = Math.min(finalPriceMinor, sellGuardMinor);
 

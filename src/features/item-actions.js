@@ -172,9 +172,9 @@ import {
     const request = (async () => {
       const { priceSource } = profile;
       if (profile.automatic) {
-        ui.setStatus(`读取出售订单墙 ${index + 1}/${total}: ${group.itemName}`);
+        ui.setStatus(`读取出售价格 ${index + 1}/${total}: ${group.itemName}`);
         const depth = await fetchMarketOrderDepth(group.marketHashName, queue, {
-          sell: true,
+          sell: priceSource !== "instant",
           onRecord: record => marketRecords.push(record),
         });
         return calculateAutomaticSellPrice(depth, {

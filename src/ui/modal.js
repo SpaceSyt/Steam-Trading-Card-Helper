@@ -99,7 +99,7 @@ import {
   }
 
   const AUTOMATIC_STRATEGY_SETTING_ROWS = [AUTOMATIC_PRICE_STRATEGY_CONFIG, SELL_AUTOMATIC_PRICE_STRATEGY_CONFIG].map(config => Object.entries(config).map(([id, fields]) => ({
-    id, label: { conservative: "保守", balanced: "平衡", aggressive: "抢单" }[id], ...fields,
+    id, label: { conservative: "保守", balanced: "平衡", aggressive: "抢单", instant: "速售", follow: "跟价" }[id], ...fields,
   })));
 
   function resetCurrencyBoundState() {
@@ -230,16 +230,14 @@ import {
     const automaticStrategySettingsHtml = (sell = false) => AUTOMATIC_STRATEGY_SETTING_ROWS[Number(sell)].map(rule => `
       <div class="stch-auto-strategy-row">
         <span class="stch-auto-strategy-name">${rule.label}</span>
-        <label>有订单墙时
+        ${rule.anchorKey ? `<label>${sell ? "" : "有订单墙时"}
           <select id="stch-${sell ? "sell-" : ""}auto-${rule.id}-wall-anchor" class="stch-input stch-auto-wall-anchor">
-            <option value="top" ${state.cfg[rule.anchorKey] === "top" ? "selected" : ""}>订单墙顶</option>
-            <option value="bottom" ${state.cfg[rule.anchorKey] === "bottom" ? "selected" : ""}>订单墙底</option>
-          </select>
-        </label>
-        <label>偏移 ${currencySymbol}
-          <input id="stch-${sell ? "sell-" : ""}auto-${rule.id}-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.wallOffsetKey]}">
-        </label>
-        <label>无订单墙时 ${currencySymbol}
+            ${(sell ? [["bottom", "出售墙底"], ["previous", "出售墙中"]] : [["top", "订单墙顶"], ["bottom", "订单墙底"]]).map(([value, label]) => `<option value="${value}" ${state.cfg[rule.anchorKey] === value ? "selected" : ""}>${label}</option>`).join("")}
+          </select></label>` : ""}
+        ${sell ? "" : `<label>${rule.anchorKey ? "偏移" : "有订单墙时"} ${currencySymbol}
+          <input id="stch-auto-${rule.id}-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.wallOffsetKey]}">
+        </label>`}
+        <label>${sell ? "偏移" : "无订单墙时"} ${currencySymbol}
           <input id="stch-${sell ? "sell-" : ""}auto-${rule.id}-no-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.noWallOffsetKey]}">
         </label>
       </div>
@@ -754,8 +752,8 @@ import {
       ["craft-interval","craftInterval",{"integer":true,"min":200}],
       ["craft-mode","craftMode"],
       ...AUTOMATIC_STRATEGY_SETTING_ROWS.flatMap((rows, side) => rows.flatMap(rule => [
-        [`${side ? "sell-" : ""}auto-${rule.id}-wall-anchor`, rule.anchorKey],
-        [`${side ? "sell-" : ""}auto-${rule.id}-wall-offset`, rule.wallOffsetKey, {}],
+        ...(rule.anchorKey ? [[`${side ? "sell-" : ""}auto-${rule.id}-wall-anchor`, rule.anchorKey]] : []),
+        ...(side ? [] : [[`auto-${rule.id}-wall-offset`, rule.wallOffsetKey, {}]]),
         [`${side ? "sell-" : ""}auto-${rule.id}-no-wall-offset`, rule.noWallOffsetKey, {}],
       ])),
     ].map(([id, ...rule]) => [`stch-${id}`, rule]));

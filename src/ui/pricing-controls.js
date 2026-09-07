@@ -5,6 +5,7 @@ import { getActiveCurrencyContext } from "../services/currency.js";
 const priceOptions = [
   [["lowest", "在售最低"], ["median", "平均价格"], ["highest", "求购最高"]],
   [["conservative", "保守"], ["balanced", "平衡"], ["aggressive", "抢单"]],
+  [["instant", "速售"], ["follow", "跟价"], ["conservative", "保守"]],
 ];
 const controlGroups = [
   [["stch-order-", "stch-"], ["stch-order-page-", "stch-order-page-"]],
@@ -22,8 +23,8 @@ function getProfile(sell) {
   if (state[draftKey(sell)]?.strategy !== strategy) resetDraft(sell);
   return getActiveOrderPricingProfile(state.cfg, state[draftKey(sell)], sell);
 }
-function optionsHtml(profile) {
-  return priceOptions[Number(profile.automatic)].map(([value, label]) =>
+function optionsHtml(profile, sell) {
+  return priceOptions[profile.automatic ? sell ? 2 : 1 : 0].map(([value, label]) =>
     `<option value="${value}" ${profile.priceSource === value ? "selected" : ""}>${label}</option>`
   ).join("");
 }
@@ -34,10 +35,10 @@ export function priceControlsHtml(pricePrefix, adjustmentPrefix, sell = false) {
   const activeClass = automatic ? "stch-auto-pricing-active" : "";
   const currency = getActiveCurrencyContext()?.symbol || "¤";
   return `<label id="${pricePrefix}price-label" class="stch-primary-label ${activeClass}">${sell ? "出售" : "购买"}价格
-    <select id="${pricePrefix}price-source" class="stch-input" style="width:118px">${optionsHtml(profile)}</select></label>
-    <label id="${adjustmentPrefix}price-wall-adjustment-label" class="stch-primary-label ${activeClass}" ${automatic ? "" : 'style="display:none"'}>有墙调整 ${currency}
+    <select id="${pricePrefix}price-source" class="stch-input" style="width:118px">${optionsHtml(profile, sell)}</select></label>
+    <label id="${adjustmentPrefix}price-wall-adjustment-label" class="stch-primary-label ${activeClass}" ${automatic && !sell ? "" : 'style="display:none"'}>有墙调整 ${currency}
       <input id="${adjustmentPrefix}price-wall-adjustment" class="stch-input" type="number" step="0.01" value="${(strategyRule?.wallOffsetMinor || 0) / 100}" style="width:68px"></label>
-    <label id="${adjustmentPrefix}price-adjustment-label" class="stch-primary-label ${activeClass}"><span id="${adjustmentPrefix}price-adjustment-text">${automatic ? "无墙调整" : sell ? "售价调整" : "买价调整"}</span> ${currency}
+    <label id="${adjustmentPrefix}price-adjustment-label" class="stch-primary-label ${activeClass}"><span id="${adjustmentPrefix}price-adjustment-text">${automatic && !sell ? "无墙调整" : sell ? "售价调整" : "买价调整"}</span> ${currency}
       <input id="${adjustmentPrefix}price-adjustment" class="stch-input" type="number" step="0.01" value="${automatic ? strategyRule.noWallOffsetMinor / 100 : profile.adjustment}" style="width:68px"></label>
     <label class="stch-auto-pricing-toggle ${activeClass}"><input id="${adjustmentPrefix}auto-pricing" type="checkbox" ${automatic ? "checked" : ""}> 智能定价模式</label>`;
 }
@@ -55,13 +56,13 @@ export function bindPricingControls(refreshBuySummaries) {
       const { automatic, strategyRule } = profile;
       for (const [pricePrefix, prefix] of controls) {
         const source = document.getElementById(`${pricePrefix}price-source`);
-        source.innerHTML = optionsHtml(profile);
+        source.innerHTML = optionsHtml(profile, sell);
         const adjustment = document.getElementById(`${prefix}price-adjustment`);
         if (adjustment.id !== exceptId) adjustment.value = automatic ? strategyRule.noWallOffsetMinor / 100 : profile.adjustment;
         const wall = document.getElementById(`${prefix}price-wall-adjustment`);
         if (wall.id !== exceptId) wall.value = (strategyRule?.wallOffsetMinor || 0) / 100;
-        wall.parentElement.style.display = automatic ? "" : "none";
-        document.getElementById(`${prefix}price-adjustment-text`).textContent = automatic ? "无墙调整" : sell ? "售价调整" : "买价调整";
+        wall.parentElement.style.display = automatic && !sell ? "" : "none";
+        document.getElementById(`${prefix}price-adjustment-text`).textContent = automatic && !sell ? "无墙调整" : sell ? "售价调整" : "买价调整";
         const toggle = document.getElementById(`${prefix}auto-pricing`);
         toggle.checked = automatic;
         for (const input of [source, adjustment, wall, toggle]) input.parentElement.classList.toggle("stch-auto-pricing-active", automatic);

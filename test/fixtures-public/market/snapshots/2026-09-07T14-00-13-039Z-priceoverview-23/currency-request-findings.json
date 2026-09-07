@@ -1,0 +1,70 @@
+{
+  "recordedAt": "2026-09-07T14:05:32.661Z",
+  "listingCurrencyParameter": {
+    "requestedCurrencyId": 23,
+    "returnedCurrencyId": 1,
+    "sourceUrl": "https://steamcommunity.com/market/listings/753/1657630-Batty%20Slime?l=english&currency=23"
+  },
+  "orderbookQueryCurrencyParameter": {
+    "requestedCurrencyId": 23,
+    "returnedCurrencyId": 1,
+    "sourceUrl": "https://steamcommunity.com/market/orderbook?q=Load&qp=%5B753%2C%221657630-Batty%20Slime%22%5D&currency=23"
+  },
+  "priceoverviewCurrencyParameter": {
+    "requestedCurrencyId": 23,
+    "returnedFormattedCurrency": "¥",
+    "sampleCount": 37,
+    "fullDepthAvailable": false
+  },
+  "relatedUsdWallExamples": [
+    {
+      "item": "753-Sack of Gems",
+      "lowest": 71,
+      "wall": 73,
+      "followCompetition": {
+        "below": 0,
+        "atPrice": 361
+      },
+      "wallCompetition": {
+        "below": 911,
+        "atPrice": 1971
+      },
+      "followNet": 62,
+      "wallNet": 64
+    },
+    {
+      "item": "440-ENGINEER (Foil Trading Card)",
+      "lowest": 107,
+      "wall": 109,
+      "followCompetition": {
+        "below": 0,
+        "atPrice": 6
+      },
+      "wallCompetition": {
+        "below": 8,
+        "atPrice": 19
+      },
+      "followNet": 94,
+      "wallNet": 96
+    },
+    {
+      "item": "440-DEMOMAN (Foil Trading Card)",
+      "lowest": 73,
+      "wall": 75,
+      "followCompetition": {
+        "below": 0,
+        "atPrice": 1
+      },
+      "wallCompetition": {
+        "below": 5,
+        "atPrice": 25
+      },
+      "followNet": 64,
+      "wallNet": 66
+    }
+  ],
+  "limitations": [
+    "Do not merge old USD depth quantities into new CNY price levels.",
+    "No observed fill times. A lower ask is only a candidate for improving execution, not proof of higher expected proceeds."
+  ]
+}

@@ -1,0 +1,792 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-09-07T12:36:01.290Z",
+  "authentication": "none",
+  "delayMs": 1500,
+  "rounds": 2,
+  "intervalMs": 120000,
+  "catalog": [
+    {
+      "gameAppid": "1657630",
+      "isFoil": false,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_1657630&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_0",
+      "fetchedAt": "2026-09-07T12:36:01.602Z",
+      "marketHashNames": [
+        "1657630-Shadow Slime",
+        "1657630-Puddle Slime",
+        "1657630-Batty Slime",
+        "1657630-Pink Slime (Trading Card)",
+        "1657630-Sloomber Slime",
+        "1657630-Tabby Slime",
+        "1657630-Yolky Slime",
+        "1657630-Flutter Slime"
+      ]
+    },
+    {
+      "gameAppid": "1657630",
+      "isFoil": true,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_1657630&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_1",
+      "fetchedAt": "2026-09-07T12:36:03.044Z",
+      "marketHashNames": [
+        "1657630-Batty Slime (Foil)",
+        "1657630-Puddle Slime (Foil)",
+        "1657630-Flutter Slime (Foil)",
+        "1657630-Yolky Slime (Foil)",
+        "1657630-Shadow Slime (Foil)",
+        "1657630-Pink Slime (Foil Trading Card)",
+        "1657630-Sloomber Slime (Foil)",
+        "1657630-Tabby Slime (Foil)"
+      ]
+    },
+    {
+      "gameAppid": "570",
+      "isFoil": false,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_570&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_0",
+      "fetchedAt": "2026-09-07T12:36:04.494Z",
+      "marketHashNames": [
+        "570-Tusk (Trading Card)",
+        "570-Tiny (Trading Card)",
+        "570-Vengeful Spirit (Trading Card)",
+        "570-Tidehunter (Trading Card)",
+        "570-Riki (Trading Card)",
+        "570-Bounty Hunter (Trading Card)",
+        "570-Razor (Trading Card)",
+        "570-Phantom Lancer (Trading Card)"
+      ]
+    },
+    {
+      "gameAppid": "570",
+      "isFoil": true,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_570&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_1",
+      "fetchedAt": "2026-09-07T12:36:06.061Z",
+      "marketHashNames": [
+        "570-Vengeful Spirit (Foil Trading Card)",
+        "570-Tiny (Foil Trading Card)",
+        "570-Bounty Hunter (Foil Trading Card)",
+        "570-Razor (Foil Trading Card)",
+        "570-Tusk (Foil Trading Card)",
+        "570-Tidehunter (Foil Trading Card)",
+        "570-Riki (Foil Trading Card)",
+        "570-Phantom Lancer (Foil Trading Card)"
+      ]
+    },
+    {
+      "gameAppid": "440",
+      "isFoil": false,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_440&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_0",
+      "fetchedAt": "2026-09-07T12:36:07.596Z",
+      "marketHashNames": [
+        "440-ENGINEER (Trading Card)",
+        "440-MEDIC (Trading Card)",
+        "440-SOLDIER (Trading Card)",
+        "440-SCOUT (Trading Card)",
+        "440-SPY (Trading Card)",
+        "440-HEAVY (Trading Card)",
+        "440-PYRO (Trading Card)",
+        "440-DEMOMAN (Trading Card)",
+        "440-SNIPER (Trading Card)"
+      ]
+    },
+    {
+      "gameAppid": "440",
+      "isFoil": true,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_440&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_1",
+      "fetchedAt": "2026-09-07T12:36:09.057Z",
+      "marketHashNames": [
+        "440-HEAVY (Foil Trading Card)",
+        "440-MEDIC (Foil Trading Card)",
+        "440-PYRO (Foil Trading Card)",
+        "440-ENGINEER (Foil Trading Card)",
+        "440-SNIPER (Foil Trading Card)",
+        "440-SCOUT (Foil Trading Card)",
+        "440-DEMOMAN (Foil Trading Card)",
+        "440-SPY (Foil Trading Card)",
+        "440-SOLDIER (Foil Trading Card)"
+      ]
+    },
+    {
+      "gameAppid": "730",
+      "isFoil": false,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_730&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_0",
+      "fetchedAt": "2026-09-07T12:36:10.631Z",
+      "marketHashNames": [
+        "730-SWAT",
+        "730-IDF",
+        "730-Anarchist",
+        "730-Balkan",
+        "730-FBI"
+      ]
+    },
+    {
+      "gameAppid": "730",
+      "isFoil": true,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_730&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_1",
+      "fetchedAt": "2026-09-07T12:36:12.035Z",
+      "marketHashNames": [
+        "730-Balkan (Foil)",
+        "730-IDF (Foil)",
+        "730-FBI (Foil)",
+        "730-Anarchist (Foil)",
+        "730-SWAT (Foil)"
+      ]
+    },
+    {
+      "gameAppid": "8870",
+      "isFoil": false,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_8870&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_0",
+      "fetchedAt": "2026-09-07T12:36:13.545Z",
+      "marketHashNames": [
+        "8870-Boys of Silence (Trading Card)",
+        "8870-Fireman",
+        "8870-Motorized Patriot",
+        "8870-Handyman",
+        "8870-Lutece Twins (Trading Card)",
+        "8870-Songbird",
+        "8870-Elizabeth"
+      ]
+    },
+    {
+      "gameAppid": "8870",
+      "isFoil": true,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_8870&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_1",
+      "fetchedAt": "2026-09-07T12:36:15.081Z",
+      "marketHashNames": [
+        "8870-Boys of Silence (Foil Trading Card)",
+        "8870-Songbird (Foil)",
+        "8870-Fireman (Foil)",
+        "8870-Lutece Twins (Foil Trading Card)",
+        "8870-Elizabeth (Foil)",
+        "8870-Motorized Patriot (Foil)",
+        "8870-Handyman (Foil)"
+      ]
+    },
+    {
+      "gameAppid": "620",
+      "isFoil": false,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_620&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_0",
+      "fetchedAt": "2026-09-07T12:36:16.587Z",
+      "marketHashNames": [
+        "620-Underground",
+        "620-Chell",
+        "620-Mannequin",
+        "620-Intro (Trading Card)",
+        "620-GlaDOS",
+        "620-Destruction",
+        "620-The Lab",
+        "620-Finale"
+      ]
+    },
+    {
+      "gameAppid": "620",
+      "isFoil": true,
+      "sourceUrl": "https://steamcommunity.com/market/search/render/?appid=753&start=0&count=100&norender=1&sort_column=popular&sort_dir=desc&category_753_Game%5B%5D=tag_app_620&category_753_item_class%5B%5D=tag_item_class_2&category_753_cardborder%5B%5D=tag_cardborder_1",
+      "fetchedAt": "2026-09-07T12:36:18.148Z",
+      "marketHashNames": [
+        "620-Destruction (Foil)",
+        "620-Chell (Foil)",
+        "620-Finale (Foil)",
+        "620-Mannequin (Foil)",
+        "620-The Lab (Foil)",
+        "620-Underground (Foil)",
+        "620-GlaDOS (Foil)",
+        "620-Intro (Foil Trading Card)"
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "file": "round-1-001.json",
+      "round": 1,
+      "marketHashName": "753-Sack of Gems",
+      "fetchedAt": "2026-09-07T12:36:19.633Z",
+      "currencyId": 1,
+      "bytes": 11948
+    },
+    {
+      "file": "round-1-002.json",
+      "round": 1,
+      "marketHashName": "1657630-Batty Slime",
+      "fetchedAt": "2026-09-07T12:36:21.149Z",
+      "currencyId": 1,
+      "bytes": 2204
+    },
+    {
+      "file": "round-1-003.json",
+      "round": 1,
+      "marketHashName": "1657630-Shadow Slime",
+      "fetchedAt": "2026-09-07T12:36:22.647Z",
+      "currencyId": 1,
+      "bytes": 2309
+    },
+    {
+      "file": "round-1-004.json",
+      "round": 1,
+      "marketHashName": "1657630-Tabby Slime",
+      "fetchedAt": "2026-09-07T12:36:24.217Z",
+      "currencyId": 1,
+      "bytes": 2285
+    },
+    {
+      "file": "round-1-005.json",
+      "round": 1,
+      "marketHashName": "1657630-Batty Slime (Foil)",
+      "fetchedAt": "2026-09-07T12:36:25.721Z",
+      "currencyId": 1,
+      "bytes": 1607
+    },
+    {
+      "file": "round-1-006.json",
+      "round": 1,
+      "marketHashName": "1657630-Flutter Slime (Foil)",
+      "fetchedAt": "2026-09-07T12:36:27.156Z",
+      "currencyId": 1,
+      "bytes": 1629
+    },
+    {
+      "file": "round-1-007.json",
+      "round": 1,
+      "marketHashName": "1657630-Pink Slime (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:28.717Z",
+      "currencyId": 1,
+      "bytes": 1690
+    },
+    {
+      "file": "round-1-008.json",
+      "round": 1,
+      "marketHashName": "570-Tusk (Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:30.423Z",
+      "currencyId": 1,
+      "bytes": 4556
+    },
+    {
+      "file": "round-1-009.json",
+      "round": 1,
+      "marketHashName": "570-Vengeful Spirit (Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:31.799Z",
+      "currencyId": 1,
+      "bytes": 4546
+    },
+    {
+      "file": "round-1-010.json",
+      "round": 1,
+      "marketHashName": "570-Bounty Hunter (Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:33.414Z",
+      "currencyId": 1,
+      "bytes": 6153
+    },
+    {
+      "file": "round-1-011.json",
+      "round": 1,
+      "marketHashName": "570-Vengeful Spirit (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:34.877Z",
+      "currencyId": 1,
+      "bytes": 1925
+    },
+    {
+      "file": "round-1-012.json",
+      "round": 1,
+      "marketHashName": "570-Bounty Hunter (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:36.224Z",
+      "currencyId": 1,
+      "bytes": 2558
+    },
+    {
+      "file": "round-1-013.json",
+      "round": 1,
+      "marketHashName": "570-Tidehunter (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:37.817Z",
+      "currencyId": 1,
+      "bytes": 2116
+    },
+    {
+      "file": "round-1-014.json",
+      "round": 1,
+      "marketHashName": "440-ENGINEER (Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:39.308Z",
+      "currencyId": 1,
+      "bytes": 3080
+    },
+    {
+      "file": "round-1-015.json",
+      "round": 1,
+      "marketHashName": "440-SCOUT (Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:40.861Z",
+      "currencyId": 1,
+      "bytes": 2537
+    },
+    {
+      "file": "round-1-016.json",
+      "round": 1,
+      "marketHashName": "440-PYRO (Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:42.257Z",
+      "currencyId": 1,
+      "bytes": 2753
+    },
+    {
+      "file": "round-1-017.json",
+      "round": 1,
+      "marketHashName": "440-HEAVY (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:43.854Z",
+      "currencyId": 1,
+      "bytes": 2567
+    },
+    {
+      "file": "round-1-018.json",
+      "round": 1,
+      "marketHashName": "440-ENGINEER (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:45.290Z",
+      "currencyId": 1,
+      "bytes": 2594
+    },
+    {
+      "file": "round-1-019.json",
+      "round": 1,
+      "marketHashName": "440-DEMOMAN (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:47.163Z",
+      "currencyId": 1,
+      "bytes": 2476
+    },
+    {
+      "file": "round-1-020.json",
+      "round": 1,
+      "marketHashName": "730-SWAT",
+      "fetchedAt": "2026-09-07T12:36:48.253Z",
+      "currencyId": 1,
+      "bytes": 13369
+    },
+    {
+      "file": "round-1-021.json",
+      "round": 1,
+      "marketHashName": "730-IDF",
+      "fetchedAt": "2026-09-07T12:36:49.822Z",
+      "currencyId": 1,
+      "bytes": 14032
+    },
+    {
+      "file": "round-1-022.json",
+      "round": 1,
+      "marketHashName": "730-Balkan",
+      "fetchedAt": "2026-09-07T12:36:51.478Z",
+      "currencyId": 1,
+      "bytes": 14417
+    },
+    {
+      "file": "round-1-023.json",
+      "round": 1,
+      "marketHashName": "730-Balkan (Foil)",
+      "fetchedAt": "2026-09-07T12:36:52.896Z",
+      "currencyId": 1,
+      "bytes": 3295
+    },
+    {
+      "file": "round-1-024.json",
+      "round": 1,
+      "marketHashName": "730-IDF (Foil)",
+      "fetchedAt": "2026-09-07T12:36:54.590Z",
+      "currencyId": 1,
+      "bytes": 3338
+    },
+    {
+      "file": "round-1-025.json",
+      "round": 1,
+      "marketHashName": "730-Anarchist (Foil)",
+      "fetchedAt": "2026-09-07T12:36:55.995Z",
+      "currencyId": 1,
+      "bytes": 3378
+    },
+    {
+      "file": "round-1-026.json",
+      "round": 1,
+      "marketHashName": "8870-Boys of Silence (Trading Card)",
+      "fetchedAt": "2026-09-07T12:36:57.380Z",
+      "currencyId": 1,
+      "bytes": 2359
+    },
+    {
+      "file": "round-1-027.json",
+      "round": 1,
+      "marketHashName": "8870-Motorized Patriot",
+      "fetchedAt": "2026-09-07T12:36:59.084Z",
+      "currencyId": 1,
+      "bytes": 2085
+    },
+    {
+      "file": "round-1-028.json",
+      "round": 1,
+      "marketHashName": "8870-Lutece Twins (Trading Card)",
+      "fetchedAt": "2026-09-07T12:37:00.502Z",
+      "currencyId": 1,
+      "bytes": 2221
+    },
+    {
+      "file": "round-1-029.json",
+      "round": 1,
+      "marketHashName": "8870-Boys of Silence (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:37:01.992Z",
+      "currencyId": 1,
+      "bytes": 1650
+    },
+    {
+      "file": "round-1-030.json",
+      "round": 1,
+      "marketHashName": "8870-Fireman (Foil)",
+      "fetchedAt": "2026-09-07T12:37:03.640Z",
+      "currencyId": 1,
+      "bytes": 2389
+    },
+    {
+      "file": "round-1-031.json",
+      "round": 1,
+      "marketHashName": "8870-Elizabeth (Foil)",
+      "fetchedAt": "2026-09-07T12:37:05.079Z",
+      "currencyId": 1,
+      "bytes": 2185
+    },
+    {
+      "file": "round-1-032.json",
+      "round": 1,
+      "marketHashName": "620-Underground",
+      "fetchedAt": "2026-09-07T12:37:06.758Z",
+      "currencyId": 1,
+      "bytes": 3381
+    },
+    {
+      "file": "round-1-033.json",
+      "round": 1,
+      "marketHashName": "620-Mannequin",
+      "fetchedAt": "2026-09-07T12:37:08.017Z",
+      "currencyId": 1,
+      "bytes": 3794
+    },
+    {
+      "file": "round-1-034.json",
+      "round": 1,
+      "marketHashName": "620-Destruction",
+      "fetchedAt": "2026-09-07T12:37:10.641Z",
+      "currencyId": 1,
+      "bytes": 4454
+    },
+    {
+      "file": "round-1-035.json",
+      "round": 1,
+      "marketHashName": "620-Destruction (Foil)",
+      "fetchedAt": "2026-09-07T12:37:11.244Z",
+      "currencyId": 1,
+      "bytes": 1757
+    },
+    {
+      "file": "round-1-036.json",
+      "round": 1,
+      "marketHashName": "620-Finale (Foil)",
+      "fetchedAt": "2026-09-07T12:37:12.770Z",
+      "currencyId": 1,
+      "bytes": 1835
+    },
+    {
+      "file": "round-1-037.json",
+      "round": 1,
+      "marketHashName": "620-Underground (Foil)",
+      "fetchedAt": "2026-09-07T12:37:14.296Z",
+      "currencyId": 1,
+      "bytes": 2277
+    },
+    {
+      "file": "round-2-001.json",
+      "round": 2,
+      "marketHashName": "753-Sack of Gems",
+      "fetchedAt": "2026-09-07T12:38:18.460Z",
+      "currencyId": 1,
+      "bytes": 11948
+    },
+    {
+      "file": "round-2-002.json",
+      "round": 2,
+      "marketHashName": "1657630-Batty Slime",
+      "fetchedAt": "2026-09-07T12:38:19.901Z",
+      "currencyId": 1,
+      "bytes": 2204
+    },
+    {
+      "file": "round-2-003.json",
+      "round": 2,
+      "marketHashName": "1657630-Shadow Slime",
+      "fetchedAt": "2026-09-07T12:38:21.728Z",
+      "currencyId": 1,
+      "bytes": 2309
+    },
+    {
+      "file": "round-2-004.json",
+      "round": 2,
+      "marketHashName": "1657630-Tabby Slime",
+      "fetchedAt": "2026-09-07T12:38:22.876Z",
+      "currencyId": 1,
+      "bytes": 2285
+    },
+    {
+      "file": "round-2-005.json",
+      "round": 2,
+      "marketHashName": "1657630-Batty Slime (Foil)",
+      "fetchedAt": "2026-09-07T12:38:24.358Z",
+      "currencyId": 1,
+      "bytes": 1607
+    },
+    {
+      "file": "round-2-006.json",
+      "round": 2,
+      "marketHashName": "1657630-Flutter Slime (Foil)",
+      "fetchedAt": "2026-09-07T12:38:25.958Z",
+      "currencyId": 1,
+      "bytes": 1629
+    },
+    {
+      "file": "round-2-007.json",
+      "round": 2,
+      "marketHashName": "1657630-Pink Slime (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:27.399Z",
+      "currencyId": 1,
+      "bytes": 1690
+    },
+    {
+      "file": "round-2-008.json",
+      "round": 2,
+      "marketHashName": "570-Tusk (Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:28.980Z",
+      "currencyId": 1,
+      "bytes": 4556
+    },
+    {
+      "file": "round-2-009.json",
+      "round": 2,
+      "marketHashName": "570-Vengeful Spirit (Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:30.527Z",
+      "currencyId": 1,
+      "bytes": 4545
+    },
+    {
+      "file": "round-2-010.json",
+      "round": 2,
+      "marketHashName": "570-Bounty Hunter (Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:32.026Z",
+      "currencyId": 1,
+      "bytes": 6171
+    },
+    {
+      "file": "round-2-011.json",
+      "round": 2,
+      "marketHashName": "570-Vengeful Spirit (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:33.555Z",
+      "currencyId": 1,
+      "bytes": 1944
+    },
+    {
+      "file": "round-2-012.json",
+      "round": 2,
+      "marketHashName": "570-Bounty Hunter (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:35.071Z",
+      "currencyId": 1,
+      "bytes": 2558
+    },
+    {
+      "file": "round-2-013.json",
+      "round": 2,
+      "marketHashName": "570-Tidehunter (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:36.511Z",
+      "currencyId": 1,
+      "bytes": 2135
+    },
+    {
+      "file": "round-2-014.json",
+      "round": 2,
+      "marketHashName": "440-ENGINEER (Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:37.989Z",
+      "currencyId": 1,
+      "bytes": 3080
+    },
+    {
+      "file": "round-2-015.json",
+      "round": 2,
+      "marketHashName": "440-SCOUT (Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:39.487Z",
+      "currencyId": 1,
+      "bytes": 2537
+    },
+    {
+      "file": "round-2-016.json",
+      "round": 2,
+      "marketHashName": "440-PYRO (Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:41.002Z",
+      "currencyId": 1,
+      "bytes": 2735
+    },
+    {
+      "file": "round-2-017.json",
+      "round": 2,
+      "marketHashName": "440-HEAVY (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:42.506Z",
+      "currencyId": 1,
+      "bytes": 2567
+    },
+    {
+      "file": "round-2-018.json",
+      "round": 2,
+      "marketHashName": "440-ENGINEER (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:44.126Z",
+      "currencyId": 1,
+      "bytes": 2594
+    },
+    {
+      "file": "round-2-019.json",
+      "round": 2,
+      "marketHashName": "440-DEMOMAN (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:45.570Z",
+      "currencyId": 1,
+      "bytes": 2476
+    },
+    {
+      "file": "round-2-020.json",
+      "round": 2,
+      "marketHashName": "730-SWAT",
+      "fetchedAt": "2026-09-07T12:38:46.992Z",
+      "currencyId": 1,
+      "bytes": 13350
+    },
+    {
+      "file": "round-2-021.json",
+      "round": 2,
+      "marketHashName": "730-IDF",
+      "fetchedAt": "2026-09-07T12:38:48.558Z",
+      "currencyId": 1,
+      "bytes": 14032
+    },
+    {
+      "file": "round-2-022.json",
+      "round": 2,
+      "marketHashName": "730-Balkan",
+      "fetchedAt": "2026-09-07T12:38:50.114Z",
+      "currencyId": 1,
+      "bytes": 14435
+    },
+    {
+      "file": "round-2-023.json",
+      "round": 2,
+      "marketHashName": "730-Balkan (Foil)",
+      "fetchedAt": "2026-09-07T12:38:51.524Z",
+      "currencyId": 1,
+      "bytes": 3295
+    },
+    {
+      "file": "round-2-024.json",
+      "round": 2,
+      "marketHashName": "730-IDF (Foil)",
+      "fetchedAt": "2026-09-07T12:38:53.253Z",
+      "currencyId": 1,
+      "bytes": 3338
+    },
+    {
+      "file": "round-2-025.json",
+      "round": 2,
+      "marketHashName": "730-Anarchist (Foil)",
+      "fetchedAt": "2026-09-07T12:38:54.734Z",
+      "currencyId": 1,
+      "bytes": 3378
+    },
+    {
+      "file": "round-2-026.json",
+      "round": 2,
+      "marketHashName": "8870-Boys of Silence (Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:56.454Z",
+      "currencyId": 1,
+      "bytes": 2359
+    },
+    {
+      "file": "round-2-027.json",
+      "round": 2,
+      "marketHashName": "8870-Motorized Patriot",
+      "fetchedAt": "2026-09-07T12:38:57.595Z",
+      "currencyId": 1,
+      "bytes": 2085
+    },
+    {
+      "file": "round-2-028.json",
+      "round": 2,
+      "marketHashName": "8870-Lutece Twins (Trading Card)",
+      "fetchedAt": "2026-09-07T12:38:59.073Z",
+      "currencyId": 1,
+      "bytes": 2221
+    },
+    {
+      "file": "round-2-029.json",
+      "round": 2,
+      "marketHashName": "8870-Boys of Silence (Foil Trading Card)",
+      "fetchedAt": "2026-09-07T12:39:00.588Z",
+      "currencyId": 1,
+      "bytes": 1650
+    },
+    {
+      "file": "round-2-030.json",
+      "round": 2,
+      "marketHashName": "8870-Fireman (Foil)",
+      "fetchedAt": "2026-09-07T12:39:02.288Z",
+      "currencyId": 1,
+      "bytes": 2389
+    },
+    {
+      "file": "round-2-031.json",
+      "round": 2,
+      "marketHashName": "8870-Elizabeth (Foil)",
+      "fetchedAt": "2026-09-07T12:39:04.217Z",
+      "currencyId": 1,
+      "bytes": 2185
+    },
+    {
+      "file": "round-2-032.json",
+      "round": 2,
+      "marketHashName": "620-Underground",
+      "fetchedAt": "2026-09-07T12:39:05.318Z",
+      "currencyId": 1,
+      "bytes": 3381
+    },
+    {
+      "file": "round-2-033.json",
+      "round": 2,
+      "marketHashName": "620-Mannequin",
+      "fetchedAt": "2026-09-07T12:39:06.606Z",
+      "currencyId": 1,
+      "bytes": 3794
+    },
+    {
+      "file": "round-2-034.json",
+      "round": 2,
+      "marketHashName": "620-Destruction",
+      "fetchedAt": "2026-09-07T12:39:08.126Z",
+      "currencyId": 1,
+      "bytes": 4455
+    },
+    {
+      "file": "round-2-035.json",
+      "round": 2,
+      "marketHashName": "620-Destruction (Foil)",
+      "fetchedAt": "2026-09-07T12:39:09.661Z",
+      "currencyId": 1,
+      "bytes": 1790
+    },
+    {
+      "file": "round-2-036.json",
+      "round": 2,
+      "marketHashName": "620-Finale (Foil)",
+      "fetchedAt": "2026-09-07T12:39:11.374Z",
+      "currencyId": 1,
+      "bytes": 1835
+    },
+    {
+      "file": "round-2-037.json",
+      "round": 2,
+      "marketHashName": "620-Underground (Foil)",
+      "fetchedAt": "2026-09-07T12:39:12.652Z",
+      "currencyId": 1,
+      "bytes": 2277
+    }
+  ],
+  "errors": [],
+  "completedAt": "2026-09-07T12:39:12.660Z"
+}
