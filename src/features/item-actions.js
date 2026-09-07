@@ -1,6 +1,8 @@
 import { showConfirmation } from "../ui/confirmation.js";
 
 import { state } from "../state.js";
+import { getActiveOrderPricingProfile } from "../config.js";
+import { calculateAutomaticSellPrice } from "../services/order-wall.js";
 
 import { RequestQueue } from "../request/queue.js";
 
@@ -23,7 +25,7 @@ import {
 
 import { surplusStatus, grindStatus } from "../status-controllers.js";
 
-import { fetchHighestBuyPrice, getOrderPriceSourceLabel } from "./orders.js";
+import { fetchHighestBuyPrice, fetchMarketOrderDepth, getOrderPriceSourceLabel } from "./orders.js";
 
 import { getSelectedSurplusResults, renderSurplusResults } from "./surplus.js";
 
@@ -65,21 +67,8 @@ import {
   }
 
   function getSellPriceControls() {
-    const configuredPriceSource =
-      document.getElementById("stch-surplus-sell-price-source")?.value
-      || state.cfg.surplusSellPriceSource
-      || "lowest";
-    const priceSource = ["lowest", "median", "highest"].includes(configuredPriceSource)
-      ? configuredPriceSource
-      : "lowest";
-    const adjustmentInput = document.getElementById("stch-surplus-sell-adjustment");
-    const adjustmentValue = adjustmentInput
-      ? parseFloat(adjustmentInput.value)
-      : state.cfg.surplusSellPriceAdjustment;
-    const adjustmentCents = Math.round(
-      (Number.isFinite(adjustmentValue) ? adjustmentValue : 0) * 100
-    );
-    return { priceSource, adjustmentCents };
+    const profile = getActiveOrderPricingProfile(state.cfg, state.sellAutomaticPricingDraft, true);
+    return { ...profile, adjustmentCents: Math.round(profile.adjustment * 100) };
   }
 
   function getActionQueue(ui) {
@@ -177,10 +166,23 @@ import {
     return { candidates, invalidQuantity };
   }
 
-  async function getSellBasePrice(group, priceSource, queue, ui, index, total, cache, marketRecords) {
+  async function getSellBasePrice(group, profile, queue, ui, index, total, cache, marketRecords) {
     if (cache.has(group.marketHashName)) return cache.get(group.marketHashName);
 
     const request = (async () => {
+      const { priceSource } = profile;
+      if (profile.automatic) {
+        ui.setStatus(`读取出售订单墙 ${index + 1}/${total}: ${group.itemName}`);
+        const depth = await fetchMarketOrderDepth(group.marketHashName, queue, {
+          sell: true,
+          onRecord: record => marketRecords.push(record),
+        });
+        return calculateAutomaticSellPrice(depth, {
+          strategy: priceSource,
+          strategyRule: profile.strategyRule,
+          minimumPriceMinor: getMarketMinimumPriceCents(),
+        });
+      }
       let basePriceCents = null;
       if (priceSource === "highest") {
         ui.setStatus(`读取求购最高 ${index + 1}/${total}: ${group.itemName}`);
@@ -214,8 +216,9 @@ import {
     return value;
   }
 
-  async function buildSellPlan(mode, ui, queue) {
-    const { priceSource, adjustmentCents } = getSellPriceControls();
+  export async function buildSellPlan(mode, ui, queue) {
+    const profile = getSellPriceControls();
+    const { priceSource, adjustmentCents } = profile;
     const minimumBuyerCents = getMarketMinimumPriceCents();
     if (!Number.isSafeInteger(minimumBuyerCents) || minimumBuyerCents <= 0) {
       throw new Error("无法确认 Steam 钱包币种，已停止生成出售计划");
@@ -249,10 +252,11 @@ import {
       getHtmlRequestConcurrency(state.cfg),
       async (group, index) => {
         let basePriceCents = null;
+        let quote = null;
         try {
-          basePriceCents = await getSellBasePrice(
+          quote = await getSellBasePrice(
             group,
-            priceSource,
+            profile,
             queue,
             ui,
             index,
@@ -260,6 +264,7 @@ import {
             priceCache,
             marketRecords
           );
+          basePriceCents = profile.automatic ? quote?.finalPriceMinor : quote;
         } catch (error) {
           skipped.failedPrice++;
           ui.log(`  ${group.itemName}: ${error?.message || error}，已跳过`, "warn");
@@ -271,13 +276,17 @@ import {
 
         const targetBuyerCents = basePriceCents + adjustmentCents;
         const clampedBuyerCents = Math.max(minimumBuyerCents, targetBuyerCents);
-        if (clampedBuyerCents !== targetBuyerCents) skipped.clamped++;
-        const sellerReceiveCents = getSellerReceiveForBuyerPrice(clampedBuyerCents);
+        if (clampedBuyerCents !== targetBuyerCents || quote?.wasMinimumClamped) skipped.clamped++;
+        let sellerReceiveCents = getSellerReceiveForBuyerPrice(clampedBuyerCents);
         if (sellerReceiveCents <= 0) {
           skipped.missingPrice++;
           return;
         }
-        const unitBuyerCents = getBuyerPriceForSellerReceive(sellerReceiveCents);
+        let unitBuyerCents = getBuyerPriceForSellerReceive(sellerReceiveCents);
+        // Fee rounding must not move an automatic listing back across the buy guard.
+        if (profile.automatic && unitBuyerCents < (quote.buyGuardMinor || minimumBuyerCents)) {
+          unitBuyerCents = getBuyerPriceForSellerReceive(++sellerReceiveCents);
+        }
         plan[index] = {
           ...group,
           priceSource,
@@ -292,7 +301,7 @@ import {
     );
 
     persistMarketObservations(marketRecords);
-    return { plan: plan.filter(Boolean), skipped, priceSource, adjustmentCents, minimumBuyerCents };
+    return { plan: plan.filter(Boolean), skipped, priceSource, adjustmentCents, minimumBuyerCents, automatic: profile.automatic };
   }
 
   function getProfileActionBaseUrl() {
@@ -468,7 +477,8 @@ import {
         `项目 <b>${plan.length}</b> 项 · 数量 <b>${totalQuantity}</b> 件 · ` +
         `买家价格合计 <b>${formatMoney(totalBuyerCents)}</b> · ` +
         `税后到手约 <b>${formatMoney(totalReceiveCents)}</b><br>` +
-        `价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> · 售价调整 <b>${adjustmentText}</b>`,
+        `价格基准 <b>${planData.automatic ? "智能定价 · " : ""}${getOrderPriceSourceLabel(priceSource)}</b>` +
+        (planData.automatic ? "" : ` · 售价调整 <b>${adjustmentText}</b>`),
       rows: plan.map(item => [
         `${item.gameName ? `${item.gameName} · ` : ""}${item.itemName}`,
         `${item.quantity} 件`,

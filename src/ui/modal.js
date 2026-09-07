@@ -1,8 +1,9 @@
+import { priceControlsHtml, bindPricingControls } from "./pricing-controls.js";
 import { state } from "../state.js";
 
 import {
   AUTOMATIC_PRICE_STRATEGY_CONFIG,
-  createAutomaticPricingDraft,
+  SELL_AUTOMATIC_PRICE_STRATEGY_CONFIG,
   saveConfig,
   DEFAULT_CONFIG,
 } from "../config.js";
@@ -97,51 +98,9 @@ import {
       + `${context.verified ? "" : " · 格式/费用规则未验证"}`;
   }
 
-  const MANUAL_ORDER_PRICE_OPTIONS = [
-    ["lowest", "在售最低"],
-    ["median", "平均价格"],
-    ["highest", "求购最高"],
-  ];
-  const AUTOMATIC_ORDER_PRICE_OPTIONS = [
-    ["conservative", "保守"],
-    ["balanced", "平衡"],
-    ["aggressive", "抢单"],
-  ];
-  const AUTOMATIC_STRATEGY_LABELS = Object.freeze({
-    conservative: "保守",
-    balanced: "平衡",
-    aggressive: "抢单",
-  });
-  const AUTOMATIC_STRATEGY_SETTING_ROWS = Object.entries(
-    AUTOMATIC_PRICE_STRATEGY_CONFIG
-  ).map(([id, fields]) => ({
-    id,
-    label: AUTOMATIC_STRATEGY_LABELS[id],
-    ...fields,
-  }));
-  function getOrderPriceOptionsHtml(automatic, selected) {
-    const options = automatic ? AUTOMATIC_ORDER_PRICE_OPTIONS : MANUAL_ORDER_PRICE_OPTIONS;
-    return options.map(([value, label]) => (
-      `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`
-    )).join("");
-  }
-
-  function getAutomaticPricingDraft(strategy, reset = false) {
-    const normalizedStrategy = ["conservative", "balanced", "aggressive"].includes(strategy)
-      ? strategy
-      : DEFAULT_CONFIG.automaticPriceStrategy;
-    if (
-      reset
-      || !state.automaticPricingDraft
-      || state.automaticPricingDraft.strategy !== normalizedStrategy
-    ) {
-      state.automaticPricingDraft = createAutomaticPricingDraft(
-        state.cfg,
-        normalizedStrategy
-      );
-    }
-    return state.automaticPricingDraft;
-  }
+  const AUTOMATIC_STRATEGY_SETTING_ROWS = [AUTOMATIC_PRICE_STRATEGY_CONFIG, SELL_AUTOMATIC_PRICE_STRATEGY_CONFIG].map(config => Object.entries(config).map(([id, fields]) => ({
+    id, label: { conservative: "保守", balanced: "平衡", aggressive: "抢单" }[id], ...fields,
+  })));
 
   function resetCurrencyBoundState() {
     state.results = [];
@@ -267,38 +226,21 @@ import {
     const currencyContext = getActiveCurrencyContext();
     const currencySymbol = currencyContext?.symbol || "¤";
     const currencyStatus = getCurrencyDisplayStatus(currencyContext);
-    const automaticPricingEnabled = state.cfg.automaticPricingEnabled === true;
-    const activePriceSource = automaticPricingEnabled
-      ? state.cfg.automaticPriceStrategy
-      : state.cfg.orderPriceSource;
-    const automaticPricingDraft = automaticPricingEnabled
-      ? getAutomaticPricingDraft(activePriceSource)
-      : null;
-    const activePriceAdjustment = automaticPricingEnabled
-      ? automaticPricingDraft.noWallOffsetMinor / 100
-      : state.cfg.priceAdjustment;
-    const activeWallPriceAdjustment = automaticPricingDraft?.wallOffsetMinor / 100 || 0;
-    const initialPriceOptions = getOrderPriceOptionsHtml(
-      automaticPricingEnabled,
-      activePriceSource
-    );
-    const automaticPricingClass = automaticPricingEnabled ? "stch-auto-pricing-active" : "";
     const progressHtml = prefix => `<div class="stch-progress" id="${prefix}progress-wrap" style="display:none"><div class="stch-progress-bar" id="${prefix}progress-bar" style="width:0"></div><div class="stch-progress-text" id="${prefix}progress-text">0/0</div></div>`;
-    const priceControlsHtml = (pricePrefix, adjustmentPrefix) => `<div class="stch-toolbar"> <label id="${pricePrefix}price-label" class="stch-primary-label ${automaticPricingClass}">购买价格 <select id="${pricePrefix}price-source" class="stch-input" style="width:118px"> ${initialPriceOptions} </select> </label> <label id="${adjustmentPrefix}price-wall-adjustment-label" class="stch-primary-label ${automaticPricingClass}" ${automaticPricingEnabled ? "" : "style=\"display:none\""}>有墙调整 ${currencySymbol} <input id="${adjustmentPrefix}price-wall-adjustment" class="stch-input" type="number" step="0.01" value="${activeWallPriceAdjustment}" style="width:68px"></label> <label id="${adjustmentPrefix}price-adjustment-label" class="stch-primary-label ${automaticPricingClass}"><span id="${adjustmentPrefix}price-adjustment-text">${automaticPricingEnabled ? "无墙调整" : "买价调整"}</span> ${currencySymbol} <input id="${adjustmentPrefix}price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label> <label class="stch-auto-pricing-toggle ${automaticPricingClass}"> <input id="${adjustmentPrefix}auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}> 智能定价模式 </label> </div>`;
-    const automaticStrategySettingsHtml = AUTOMATIC_STRATEGY_SETTING_ROWS.map(rule => `
+    const automaticStrategySettingsHtml = (sell = false) => AUTOMATIC_STRATEGY_SETTING_ROWS[Number(sell)].map(rule => `
       <div class="stch-auto-strategy-row">
         <span class="stch-auto-strategy-name">${rule.label}</span>
         <label>有订单墙时
-          <select id="stch-auto-${rule.id}-wall-anchor" class="stch-input stch-auto-wall-anchor">
+          <select id="stch-${sell ? "sell-" : ""}auto-${rule.id}-wall-anchor" class="stch-input stch-auto-wall-anchor">
             <option value="top" ${state.cfg[rule.anchorKey] === "top" ? "selected" : ""}>订单墙顶</option>
             <option value="bottom" ${state.cfg[rule.anchorKey] === "bottom" ? "selected" : ""}>订单墙底</option>
           </select>
         </label>
         <label>偏移 ${currencySymbol}
-          <input id="stch-auto-${rule.id}-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.wallOffsetKey]}">
+          <input id="stch-${sell ? "sell-" : ""}auto-${rule.id}-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.wallOffsetKey]}">
         </label>
         <label>无订单墙时 ${currencySymbol}
-          <input id="stch-auto-${rule.id}-no-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.noWallOffsetKey]}">
+          <input id="stch-${sell ? "sell-" : ""}auto-${rule.id}-no-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.noWallOffsetKey]}">
         </label>
       </div>
     `).join("");
@@ -385,7 +327,7 @@ import {
               包含掉落
             </label>
           </div>
-          ${priceControlsHtml("stch-order-", "stch-")}
+          <div class="stch-toolbar">${priceControlsHtml("stch-order-", "stch-")}</div>
           <div class="stch-scan-actions">
             <div class="stch-btn" id="stch-scan-btn">开始扫描</div>
             <div class="stch-btn alt disabled" id="stch-stop-btn">停止</div>
@@ -446,7 +388,7 @@ import {
             <div class="stch-btn alt disabled" id="stch-order-recalculate-btn">重新计算</div>
             <div class="stch-btn disabled" id="stch-order-submit-orders-btn">提交订购单</div>
           </div>
-          ${priceControlsHtml("stch-order-page-", "stch-order-page-")}
+          <div class="stch-toolbar">${priceControlsHtml("stch-order-page-", "stch-order-page-")}</div>
           <div class="stch-summary" id="stch-order-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-order-summary"></span>
           </div>
@@ -544,14 +486,7 @@ import {
               <input id="stch-surplus-only-recommended" type="checkbox" ${state.cfg.surplusOnlyRecommended ? "checked" : ""}>
               只显示建议分解
             </label>
-            <label class="stch-primary-label">出售价格
-              <select id="stch-surplus-sell-price-source" class="stch-input" style="width:118px">
-                <option value="lowest" ${state.cfg.surplusSellPriceSource === "lowest" ? "selected" : ""}>在售最低</option>
-                <option value="median" ${state.cfg.surplusSellPriceSource === "median" ? "selected" : ""}>平均价格</option>
-                <option value="highest" ${state.cfg.surplusSellPriceSource === "highest" ? "selected" : ""}>求购最高</option>
-              </select>
-            </label>
-            <label class="stch-primary-label">售价调整 ${currencySymbol} <input id="stch-surplus-sell-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.surplusSellPriceAdjustment}" style="width:68px"></label>
+            ${priceControlsHtml("stch-surplus-sell-", "stch-surplus-sell-", true)}
             <label><input id="stch-surplus-include-foil" type="checkbox" ${state.cfg.surplusIncludeFoil ? "checked" : ""}> 包含闪卡</label>
           </div>
           <div class="stch-scan-actions stch-surplus-action-row">
@@ -635,8 +570,13 @@ import {
           <div class="stch-advanced-setting" style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">购买价格</div>
           <div class="stch-advanced-setting" style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-auto-strategy-settings stch-advanced-setting">
-            ${automaticStrategySettingsHtml}
+            ${automaticStrategySettingsHtml()}
             <div class="stch-auto-strategy-hint">* 订单墙是靠近有效最高买价、订单数量相对前面邻近价位显著增加的连续区域；墙顶是该区域最高价，墙底是最低价。</div>
+          </div>
+          <div class="stch-advanced-setting" style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">出售价格</div>
+          <div class="stch-advanced-setting" style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+          <div class="stch-auto-strategy-settings stch-advanced-setting">
+            ${automaticStrategySettingsHtml(true)}
           </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">卡牌价格扫描</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
@@ -809,17 +749,15 @@ import {
       ["surplus-item-mode","surplusItemMode"],
       ["surplus-include-foil","surplusIncludeFoil"],
       ["surplus-keep-max-level-cards","surplusKeepMaxLevelCards"],
-      ["surplus-sell-price-source","surplusSellPriceSource"],
-      ["surplus-sell-adjustment","surplusSellPriceAdjustment",{}],
       ["grind-reserve-copies","grindReserveCopies",{"integer":true,"min":0}],
       ["grind-include-points-shop","grindIncludePointsShopItems"],
       ["craft-interval","craftInterval",{"integer":true,"min":200}],
       ["craft-mode","craftMode"],
-      ...AUTOMATIC_STRATEGY_SETTING_ROWS.flatMap(rule => [
-        [`auto-${rule.id}-wall-anchor`, rule.anchorKey],
-        [`auto-${rule.id}-wall-offset`, rule.wallOffsetKey, {}],
-        [`auto-${rule.id}-no-wall-offset`, rule.noWallOffsetKey, {}],
-      ]),
+      ...AUTOMATIC_STRATEGY_SETTING_ROWS.flatMap((rows, side) => rows.flatMap(rule => [
+        [`${side ? "sell-" : ""}auto-${rule.id}-wall-anchor`, rule.anchorKey],
+        [`${side ? "sell-" : ""}auto-${rule.id}-wall-offset`, rule.wallOffsetKey, {}],
+        [`${side ? "sell-" : ""}auto-${rule.id}-no-wall-offset`, rule.noWallOffsetKey, {}],
+      ])),
     ].map(([id, ...rule]) => [`stch-${id}`, rule]));
     const syncConfigFromInputs = changedId => {
       const [key, numberOptions] = configInputs.get(changedId);
@@ -898,138 +836,12 @@ import {
       input?.addEventListener(input.type === "number" ? "input" : "change", () => syncConfigFromInputs(id));
     }
 
-    const orderPriceSourceIds = [
-      "stch-order-price-source",
-      "stch-order-page-price-source",
-    ];
-    const orderPriceAdjustmentIds = [
-      "stch-price-adjustment",
-      "stch-order-page-price-adjustment",
-    ];
-    const automaticWallAdjustmentIds = [
-      "stch-price-wall-adjustment",
-      "stch-order-page-price-wall-adjustment",
-    ];
-    const automaticPricingIds = [
-      "stch-auto-pricing",
-      "stch-order-page-auto-pricing",
-    ];
-    const refreshPricingSummaries = () => {
+    bindPricingControls(() => {
       renderResults();
       renderOrderResults();
       updateSummary();
       updateOrderSummary();
-    };
-    const renderOrderPricingControls = (exceptId = "") => {
-      const automatic = state.cfg.automaticPricingEnabled === true;
-      const source = automatic
-        ? state.cfg.automaticPriceStrategy || DEFAULT_CONFIG.automaticPriceStrategy
-        : state.cfg.orderPriceSource || DEFAULT_CONFIG.orderPriceSource;
-      const draft = automatic ? getAutomaticPricingDraft(source) : null;
-      const adjustment = automatic
-        ? draft.noWallOffsetMinor / 100
-        : state.cfg.priceAdjustment ?? DEFAULT_CONFIG.priceAdjustment;
-      const wallAdjustment = draft?.wallOffsetMinor / 100 || 0;
-      orderPriceSourceIds.forEach(id => {
-        const input = document.getElementById(id);
-        if (!input) return;
-        input.innerHTML = getOrderPriceOptionsHtml(automatic, source);
-        input.value = source;
-      });
-      orderPriceAdjustmentIds.forEach(id => {
-        if (id === exceptId) return;
-        const input = document.getElementById(id);
-        if (input) input.value = String(adjustment);
-      });
-      automaticWallAdjustmentIds.forEach(id => {
-        if (id !== exceptId) {
-          const input = document.getElementById(id);
-          if (input) input.value = String(wallAdjustment);
-        }
-        const label = document.getElementById(`${id}-label`);
-        if (label) label.style.display = automatic ? "" : "none";
-      });
-      [
-        "stch-price-adjustment-text",
-        "stch-order-page-price-adjustment-text",
-      ].forEach(id => {
-        const text = document.getElementById(id);
-        if (text) text.textContent = automatic ? "无墙调整" : "买价调整";
-      });
-      automaticPricingIds.forEach(id => {
-        const input = document.getElementById(id);
-        if (input) input.checked = automatic;
-      });
-      [
-        "stch-order-price-label",
-        "stch-price-wall-adjustment-label",
-        "stch-price-adjustment-label",
-        "stch-order-page-price-label",
-        "stch-order-page-price-wall-adjustment-label",
-        "stch-order-page-price-adjustment-label",
-      ].forEach(id => {
-        document.getElementById(id)?.classList.toggle("stch-auto-pricing-active", automatic);
-      });
-      modal.querySelectorAll(".stch-auto-pricing-toggle").forEach(label => {
-        label.classList.toggle("stch-auto-pricing-active", automatic);
-      });
-    };
-    orderPriceSourceIds.forEach(id => {
-      document.getElementById(id)?.addEventListener("change", event => {
-        if (state.cfg.automaticPricingEnabled) {
-          state.cfg.automaticPriceStrategy = event.currentTarget.value;
-          getAutomaticPricingDraft(state.cfg.automaticPriceStrategy, true);
-        } else {
-          state.cfg.orderPriceSource = event.currentTarget.value;
-        }
-        renderOrderPricingControls();
-        saveConfig(state.cfg);
-        refreshPricingSummaries();
-      });
     });
-    const syncOrderPriceAdjustment = (event, normalizeSource = false) => {
-      const parsed = parseFloat(event.currentTarget.value);
-      const value = Number.isFinite(parsed) ? parsed : 0;
-      if (state.cfg.automaticPricingEnabled) {
-        const draft = getAutomaticPricingDraft(state.cfg.automaticPriceStrategy);
-        draft.noWallOffsetMinor = Math.round(value * 100);
-      } else {
-        state.cfg.priceAdjustment = value;
-      }
-      renderOrderPricingControls(normalizeSource ? "" : event.currentTarget.id);
-      if (!state.cfg.automaticPricingEnabled) saveConfig(state.cfg);
-      refreshPricingSummaries();
-    };
-    orderPriceAdjustmentIds.forEach(id => {
-      const input = document.getElementById(id);
-      input?.addEventListener("input", event => syncOrderPriceAdjustment(event, false));
-      input?.addEventListener("change", event => syncOrderPriceAdjustment(event, true));
-    });
-    const syncAutomaticWallAdjustment = (event, normalizeSource = false) => {
-      const parsed = parseFloat(event.currentTarget.value);
-      const value = Number.isFinite(parsed) ? parsed : 0;
-      const draft = getAutomaticPricingDraft(state.cfg.automaticPriceStrategy);
-      draft.wallOffsetMinor = Math.round(value * 100);
-      renderOrderPricingControls(normalizeSource ? "" : event.currentTarget.id);
-      refreshPricingSummaries();
-    };
-    automaticWallAdjustmentIds.forEach(id => {
-      const input = document.getElementById(id);
-      input?.addEventListener("input", event => syncAutomaticWallAdjustment(event, false));
-      input?.addEventListener("change", event => syncAutomaticWallAdjustment(event, true));
-    });
-    automaticPricingIds.forEach(id => {
-      document.getElementById(id)?.addEventListener("change", event => {
-        state.cfg.automaticPricingEnabled = event.currentTarget.checked;
-        if (state.cfg.automaticPricingEnabled) {
-          getAutomaticPricingDraft(state.cfg.automaticPriceStrategy, true);
-        }
-        renderOrderPricingControls();
-        saveConfig(state.cfg);
-        refreshPricingSummaries();
-      });
-    });
-    renderOrderPricingControls();
 
     const activateTab = tabName => {
       if (tabName !== "history") stopPriceHistoryRefresh({ silent: true });

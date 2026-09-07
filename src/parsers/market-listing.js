@@ -172,40 +172,45 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
     return snapshot;
   }
 
-  function parseMarketOrderDepth(queries, marketHashName) {
+  function parseMarketOrderDepth(queries, marketHashName, sell = false) {
+    const levelsKey = sell ? "rgCompactSellOrders" : "rgCompactBuyOrders";
     const orderbookQuery = findTargetQuery(
       queries,
       marketHashName,
       "orderbook",
-      data => data && Array.isArray(data.rgCompactBuyOrders)
+      data => data && Array.isArray(data[levelsKey])
     );
     const orderbook = orderbookQuery?.state?.data;
     if (!orderbook) return null;
     const highestBuyMinor = parseCount(orderbook.amtMaxBuyOrder);
-    const currencyId = parseCount(orderbook.eCurrency);
-    if (!highestBuyMinor || !currencyId) return null;
-    const buyLevels = parseCompactBuyOrderLevels(orderbook.rgCompactBuyOrders, {
-      expectedBestPriceMinor: highestBuyMinor,
-    });
-    if (!buyLevels) return null;
-    const buyOrderCount = parseCount(orderbook.cBuyOrders);
-    if (
-      buyOrderCount !== null
-      && buyLevels.reduce((sum, level) => sum + level.quantity, 0) !== buyOrderCount
-    ) return null;
     const lowestSellValue = parseCount(orderbook.amtMinSellOrder);
+    const bestPriceMinor = sell ? lowestSellValue : highestBuyMinor;
+    const currencyId = parseCount(orderbook.eCurrency);
+    if (!bestPriceMinor || !currencyId) return null;
+    const levels = parseCompactBuyOrderLevels(orderbook[levelsKey], {
+      sell,
+      expectedBestPriceMinor: bestPriceMinor,
+    });
+    if (!levels) return null;
+    const buyOrderCount = parseCount(orderbook.cBuyOrders);
+    const sellOrderCount = parseCount(orderbook.cSellOrders);
+    const count = sell ? sellOrderCount : buyOrderCount;
+    if (
+      count !== null
+      && levels.reduce((sum, level) => sum + level.quantity, 0) !== count
+    ) return null;
     return {
       currencyId,
       highestBuyMinor,
       lowestSellMinor: lowestSellValue && lowestSellValue > 0 ? lowestSellValue : null,
       buyOrderCount,
-      sellOrderCount: parseCount(orderbook.cSellOrders),
-      buyLevels,
+      sellOrderCount,
+      [sell ? "sellLevels" : "buyLevels"]: levels,
     };
   }
 
-  export function parseMarketOrderDepthFromListingHtml(listingHtml, marketHashName) {
-    return parseMarketOrderDepth(getRenderQueries(listingHtml), marketHashName);
+  export function parseMarketOrderDepthFromListingHtml(listingHtml, marketHashName, options = {}) {
+    return parseMarketOrderDepth(getRenderQueries(listingHtml), marketHashName, options.sell);
   }
 
   export function parseMarketListingWithDepthFromHtml(listingHtml, marketHashName, options = {}) {
@@ -216,7 +221,7 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
         marketHashName,
         options.includeHistory !== false
       ),
-      depth: parseMarketOrderDepth(queries, marketHashName),
+      depth: parseMarketOrderDepth(queries, marketHashName, options.sell),
     };
   }
 

@@ -4,7 +4,7 @@
 
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 33;
+  export const CONFIG_SCHEMA_VERSION = 34;
 
   export const AUTOMATIC_PRICE_STRATEGY_CONFIG = Object.freeze({
     conservative: Object.freeze({
@@ -23,6 +23,17 @@
       noWallOffsetKey: "automaticAggressiveNoWallOffset",
     }),
   });
+
+  export const SELL_AUTOMATIC_PRICE_STRATEGY_CONFIG = Object.fromEntries(
+    Object.entries(AUTOMATIC_PRICE_STRATEGY_CONFIG).map(([strategy, fields]) => [
+      strategy,
+      Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, `sell${value[0].toUpperCase()}${value.slice(1)}`])),
+    ])
+  );
+  const ALL_AUTOMATIC_STRATEGY_FIELDS = [
+    ...Object.values(AUTOMATIC_PRICE_STRATEGY_CONFIG),
+    ...Object.values(SELL_AUTOMATIC_PRICE_STRATEGY_CONFIG),
+  ];
 
   export const DEFAULT_CONFIG = {
     configVersion: CONFIG_SCHEMA_VERSION,
@@ -78,11 +89,20 @@
     surplusKeepMaxLevelCards: true,
     surplusSellPriceSource: "lowest",
     surplusSellPriceAdjustment: 0,
+    sellAutomaticPricingEnabled: false,
+    sellAutomaticPriceStrategy: "balanced",
     grindReserveCopies: 1,
     grindIncludePointsShopItems: false,
     tabOrder: [...DEFAULT_TAB_ORDER],
     tabColors: {},
   };
+
+  for (const [strategy, fields] of Object.entries(SELL_AUTOMATIC_PRICE_STRATEGY_CONFIG)) {
+    const buy = AUTOMATIC_PRICE_STRATEGY_CONFIG[strategy];
+    DEFAULT_CONFIG[fields.anchorKey] = DEFAULT_CONFIG[buy.anchorKey] === "top" ? "bottom" : "top";
+    DEFAULT_CONFIG[fields.wallOffsetKey] = -DEFAULT_CONFIG[buy.wallOffsetKey] || 0;
+    DEFAULT_CONFIG[fields.noWallOffsetKey] = -DEFAULT_CONFIG[buy.noWallOffsetKey] || 0;
+  }
 
   export function normalizeConfig(saved) {
     const defaults = { ...DEFAULT_CONFIG };
@@ -113,6 +133,7 @@
       ? currencyId
       : defaults.currencyId;
     merged.automaticPricingEnabled = merged.automaticPricingEnabled === true;
+    merged.sellAutomaticPricingEnabled = merged.sellAutomaticPricingEnabled === true;
     merged.parallelOrderPricingEnabled = merged.parallelOrderPricingEnabled === true;
     merged.parallelOtherRequestsEnabled = merged.parallelOtherRequestsEnabled !== false;
     merged.showAdvancedSettings = merged.showAdvancedSettings === true;
@@ -138,13 +159,14 @@
     merged.parallelOtherRequestsConcurrency = Number.isFinite(parallelOtherRequestsConcurrency)
       ? Math.min(20, Math.max(1, Math.floor(parallelOtherRequestsConcurrency)))
       : defaults.parallelOtherRequestsConcurrency;
-    merged.automaticPriceStrategy = ["conservative", "balanced", "aggressive"]
-      .includes(merged.automaticPriceStrategy)
-      ? merged.automaticPriceStrategy
-      : defaults.automaticPriceStrategy;
+    for (const key of ["automaticPriceStrategy", "sellAutomaticPriceStrategy"]) {
+      merged[key] = Object.hasOwn(AUTOMATIC_PRICE_STRATEGY_CONFIG, merged[key])
+        ? merged[key] : defaults[key];
+    }
     for (const key of [
       "priceAdjustment",
-      ...Object.values(AUTOMATIC_PRICE_STRATEGY_CONFIG).flatMap(rule => [
+      "surplusSellPriceAdjustment",
+      ...ALL_AUTOMATIC_STRATEGY_FIELDS.flatMap(rule => [
         rule.wallOffsetKey,
         rule.noWallOffsetKey,
       ]),
@@ -152,7 +174,7 @@
       const value = Number(merged[key]);
       merged[key] = Number.isFinite(value) ? value : defaults[key];
     }
-    for (const rule of Object.values(AUTOMATIC_PRICE_STRATEGY_CONFIG)) {
+    for (const rule of ALL_AUTOMATIC_STRATEGY_FIELDS) {
       merged[rule.anchorKey] = ["top", "bottom"].includes(merged[rule.anchorKey])
         ? merged[rule.anchorKey]
         : defaults[rule.anchorKey];
@@ -161,22 +183,26 @@
     return merged;
   }
 
-  export function createAutomaticPricingDraft(cfg = DEFAULT_CONFIG, strategy = "balanced") {
+  export function createAutomaticPricingDraft(cfg = DEFAULT_CONFIG, strategy = "balanced", sell = false) {
     const normalizedStrategy = Object.hasOwn(AUTOMATIC_PRICE_STRATEGY_CONFIG, strategy)
       ? strategy
       : DEFAULT_CONFIG.automaticPriceStrategy;
     return {
       strategy: normalizedStrategy,
-      ...getAutomaticPriceStrategyRule(cfg, normalizedStrategy),
+      ...getAutomaticPriceStrategyRule(cfg, normalizedStrategy, sell),
     };
   }
 
-  export function getActiveOrderPricingProfile(cfg = DEFAULT_CONFIG, automaticDraft = null) {
-    if (cfg?.automaticPricingEnabled) {
+  export function getActiveOrderPricingProfile(cfg = DEFAULT_CONFIG, automaticDraft = null, sell = false) {
+    const enabledKey = sell ? "sellAutomaticPricingEnabled" : "automaticPricingEnabled";
+    const strategyKey = sell ? "sellAutomaticPriceStrategy" : "automaticPriceStrategy";
+    const sourceKey = sell ? "surplusSellPriceSource" : "orderPriceSource";
+    const adjustmentKey = sell ? "surplusSellPriceAdjustment" : "priceAdjustment";
+    if (cfg?.[enabledKey]) {
       const priceSource = ["conservative", "balanced", "aggressive"]
-        .includes(cfg.automaticPriceStrategy)
-        ? cfg.automaticPriceStrategy
-        : DEFAULT_CONFIG.automaticPriceStrategy;
+        .includes(cfg[strategyKey])
+        ? cfg[strategyKey]
+        : DEFAULT_CONFIG[strategyKey];
       const draftRule = automaticDraft?.strategy === priceSource
         ? automaticDraft
         : null;
@@ -190,25 +216,25 @@
             wallOffsetMinor: draftRule.wallOffsetMinor,
             noWallOffsetMinor: draftRule.noWallOffsetMinor,
           }
-          : getAutomaticPriceStrategyRule(cfg, priceSource),
+          : getAutomaticPriceStrategyRule(cfg, priceSource, sell),
       };
     }
     return {
       automatic: false,
-      priceSource: ["lowest", "median", "highest"].includes(cfg?.orderPriceSource)
-        ? cfg.orderPriceSource
-        : DEFAULT_CONFIG.orderPriceSource,
-      adjustment: Number.isFinite(Number(cfg?.priceAdjustment))
-        ? Number(cfg.priceAdjustment)
-        : DEFAULT_CONFIG.priceAdjustment,
+      priceSource: ["lowest", "median", "highest"].includes(cfg?.[sourceKey])
+        ? cfg[sourceKey]
+        : DEFAULT_CONFIG[sourceKey],
+      adjustment: Number.isFinite(Number(cfg?.[adjustmentKey]))
+        ? Number(cfg[adjustmentKey])
+        : DEFAULT_CONFIG[adjustmentKey],
     };
   }
 
-  export function getAutomaticPriceStrategyRule(cfg = DEFAULT_CONFIG, strategy = "balanced") {
+  export function getAutomaticPriceStrategyRule(cfg = DEFAULT_CONFIG, strategy = "balanced", sell = false) {
     const normalizedStrategy = Object.hasOwn(AUTOMATIC_PRICE_STRATEGY_CONFIG, strategy)
       ? strategy
       : "balanced";
-    const fields = AUTOMATIC_PRICE_STRATEGY_CONFIG[normalizedStrategy];
+    const fields = (sell ? SELL_AUTOMATIC_PRICE_STRATEGY_CONFIG : AUTOMATIC_PRICE_STRATEGY_CONFIG)[normalizedStrategy];
     const anchor = ["top", "bottom"].includes(cfg?.[fields.anchorKey])
       ? cfg[fields.anchorKey]
       : DEFAULT_CONFIG[fields.anchorKey];

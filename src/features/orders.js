@@ -305,7 +305,8 @@ const { setStatus: setOrderStatus } = orderStatus;
   export async function fetchMarketOrderDepth(marketHashName, queue = null, options = {}) {
     const currencyContext = getOrderCurrencyContext();
     const cacheKey = getCurrencyMarketKey(marketHashName, currencyContext.currencyId);
-    const cached = state.marketOrderDepths.get(cacheKey);
+    const depthKey = options.sell ? `${cacheKey}:sell` : cacheKey;
+    const cached = state.marketOrderDepths.get(depthKey);
     if (cached?.depth && Date.now() - cached.fetchedAt < 30000) {
       return cached.depth;
     }
@@ -325,11 +326,11 @@ const { setStatus: setOrderStatus } = orderStatus;
       const { snapshot, depth } = parseMarketListingWithDepthFromHtml(
         listingHtml,
         marketHashName,
-        { includeHistory: false }
+        { includeHistory: false, sell: options.sell }
       );
       if (!depth) {
-        validateListingSnapshot(snapshot, currencyContext.currencyId);
-        throw new Error("商品页缺少有效的完整买单深度");
+        if (!options.sell) validateListingSnapshot(snapshot, currencyContext.currencyId);
+        throw new Error(`商品页缺少有效的完整${options.sell ? "卖" : "买"}单深度`);
       }
       if (depth.currencyId !== currencyContext.currencyId) {
         throw new Error(
@@ -358,7 +359,7 @@ const { setStatus: setOrderStatus } = orderStatus;
         imageUrl: snapshot?.imageUrl || "",
         sellOrderCount: depth.sellOrderCount ?? snapshot?.sellOrderCount ?? null,
       });
-      state.marketOrderDepths.set(cacheKey, { depth, fetchedAt: observedAt });
+      state.marketOrderDepths.set(depthKey, { depth, fetchedAt: observedAt });
       return depth;
     } finally {
       ownedQueue?.stop();

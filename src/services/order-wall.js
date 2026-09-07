@@ -22,15 +22,16 @@ function addLevel(byPrice, priceValue, quantityValue) {
   byPrice.set(priceMinor, (byPrice.get(priceMinor) || 0) + quantity);
 }
 
-/** Strictly validate the compact depth returned by Steam SSR. */
+/** Validate Steam SSR depth: bids descend, asks ascend with options.sell. */
 export function parseCompactBuyOrderLevels(input, options = {}) {
   if (!Array.isArray(input) || input.length === 0 || input.length % 2 !== 0) return null;
   const levels = [];
-  let previousPrice = Infinity;
+  const direction = options.sell ? -1 : 1;
+  let previousPrice = Infinity * direction;
   for (let index = 0; index < input.length; index += 2) {
     const priceMinor = normalizePositiveInteger(input[index]);
     const quantity = normalizePositiveInteger(input[index + 1]);
-    if (priceMinor === null || quantity === null || priceMinor >= previousPrice) return null;
+    if (priceMinor === null || quantity === null || direction * (priceMinor - previousPrice) >= 0) return null;
     levels.push({ priceMinor, quantity });
     previousPrice = priceMinor;
   }
@@ -44,8 +45,8 @@ export function parseCompactBuyOrderLevels(input, options = {}) {
   return levels;
 }
 
-/** Normalize Steam's [price, quantity, ...] compact buy depth. */
-export function normalizeBuyOrderLevels(input) {
+/** Normalize compact depth, sorting from the best price outward. */
+export function normalizeBuyOrderLevels(input, sell = false) {
   const byPrice = new Map();
   if (!Array.isArray(input)) return [];
 
@@ -69,7 +70,7 @@ export function normalizeBuyOrderLevels(input) {
 
   return [...byPrice.entries()]
     .map(([priceMinor, quantity]) => ({ priceMinor, quantity }))
-    .sort((left, right) => right.priceMinor - left.priceMinor);
+    .sort((left, right) => (sell ? -1 : 1) * (right.priceMinor - left.priceMinor));
 }
 
 function median(values) {
@@ -97,7 +98,8 @@ function getPrecedingBaseline(levels, index, windowSize, minimumCount) {
  */
 export function detectIsolatedHighBuyOrder(input, options = {}) {
   const settings = { ...DEFAULT_ORDER_WALL_OPTIONS, ...options };
-  const levels = normalizeBuyOrderLevels(input);
+  const direction = settings.sell ? -1 : 1;
+  const levels = normalizeBuyOrderLevels(input, settings.sell);
   const originalBestPriceMinor = levels[0]?.priceMinor ?? null;
   const emptyResult = {
     classification: "normal",
@@ -124,14 +126,14 @@ export function detectIsolatedHighBuyOrder(input, options = {}) {
   const localLevels = levels.slice(0, lookaheadLevels + 1);
   const lowerGaps = [];
   for (let index = 1; index + 1 < localLevels.length; index++) {
-    lowerGaps.push(localLevels[index].priceMinor - localLevels[index + 1].priceMinor);
+    lowerGaps.push(direction * (localLevels[index].priceMinor - localLevels[index + 1].priceMinor));
   }
   const typicalLowerGap = median(lowerGaps.filter(gap => gap > 0));
   if (!Number.isFinite(typicalLowerGap) || typicalLowerGap <= 0) return emptyResult;
 
   const top = levels[0];
   const second = levels[1];
-  const topGapMinor = top.priceMinor - second.priceMinor;
+  const topGapMinor = direction * (top.priceMinor - second.priceMinor);
   const topGapRatio = topGapMinor / second.priceMinor;
   const topGapVsTypical = topGapMinor / typicalLowerGap;
   const localQuantity = localLevels.reduce((sum, level) => sum + level.quantity, 0);
@@ -157,7 +159,7 @@ export function detectIsolatedHighBuyOrder(input, options = {}) {
 
   const effectiveLevels = levels.slice(1);
   return {
-    classification: "isolated-high",
+    classification: settings.sell ? "isolated-low" : "isolated-high",
     originalBestPriceMinor,
     effectiveBestPriceMinor: effectiveLevels[0]?.priceMinor ?? null,
     isolatedLevels: [{
@@ -182,10 +184,11 @@ function buildClusters(walls, clusterGapMinor) {
     const previous = clusters.at(-1);
     if (
       previous
-      && previous.bottomPriceMinor - wall.priceMinor <= clusterGapMinor
+      && Math.abs(previous.walls.at(-1).priceMinor - wall.priceMinor) <= clusterGapMinor
     ) {
       previous.walls.push(wall);
-      previous.bottomPriceMinor = wall.priceMinor;
+      previous.bottomPriceMinor = Math.min(previous.bottomPriceMinor, wall.priceMinor);
+      previous.topPriceMinor = Math.max(previous.topPriceMinor, wall.priceMinor);
       previous.totalQuantity += wall.quantity;
       previous.maxQuantityRatio = Math.max(previous.maxQuantityRatio, wall.quantityRatio);
       return;
@@ -203,7 +206,7 @@ function buildClusters(walls, clusterGapMinor) {
 }
 
 /**
- * Detect quantity walls close enough to affect the current buy-order price.
+ * Detect quantity walls close enough to affect the current best price.
  * Deep support is deliberately excluded even when it is the global maximum.
  */
 export function detectBuyOrderWalls(input, options = {}) {
@@ -240,7 +243,7 @@ export function detectBuyOrderWalls(input, options = {}) {
 
   const wallCandidates = [];
   levels.forEach((level, index) => {
-    const distanceFromBestMinor = bestPriceMinor - level.priceMinor;
+    const distanceFromBestMinor = (settings.sell ? -1 : 1) * (bestPriceMinor - level.priceMinor);
     if (distanceFromBestMinor < 0 || distanceFromBestMinor > maxDistanceMinor) return;
     const baselineQuantity = getPrecedingBaseline(
       levels,
@@ -301,8 +304,13 @@ export const DEFAULT_AUTOMATIC_BUY_PRICE_RULES = Object.freeze({
   }),
 });
 
-function normalizeStrategyRule(strategy, input) {
-  const fallback = DEFAULT_AUTOMATIC_BUY_PRICE_RULES[strategy];
+function normalizeStrategyRule(strategy, input, sell) {
+  const defaults = DEFAULT_AUTOMATIC_BUY_PRICE_RULES[strategy];
+  const fallback = sell ? {
+    wallAnchor: defaults.wallAnchor === "top" ? "bottom" : "top",
+    wallOffsetMinor: -defaults.wallOffsetMinor || 0,
+    noWallOffsetMinor: -defaults.noWallOffsetMinor || 0,
+  } : defaults;
   const rule = input && typeof input === "object" ? input : {};
   const integerOrFallback = (value, fallbackValue) => (
     Number.isSafeInteger(Number(value)) ? Number(value) : fallbackValue
@@ -322,26 +330,39 @@ function normalizeStrategyRule(strategy, input) {
  * lowest-sell guard are applied to the final price.
  */
 export function calculateAutomaticBuyPrice(depth, options = {}) {
+  return calculateAutomaticPrice(depth, options, false);
+}
+
+export function calculateAutomaticSellPrice(depth, options = {}) {
+  return calculateAutomaticPrice(depth, options, true);
+}
+
+function calculateAutomaticPrice(depth, options, sell) {
   const strategy = AUTOMATIC_BUY_PRICE_STRATEGIES.includes(options.strategy)
     ? options.strategy
     : "balanced";
   const highestBuyMinor = normalizePositiveInteger(
     depth?.highestBuyMinor ?? depth?.amtMaxBuyOrder
   );
-  if (highestBuyMinor === null) return null;
+  const lowestSellMinor = normalizePositiveInteger(
+    depth?.lowestSellMinor ?? depth?.amtMinSellOrder
+  );
+  const bestPriceMinor = sell ? lowestSellMinor : highestBuyMinor;
+  if (bestPriceMinor === null) return null;
   const minimumPriceMinor = normalizePositiveInteger(options.minimumPriceMinor) ?? 1;
 
   const detection = detectBuyOrderWalls(
-    depth?.buyLevels ?? depth?.rgCompactBuyOrders ?? [],
+    (sell ? depth?.sellLevels ?? depth?.rgCompactSellOrders : depth?.buyLevels ?? depth?.rgCompactBuyOrders) ?? [],
     {
       ...options.wallOptions,
-      bestPriceMinor: highestBuyMinor,
+      sell,
+      bestPriceMinor,
       minimumPriceMinor,
     }
   );
   const cluster = detection.nearestCluster;
-  const effectiveHighestBuyMinor = detection.bestPriceMinor ?? highestBuyMinor;
-  const strategyRule = normalizeStrategyRule(strategy, options.strategyRule);
+  const effectiveBestPriceMinor = detection.bestPriceMinor ?? bestPriceMinor;
+  const strategyRule = normalizeStrategyRule(strategy, options.strategyRule, sell);
   const wallReferencePriceMinor = cluster
     ? strategyRule.wallAnchor === "bottom"
       ? cluster.bottomPriceMinor
@@ -349,28 +370,29 @@ export function calculateAutomaticBuyPrice(depth, options = {}) {
     : null;
   const strategyBasePriceMinor = cluster
     ? wallReferencePriceMinor + strategyRule.wallOffsetMinor
-    : effectiveHighestBuyMinor + strategyRule.noWallOffsetMinor;
+    : effectiveBestPriceMinor + strategyRule.noWallOffsetMinor;
 
   const adjustmentMinor = Number.isSafeInteger(Number(options.adjustmentMinor))
     ? Number(options.adjustmentMinor)
     : 0;
-  const lowestSellMinor = normalizePositiveInteger(
-    depth?.lowestSellMinor ?? depth?.amtMinSellOrder
-  );
-  if (lowestSellMinor !== null && lowestSellMinor <= minimumPriceMinor) return null;
+  if (!sell && lowestSellMinor !== null && lowestSellMinor <= minimumPriceMinor) return null;
   const sellGuardMinor = lowestSellMinor === null
     ? null
     : lowestSellMinor - 1;
   const adjustedPriceMinor = strategyBasePriceMinor + adjustmentMinor;
   let finalPriceMinor = Math.max(minimumPriceMinor, adjustedPriceMinor);
-  if (sellGuardMinor !== null) finalPriceMinor = Math.min(finalPriceMinor, sellGuardMinor);
+  const buyGuardMinor = highestBuyMinor === null ? null : highestBuyMinor + 1;
+  if (sell) finalPriceMinor = Math.max(finalPriceMinor, buyGuardMinor ?? 0);
+  else if (sellGuardMinor !== null) finalPriceMinor = Math.min(finalPriceMinor, sellGuardMinor);
 
   return {
     strategy,
     strategyRule,
     classification: detection.classification,
     highestBuyMinor,
-    effectiveHighestBuyMinor,
+    ...(sell ? { effectiveLowestSellMinor: effectiveBestPriceMinor, buyGuardMinor } : {
+      effectiveHighestBuyMinor: effectiveBestPriceMinor,
+    }),
     wallReferencePriceMinor,
     strategyBasePriceMinor,
     adjustmentMinor,
@@ -379,8 +401,8 @@ export function calculateAutomaticBuyPrice(depth, options = {}) {
     lowestSellMinor,
     sellGuardMinor,
     finalPriceMinor,
-    wasMinimumClamped: finalPriceMinor > adjustedPriceMinor,
-    wasSellGuardClamped: sellGuardMinor !== null && finalPriceMinor === sellGuardMinor
+    wasMinimumClamped: sell ? adjustedPriceMinor < minimumPriceMinor : finalPriceMinor > adjustedPriceMinor,
+    wasSellGuardClamped: !sell && sellGuardMinor !== null && finalPriceMinor === sellGuardMinor
       && adjustedPriceMinor > sellGuardMinor,
     detection,
   };

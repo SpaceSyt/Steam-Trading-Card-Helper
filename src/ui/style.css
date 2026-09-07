@@ -343,8 +343,8 @@
       color: #fff;
       font-weight: bold;
     }
-    .stch-auto-wall-anchor { width: 104px; }
-    .stch-auto-offset { width: 64px; }
+    .stch-input.stch-auto-wall-anchor { width: 104px; flex-shrink: 0; }
+    .stch-input.stch-auto-offset { width: 64px; }
     .stch-auto-strategy-hint {
       color: #697887;
       font-size: 12px;
