@@ -44,7 +44,6 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     enableCheckboxDragSelection(list, {
       checkboxSelector: ".stch-result-cb",
       activationSelector: ".stch-result-cb, .stch-check-hit, .stch-check",
-      rowSelector: ".stch-game-row",
       excludeSelector: "[id$='select-all']",
     });
   }
