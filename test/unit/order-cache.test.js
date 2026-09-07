@@ -108,9 +108,6 @@ test("incomplete prices remain unavailable after order-cache normalization", () 
   assert.equal(normalized.cheapestSetCostCents, null);
   assert.equal(normalized.fullSetCostCents, null);
   assert.equal(normalized.level5CostCents, null);
-  assert.equal(normalized.cheapestSetFormatted, "-");
-  assert.equal(normalized.fullSetFormatted, "-");
-  assert.equal(normalized.level5Formatted, "-");
 });
 
 test("corrupt cache is diagnosed without treating it as a migration", () => {

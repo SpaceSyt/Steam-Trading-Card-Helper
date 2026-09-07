@@ -1,3 +1,5 @@
+import { persistMarketObservations } from "../services/market-observations.js";
+
 import { state } from "../state.js";
 
 import { RequestQueue } from "../request/queue.js";
@@ -45,6 +47,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       )
     );
 
+    const marketRecords = [];
     let refreshed = 0;
     let removed = 0;
     let failed = 0;
@@ -54,12 +57,12 @@ const { setStatus: setOrderStatus } = orderStatus;
         const key = getResultKey(existing);
         statusFn(`重新计算 ${index + 1}/${selected.length}: ${existing.gameName}`);
         try {
-          const next = await refreshResultInfo(existing, queue);
+          const next = await refreshResultInfo(existing, queue, marketRecords);
           const resultIndex = targetResults.findIndex(info => getResultKey(info) === key);
           if (next.level >= getBadgeTargetLevel(next)) {
             if (resultIndex >= 0) targetResults.splice(resultIndex, 1);
             selectedSet.delete(key);
-            if (!isOrder) removeOrderResultByKey(key, { render: false });
+            if (!isOrder) removeOrderResultByKey(key, { persist: false });
             removed++;
             logFn(`[${existing.appid}] ${existing.gameName}: 已满级，从结果中移除`, "info");
           } else if (resultIndex >= 0) {
@@ -90,6 +93,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       }
     } finally {
       queue.stop();
+      persistMarketObservations(marketRecords);
       state.recalculationRunning = false;
       statusFn(null);
       try {

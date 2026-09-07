@@ -2,7 +2,7 @@ import { state } from "../state.js";
 
 import { RequestQueue } from "../request/queue.js";
 
-import { unsafeWindow } from "../globals.js";
+import { readInventoryPages } from "../services/inventory-pages.js";
 
 import { formatInt, formatMoney } from "../utils/format.js";
 
@@ -18,7 +18,7 @@ import {
 } from "../parsers/price.js";
 import { persistMarketObservations } from "../services/market-observations.js";
 
-import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, getCardGameName, getCommunityItemType, getCommunityItemCategory, getDescriptionImageUrl, getDescriptionColor, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, getDescriptionKey, isPointsShopCommunityItemDescription, parseCommunityInventoryPage } from "../parsers/inventory.js";
+import { isGemSackDescription, isLooseGemDescription, getCardGameAppid, getCardGameName, getCommunityItemType, getCommunityItemCategory, getDescriptionImageUrl, getDescriptionColor, getAssetAmount, parseGemValueFromDescription, parseGooValueParams, getDescriptionKey, isPointsShopCommunityItemDescription } from "../parsers/inventory.js";
 
 import { getGemBreakEvenBuyerPrice, getGemSackSellerNetCents } from "../utils/market-fees.js";
 
@@ -35,7 +35,7 @@ import {
 
 import { grindStatus } from "../status-controllers.js";
 import { enableTileDragSelection } from "../ui/checkbox-drag.js";
-import { appendInventoryTileText, createInventoryTile } from "../utils/dom.js";
+import { appendInventoryTileText, createInventoryTile, renderInventoryTiles, createFrameScheduler } from "../utils/dom.js";
 import { countSelected, pruneSelection, setItemsSelected } from "../utils/selection.js";
 import { getProcessingDecorationCategories } from "../services/processing-mode.js";
 import { syncProcessingView } from "../ui/processing-view.js";
@@ -223,13 +223,11 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     };
   }
 
-  export async function loadGrindInventoryItems(steamId, queue) {
+  export async function loadGrindInventoryItems(steamId, queue, snapshot) {
     const groupMap = new Map();
-    const language = unsafeWindow.g_strLanguage || "schinese";
     const reserveCopies = Math.max(0, Math.floor(Number(state.cfg.grindReserveCopies) || 0));
     const preferPointsShopItems = !!state.cfg.grindIncludePointsShopItems;
     const itemCategories = getProcessingDecorationCategories(state.cfg.surplusItemMode);
-    let startAssetId = "";
     let page = 0;
     let totalInventoryCount = 0;
     let totalAssetsSeen = 0;
@@ -241,22 +239,12 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
       reserved: 0,
     };
 
-    do {
+    for await (const inventoryPage of readInventoryPages(steamId, queue, {
+      snapshot,
+      shouldStop: () => state.grindStopRequested,
+      onPage: number => setGrindStatus(`读取库存第 ${number} 页`),
+    })) {
       page++;
-      const params = new URLSearchParams({
-        l: language,
-        count: "2000",
-      });
-      if (startAssetId) params.set("start_assetid", startAssetId);
-      const url = `https://steamcommunity.com/inventory/${steamId}/753/6?${params.toString()}`;
-      setGrindStatus(`读取库存第 ${page} 页`);
-      const response = await queue.fetch(url);
-      const data = response?.data || {};
-      if (data?.success !== 1 && data?.success !== true) {
-        throw new Error(data?.Error || data?.error || "Steam 未返回可用库存数据");
-      }
-
-      const inventoryPage = parseCommunityInventoryPage(data);
       totalInventoryCount = inventoryPage.totalInventoryCount || totalInventoryCount;
       const { assets, descriptions } = inventoryPage;
       totalAssetsSeen += assets.length;
@@ -311,8 +299,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         `库存第 ${page} 页：读取 ${assets.length} 件，累计候选 ${groupMap.size} 种`,
         "info"
       );
-      startAssetId = inventoryPage.nextAssetId;
-    } while (startAssetId && !state.grindStopRequested);
+    }
 
     const items = [...groupMap.values()].flatMap(item => {
       const surplus = selectDuplicateSurplusItem(item, reserveCopies, preferPointsShopItems);
@@ -380,11 +367,10 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     pruneSelection(state.selectedGrindResults, visible, getGrindResultKey);
   }
 
-  export function updateGrindSummary() {
+  export function updateGrindSummary(visible = getVisibleGrindResults()) {
     const row = document.getElementById("stch-surplus-summary-row");
     const summary = document.getElementById("stch-grind-summary");
     if (!row || !summary) return;
-    const visible = getVisibleGrindResults();
     if (visible.length === 0) {
       summary.textContent = "";
       syncProcessingView();
@@ -408,6 +394,11 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     syncProcessingView();
   }
 
+  const scheduleGrindSelection = createFrameScheduler(() => {
+    updateGrindSummary();
+    updateSurplusActionState();
+  });
+
   export function renderGrindResults() {
     const list = document.getElementById("stch-grind-list");
     if (!list) return;
@@ -417,24 +408,12 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         if (selected) state.selectedGrindResults.add(tile.dataset.key);
         else state.selectedGrindResults.delete(tile.dataset.key);
       },
-      onSelectionChange: () => {
-        updateGrindSummary();
-        updateSurplusActionState();
-      },
+      onSelectionChange: scheduleGrindSelection,
     });
-    list.innerHTML = "";
 
     const visible = getVisibleGrindResults();
     pruneSelectedGrindResults(visible);
-    if (visible.length === 0) {
-      updateGrindSummary();
-      updateSurplusActionState();
-      syncProcessingView();
-      return;
-    }
-
-    for (const item of visible) {
-      const key = getGrindResultKey(item);
+    renderInventoryTiles(list, visible, state.selectedGrindResults, getGrindResultKey, (item, key) => {
       const assetSummary = summarizeAssetIds(item.assets.map(asset => ({
         assetid: asset.assetid,
         selectedAmount: asset.amount,
@@ -478,12 +457,11 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
       appendInventoryTileText(tile, "span", "stch-inv-gems", `${formatInt(item.totalGems)} 宝石`, `${item.gemValue} 宝石/件`);
       appendInventoryTileText(tile, "div", "stch-inv-name", label || "未知物品");
 
-      list.appendChild(tile);
-    }
+      return tile;
+    });
 
-    updateGrindSummary();
+    updateGrindSummary(visible);
     updateSurplusActionState();
-    syncProcessingView();
   }
 
   export async function startGrindScan(options = {}) {
@@ -551,7 +529,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
 
       grindLog("【阶段 2/3】读取社区库存并识别可分解物品");
       setGrindProgress(0, 1, "阶段2: 读取库存");
-      const inventory = await loadGrindInventoryItems(steamId, otherQueue);
+      const inventory = await loadGrindInventoryItems(steamId, otherQueue, options.inventorySnapshot);
       if (state.grindStopRequested) {
         grindLog("已停止扫描", "warn");
         return;

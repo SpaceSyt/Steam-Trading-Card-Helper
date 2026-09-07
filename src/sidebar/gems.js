@@ -1,9 +1,9 @@
-import { unsafeWindow } from "../globals.js";
+import { readInventoryPages } from "../services/inventory-pages.js";
 import { state } from "../state.js";
 
 import { SIDEBAR_GEM_SACK_HASH, GEM_SACK_SIZE } from "../constants.js";
 
-import { isGemSackDescription, isLooseGemDescription, getDescriptionKey, getAssetAmount, parseCommunityInventoryPage } from "../parsers/inventory.js";
+import { isGemSackDescription, isLooseGemDescription, getDescriptionKey, getAssetAmount } from "../parsers/inventory.js";
 
 import { stchRequestJson } from "../request/http.js";
 import { RequestQueue } from "../request/queue.js";
@@ -15,25 +15,13 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
   export async function loadSidebarGemInfo(steamId) {
     if (!steamId) throw new Error("未找到 SteamID，无法读取库存");
 
-    const language = unsafeWindow.g_strLanguage || "schinese";
-    let startAssetId = "";
     let looseGems = 0;
     let sackCount = 0;
     let totalInventoryCount = 0;
 
-    do {
-      const params = new URLSearchParams({
-        l: language,
-        count: "2000",
-      });
-      if (startAssetId) params.set("start_assetid", startAssetId);
-      const data = await stchRequestJson(
-        `https://steamcommunity.com/inventory/${steamId}/753/6?${params.toString()}`
-      );
-      if (data?.success !== 1 && data?.success !== true) {
-        throw new Error(data?.Error || data?.error || "Steam 未返回库存数据");
-      }
-      const inventoryPage = parseCommunityInventoryPage(data);
+    for await (const inventoryPage of readInventoryPages(steamId, {
+      fetch: async url => ({ data: await stchRequestJson(url) }),
+    })) {
       totalInventoryCount = inventoryPage.totalInventoryCount || totalInventoryCount;
       for (const asset of inventoryPage.assets) {
         const description = inventoryPage.descriptions.get(getDescriptionKey(asset));
@@ -45,8 +33,7 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
         }
       }
 
-      startAssetId = inventoryPage.nextAssetId;
-    } while (startAssetId);
+    }
 
     return {
       looseGems,

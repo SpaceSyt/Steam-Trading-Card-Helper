@@ -1,6 +1,6 @@
 import { state } from "../state.js";
 
-import { createTextSpan, createCheckboxHit } from "../utils/dom.js";
+import { createTextSpan, createCheckboxHit, createFrameScheduler } from "../utils/dom.js";
 
 import { getProfileUrl, getMarketMinimumPriceCents } from "../utils/steam.js";
 
@@ -23,23 +23,21 @@ import { calculateResultPricingTotals } from "../services/pricing-estimate.js";
 import { enableCheckboxDragSelection } from "./checkbox-drag.js";
 
   const pendingSelectionUpdates = new Set();
-  let selectionUpdateFrame = 0;
+  const flushSelectionUpdates = createFrameScheduler(() => {
+    if (pendingSelectionUpdates.has("order")) {
+      updateOrderSummary({ prune: false });
+      updateOrderActionState();
+    }
+    if (pendingSelectionUpdates.has("scan")) {
+      updateSummary();
+      updateBulkActionState();
+    }
+    pendingSelectionUpdates.clear();
+  });
 
   function scheduleSelectionUpdate(source) {
     pendingSelectionUpdates.add(source);
-    if (selectionUpdateFrame) return;
-    selectionUpdateFrame = requestAnimationFrame(() => {
-      selectionUpdateFrame = 0;
-      if (pendingSelectionUpdates.has("order")) {
-        updateOrderSummary({ prune: false });
-        updateOrderActionState();
-      }
-      if (pendingSelectionUpdates.has("scan")) {
-        updateSummary();
-        updateBulkActionState();
-      }
-      pendingSelectionUpdates.clear();
-    });
+    flushSelectionUpdates();
   }
 
   function enableResultDragSelection(list) {

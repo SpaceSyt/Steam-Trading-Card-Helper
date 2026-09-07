@@ -239,7 +239,11 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
     return fallback ? Math.max(0, parseInt(fallback[1], 10) || 0) : 0;
   }
 
+  const gemValuesByDescription = new WeakMap();
+
   export function parseGemValueFromDescription(description) {
+    if (!description || typeof description !== "object") return 0;
+    if (gemValuesByDescription.has(description)) return gemValuesByDescription.get(description);
     const values = [];
     ["owner_descriptions", "descriptions", "owner_actions", "actions"].forEach(key => {
       const list = Array.isArray(description?.[key]) ? description[key] : [];
@@ -247,10 +251,12 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
         values.push(item?.value, item?.name, item?.link);
       });
     });
-    return values.reduce((best, value) => {
+    const gemValue = values.reduce((best, value) => {
       if (value == null) return best;
       return Math.max(best, parseGemValueFromText(value));
     }, 0);
+    gemValuesByDescription.set(description, gemValue);
+    return gemValue;
   }
 
   export function parseGooValueParams(description) {

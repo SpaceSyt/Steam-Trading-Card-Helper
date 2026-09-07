@@ -14,7 +14,10 @@ function parseCardImageUrl(cardElement) {
 }
 
   export function parseGameCardsHtml(html, appid, isFoil) {
-    const doc = new DOMParser().parseFromString(html, "text/html");
+    return parseGameCardsDocument(new DOMParser().parseFromString(html, "text/html"), appid, isFoil);
+  }
+
+  function parseGameCardsDocument(doc, appid, isFoil) {
 
     // game name from title
     let gameName = "";
@@ -161,8 +164,7 @@ function parseCardImageUrl(cardElement) {
     };
   }
 
-  export function parseCraftCandidatesHtml(html) {
-    const doc = new DOMParser().parseFromString(html, "text/html");
+  export function parseCraftCandidatesHtml(html, doc = new DOMParser().parseFromString(html, "text/html")) {
     const candidates = [];
     const seen = new Set();
 
@@ -193,8 +195,8 @@ function parseCardImageUrl(cardElement) {
   }
 
   export function parseCraftableGameCardsHtml(html, candidate) {
-    const info = parseGameCardsHtml(html, candidate.appid, candidate.isFoil);
     const doc = new DOMParser().parseFromString(html, "text/html");
+    const info = parseGameCardsDocument(doc, candidate.appid, candidate.isFoil);
     const craftButton = doc.querySelector(
       ".gamecard_badge_craftbtn_ctn .badge_craft_button"
     );

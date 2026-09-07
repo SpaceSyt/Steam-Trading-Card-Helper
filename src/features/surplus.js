@@ -40,7 +40,7 @@ import {
   getHtmlRequestConcurrency,
   runWithConcurrency,
 } from "../utils/concurrency.js";
-import { appendInventoryTileText, createInventoryTile } from "../utils/dom.js";
+import { appendInventoryTileText, createInventoryTile, renderInventoryTiles, createFrameScheduler } from "../utils/dom.js";
 import { countSelected, pruneSelection, setItemsSelected } from "../utils/selection.js";
 import { processingModeIncludesCards } from "../services/processing-mode.js";
 import { syncProcessingView } from "../ui/processing-view.js";
@@ -199,12 +199,11 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
     });
   }
 
-  export function updateSurplusSummary() {
+  export function updateSurplusSummary(visible = getVisibleSurplusResults()) {
     const row = document.getElementById("stch-surplus-summary-row");
     const summary = document.getElementById("stch-surplus-summary");
     if (!row || !summary) return;
 
-    const visible = getVisibleSurplusResults();
     if (visible.length === 0) {
       summary.textContent = "";
       syncProcessingView();
@@ -226,6 +225,11 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
     syncProcessingView();
   }
 
+  const scheduleSurplusSelection = createFrameScheduler(() => {
+    updateSurplusSummary();
+    updateSurplusActionState();
+  });
+
   export function renderSurplusResults() {
     const list = document.getElementById("stch-surplus-list");
     if (!list) return;
@@ -235,24 +239,12 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
         if (selected) state.selectedSurplusResults.add(tile.dataset.key);
         else state.selectedSurplusResults.delete(tile.dataset.key);
       },
-      onSelectionChange: () => {
-        updateSurplusSummary();
-        updateSurplusActionState();
-      },
+      onSelectionChange: scheduleSurplusSelection,
     });
-    list.innerHTML = "";
 
     const visible = getVisibleSurplusResults();
     pruneSelectedSurplusResults(visible);
-    if (visible.length === 0) {
-      updateSurplusSummary();
-      updateSurplusActionState();
-      syncProcessingView();
-      return;
-    }
-
-    for (const result of visible) {
-      const key = getSurplusResultKey(result);
+    renderInventoryTiles(list, visible, state.selectedSurplusResults, getSurplusResultKey, (result, key) => {
       const volumeZero = result.volume === 0;
       const title = [
         `${result.gameName || "未知游戏"} · ${result.cardName || result.marketHashName || "未知卡牌"}`,
@@ -297,15 +289,14 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
       appendInventoryTileText(tile, "span", `stch-inv-badge stch-inv-badge-left ${result.recommendationClass || ""}`.trim(), result.recommendationLabel || "—", result.recommendationReason || "");
       appendInventoryTileText(tile, "div", "stch-inv-name", label || "未知卡牌");
 
-      list.appendChild(tile);
-    }
+      return tile;
+    });
 
-    updateSurplusSummary();
+    updateSurplusSummary(visible);
     updateSurplusActionState();
-    syncProcessingView();
   }
 
-  export async function startSurplusScan() {
+  export async function startSurplusScan(options = {}) {
     if (isPriceOverviewProbeBlocked(state.surplusScanning || state.grindScanning)) return;
 
     if (location.hostname !== "steamcommunity.com") {
@@ -351,7 +342,7 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
     try {
       surplusLog("【阶段 1/3】正在读取 Steam 社区库存");
       setSurplusProgress(0, 1, "阶段1: 读取库存");
-      const inventory = await loadCommunityInventoryCards(steamId, queue);
+      const inventory = await loadCommunityInventoryCards(steamId, queue, options.inventorySnapshot);
       const groups = state.cfg.surplusIncludeFoil
         ? inventory.groups
         : inventory.groups.filter(group => !group.isFoil);

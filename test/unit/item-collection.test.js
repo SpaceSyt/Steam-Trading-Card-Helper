@@ -93,6 +93,7 @@ test("removal is key-based and corrupt storage fails closed", () => {
     makeCard({ marketHashName: "440-Other Card", itemName: "Other" }),
   ]);
   const key = getItemCollectionKey(makeCard());
+  assert.equal(isItemCollected(makeCard()), true);
   const removed = removeItemCollectionEntries([key]);
   assert.deepEqual(removed, { ok: true, removed: 1, total: 1 });
   assert.equal(isItemCollected(makeCard()), false);
@@ -102,4 +103,14 @@ test("removal is key-based and corrupt storage fails closed", () => {
   assert.equal(state.itemCollectionHealthy, false);
   assert.equal(addItemCollectionEntries([makeCard()]).ok, false);
   assert.equal(removeItemCollectionEntries([key]).ok, false);
+});
+
+test("collection lookup refreshes after a replacement and reuses the current key index", () => {
+  let reads = 0;
+  const key = getItemCollectionKey(makeCard());
+  state.itemCollectionItems = [{ get key() { reads++; return key; } }];
+  for (let i = 0; i < 100; i++) assert.equal(isItemCollected(makeCard()), true);
+  assert.equal(reads, 1);
+  state.itemCollectionItems = [];
+  assert.equal(isItemCollected(makeCard()), false);
 });

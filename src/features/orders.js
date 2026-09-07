@@ -1,3 +1,5 @@
+import { showConfirmation } from "../ui/confirmation.js";
+
 import { state } from "../state.js";
 
 import { RequestQueue } from "../request/queue.js";
@@ -608,7 +610,6 @@ const { setStatus: setOrderStatus } = orderStatus;
   }
 
   export function showBuyOrderConfirmation(planData, selectedGameCount) {
-    return new Promise(resolve => {
       const {
         plan,
         skipped,
@@ -618,8 +619,6 @@ const { setStatus: setOrderStatus } = orderStatus;
         automaticPricing,
         strategyRule,
       } = planData;
-      const backdrop = document.createElement("div");
-      backdrop.id = "stch-order-dialog-backdrop";
       const totalQuantity = plan.reduce((sum, item) => sum + item.quantity, 0);
       const totalCents = plan.reduce((sum, item) => sum + item.totalPriceCents, 0);
       const plannedGameCount = new Set(plan.map(item => `${item.appid}:${item.gameName}`)).size;
@@ -636,24 +635,11 @@ const { setStatus: setOrderStatus } = orderStatus;
         : `价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> · `
           + `买价调整 <b>${adjustmentText}</b>`;
 
-      backdrop.innerHTML = `
-        <div class="stch-order-dialog">
-          <h3>确认提交长期订购单</h3>
-          <div class="stch-order-summary">
-            游戏 <b>${plannedGameCount}</b>/${selectedGameCount} 个 · 卡牌种类 <b>${plan.length}</b> ·
-            数量 <b>${totalQuantity}</b> 张 · 新增最高占用 <b>${formatMoney(totalCents)}</b><br>
-            ${pricingSummary}
-          </div>
-          <div class="stch-order-list"></div>
-          <div class="stch-order-note"></div>
-          <div class="stch-order-dialog-actions">
-            <div class="stch-btn alt" data-action="cancel">取消</div>
-            <div class="stch-btn" data-action="confirm">提交订购单</div>
-          </div>
-        </div>
-      `;
-
-      const list = backdrop.querySelector(".stch-order-list");
+      return showConfirmation({
+        title: "确认提交长期订购单",
+        confirmLabel: "提交订购单",
+        summaryHtml: `游戏 <b>${plannedGameCount}</b>/${selectedGameCount} 个 · 卡牌种类 <b>${plan.length}</b> · 数量 <b>${totalQuantity}</b> 张 · 新增最高占用 <b>${formatMoney(totalCents)}</b><br>${pricingSummary}`,
+      }, (list, backdrop) => {
       plan.forEach(item => {
         const row = document.createElement("div");
         row.className = "stch-order-item";
@@ -699,16 +685,6 @@ const { setStatus: setOrderStatus } = orderStatus;
       backdrop.querySelector(".stch-order-note").textContent =
         [...notes, "订单长期有效"].join("；") + "。";
 
-      const finish = confirmed => {
-        backdrop.remove();
-        resolve(confirmed);
-      };
-      backdrop.querySelector('[data-action="cancel"]').addEventListener("click", () => finish(false));
-      backdrop.querySelector('[data-action="confirm"]').addEventListener("click", () => finish(true));
-      backdrop.addEventListener("click", event => {
-        if (event.target === backdrop) finish(false);
-      });
-      document.body.appendChild(backdrop);
     });
   }
 

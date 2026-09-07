@@ -26,6 +26,7 @@ import { getBadgeModeLabel, getGameCardsUrl, getBadgeTargetLevel } from "../util
 
 import {
   getCachedOrderResult,
+  createOrderCacheIndex,
   getOrderCacheAgeDays,
   saveOrderCache,
 } from "../services/order-cache.js";
@@ -224,6 +225,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
         return blacklistedAppids;
       };
 
+      const cachedOrders = cfg.skipCachedOrderResults ? createOrderCacheIndex() : null;
       for (const b of badges) {
         if (state.stopRequested) { log("已手动停止", "warn"); break; }
         if (state.skipCurrent) {
@@ -239,7 +241,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           continue;
         }
         if (cfg.skipCachedOrderResults) {
-          const cached = getCachedOrderResult(b);
+          const cached = getCachedOrderResult(b, cachedOrders);
           if (cached) {
             log(
               `[${b.appid}] ${b.gameName || cached.gameName || ""}: 订购缓存内已有结果 ` +

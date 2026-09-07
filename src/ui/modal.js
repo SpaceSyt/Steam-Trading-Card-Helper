@@ -283,6 +283,8 @@ import {
       activePriceSource
     );
     const automaticPricingClass = automaticPricingEnabled ? "stch-auto-pricing-active" : "";
+    const progressHtml = prefix => `<div class="stch-progress" id="${prefix}progress-wrap" style="display:none"><div class="stch-progress-bar" id="${prefix}progress-bar" style="width:0"></div><div class="stch-progress-text" id="${prefix}progress-text">0/0</div></div>`;
+    const priceControlsHtml = (pricePrefix, adjustmentPrefix) => `<div class="stch-toolbar"> <label id="${pricePrefix}price-label" class="stch-primary-label ${automaticPricingClass}">购买价格 <select id="${pricePrefix}price-source" class="stch-input" style="width:118px"> ${initialPriceOptions} </select> </label> <label id="${adjustmentPrefix}price-wall-adjustment-label" class="stch-primary-label ${automaticPricingClass}" ${automaticPricingEnabled ? "" : "style=\"display:none\""}>有墙调整 ${currencySymbol} <input id="${adjustmentPrefix}price-wall-adjustment" class="stch-input" type="number" step="0.01" value="${activeWallPriceAdjustment}" style="width:68px"></label> <label id="${adjustmentPrefix}price-adjustment-label" class="stch-primary-label ${automaticPricingClass}"><span id="${adjustmentPrefix}price-adjustment-text">${automaticPricingEnabled ? "无墙调整" : "买价调整"}</span> ${currencySymbol} <input id="${adjustmentPrefix}price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label> <label class="stch-auto-pricing-toggle ${automaticPricingClass}"> <input id="${adjustmentPrefix}auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}> 智能定价模式 </label> </div>`;
     const automaticStrategySettingsHtml = AUTOMATIC_STRATEGY_SETTING_ROWS.map(rule => `
       <div class="stch-auto-strategy-row">
         <span class="stch-auto-strategy-name">${rule.label}</span>
@@ -383,19 +385,7 @@ import {
               包含掉落
             </label>
           </div>
-          <div class="stch-toolbar">
-            <label id="stch-order-price-label" class="stch-primary-label ${automaticPricingClass}">购买价格
-              <select id="stch-order-price-source" class="stch-input" style="width:118px">
-                ${initialPriceOptions}
-              </select>
-            </label>
-            <label id="stch-price-wall-adjustment-label" class="stch-primary-label ${automaticPricingClass}" ${automaticPricingEnabled ? "" : "style=\"display:none\""}>有墙调整 ${currencySymbol} <input id="stch-price-wall-adjustment" class="stch-input" type="number" step="0.01" value="${activeWallPriceAdjustment}" style="width:68px"></label>
-            <label id="stch-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}"><span id="stch-price-adjustment-text">${automaticPricingEnabled ? "无墙调整" : "买价调整"}</span> ${currencySymbol} <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
-            <label class="stch-auto-pricing-toggle ${automaticPricingClass}">
-              <input id="stch-auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}>
-              智能定价模式
-            </label>
-          </div>
+          ${priceControlsHtml("stch-order-", "stch-")}
           <div class="stch-scan-actions">
             <div class="stch-btn" id="stch-scan-btn">开始扫描</div>
             <div class="stch-btn alt disabled" id="stch-stop-btn">停止</div>
@@ -405,10 +395,7 @@ import {
               <div class="stch-btn disabled" id="stch-submit-orders-btn">提交订购单</div>
             </div>
           </div>
-          <div class="stch-progress" id="stch-progress-wrap" style="display:none">
-            <div class="stch-progress-bar" id="stch-progress-bar" style="width:0"></div>
-            <div class="stch-progress-text" id="stch-progress-text">0/0</div>
-          </div>
+          ${progressHtml("stch-")}
           <div class="stch-summary" id="stch-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-summary"></span>
             <span class="stch-selected-count" id="stch-selected-count">已选择 0 项</span>
@@ -459,19 +446,7 @@ import {
             <div class="stch-btn alt disabled" id="stch-order-recalculate-btn">重新计算</div>
             <div class="stch-btn disabled" id="stch-order-submit-orders-btn">提交订购单</div>
           </div>
-          <div class="stch-toolbar">
-            <label id="stch-order-page-price-label" class="stch-primary-label ${automaticPricingClass}">购买价格
-              <select id="stch-order-page-price-source" class="stch-input" style="width:118px">
-                ${initialPriceOptions}
-              </select>
-            </label>
-            <label id="stch-order-page-price-wall-adjustment-label" class="stch-primary-label ${automaticPricingClass}" ${automaticPricingEnabled ? "" : "style=\"display:none\""}>有墙调整 ${currencySymbol} <input id="stch-order-page-price-wall-adjustment" class="stch-input" type="number" step="0.01" value="${activeWallPriceAdjustment}" style="width:68px"></label>
-            <label id="stch-order-page-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}"><span id="stch-order-page-price-adjustment-text">${automaticPricingEnabled ? "无墙调整" : "买价调整"}</span> ${currencySymbol} <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
-            <label class="stch-auto-pricing-toggle ${automaticPricingClass}">
-              <input id="stch-order-page-auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}>
-              智能定价模式
-            </label>
-          </div>
+          ${priceControlsHtml("stch-order-page-", "stch-order-page-")}
           <div class="stch-summary" id="stch-order-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-order-summary"></span>
           </div>
@@ -517,10 +492,7 @@ import {
               <div class="stch-btn disabled" id="stch-craft-submit-btn">确认合成</div>
             </div>
           </div>
-          <div class="stch-progress" id="stch-craft-progress-wrap" style="display:none">
-            <div class="stch-progress-bar" id="stch-craft-progress-bar" style="width:0"></div>
-            <div class="stch-progress-text" id="stch-craft-progress-text">0/0</div>
-          </div>
+          ${progressHtml("stch-craft-")}
           <div class="stch-summary" id="stch-craft-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-craft-summary"></span>
           </div>
@@ -594,10 +566,7 @@ import {
             </div>
           </div>
           <div class="stch-surplus-mode-panel" id="stch-surplus-processing-panel">
-            <div class="stch-progress" id="stch-surplus-progress-wrap" style="display:none">
-              <div class="stch-progress-bar" id="stch-surplus-progress-bar" style="width:0"></div>
-              <div class="stch-progress-text" id="stch-surplus-progress-text">0/0</div>
-            </div>
+            ${progressHtml("stch-surplus-")}
             <div class="stch-summary" id="stch-surplus-summary-row" style="display:none">
               <span class="stch-summary-text stch-processing-summary" id="stch-surplus-summary"></span>
               <span class="stch-summary-text stch-processing-summary" id="stch-grind-summary"></span>
@@ -814,102 +783,69 @@ import {
       renderGrindResults();
       updateSurplusActionState();
     };
+    const configInputs = new Map([
+      ["threshold","threshold",{"min":0}],
+      ["req-interval","requestInterval",{"integer":true,"min":0}],
+      ["max-pages","maxBadgePages",{"integer":true,"min":1}],
+      ["include-drops","includeDrops"],
+      ["foil-scan-mode","foilScanMode"],
+      ["show-scan-completion-column","showScanCompletionColumn"],
+      ["show-scan-sell-set-column","showScanSellSetColumn"],
+      ["show-no-result-logs","showNoResultLogs"],
+      ["show-advanced-settings","showAdvancedSettings"],
+      ["sidebar-disabled","sidebarDisabled"],
+      ["parallel-order-pricing","parallelOrderPricingEnabled"],
+      ["parallel-order-pricing-concurrency","parallelOrderPricingConcurrency",{"integer":true,"min":1,"max":20}],
+      ["parallel-other-requests","parallelOtherRequestsEnabled"],
+      ["parallel-other-requests-concurrency","parallelOtherRequestsConcurrency",{"integer":true,"min":1,"max":20}],
+      ["buy-mode","buyMode"],
+      ["early-price-prediction","earlyPricePrediction"],
+      ["minimum-price-fallback","minimumPriceFallback"],
+      ["settings-early-prediction-auto-blacklist","earlyPredictionAutoBlacklist"],
+      ["order-cache-days","orderCacheDays",{"integer":true,"min":0}],
+      ["skip-cached-orders","skipCachedOrderResults"],
+      ["surplus-only-tradable","surplusOnlyTradable"],
+      ["surplus-only-recommended","surplusOnlyRecommended"],
+      ["surplus-item-mode","surplusItemMode"],
+      ["surplus-include-foil","surplusIncludeFoil"],
+      ["surplus-keep-max-level-cards","surplusKeepMaxLevelCards"],
+      ["surplus-sell-price-source","surplusSellPriceSource"],
+      ["surplus-sell-adjustment","surplusSellPriceAdjustment",{}],
+      ["grind-reserve-copies","grindReserveCopies",{"integer":true,"min":0}],
+      ["grind-include-points-shop","grindIncludePointsShopItems"],
+      ["craft-interval","craftInterval",{"integer":true,"min":200}],
+      ["craft-mode","craftMode"],
+      ...AUTOMATIC_STRATEGY_SETTING_ROWS.flatMap(rule => [
+        [`auto-${rule.id}-wall-anchor`, rule.anchorKey],
+        [`auto-${rule.id}-wall-offset`, rule.wallOffsetKey, {}],
+        [`auto-${rule.id}-no-wall-offset`, rule.noWallOffsetKey, {}],
+      ]),
+    ].map(([id, ...rule]) => [`stch-${id}`, rule]));
     const syncConfigFromInputs = changedId => {
-      const previousSurplusItemMode = state.cfg.surplusItemMode || DEFAULT_CONFIG.surplusItemMode;
-      state.cfg.threshold = readNumberInput(
-        "stch-threshold",
-        state.cfg.threshold ?? DEFAULT_CONFIG.threshold,
-        { min: 0 }
-      );
-      state.cfg.requestInterval = readNumberInput(
-        "stch-req-interval",
-        state.cfg.requestInterval ?? DEFAULT_CONFIG.requestInterval,
-        { integer: true, min: 0 }
-      );
-      state.cfg.maxBadgePages = readNumberInput(
-        "stch-max-pages",
-        state.cfg.maxBadgePages ?? DEFAULT_CONFIG.maxBadgePages,
-        { integer: true, min: 1 }
-      );
-      state.cfg.includeDrops = !!document.getElementById("stch-include-drops")?.checked;
-      state.cfg.foilScanMode = !!document.getElementById("stch-foil-scan-mode")?.checked;
-      state.cfg.showScanCompletionColumn = !!document.getElementById("stch-show-scan-completion-column")?.checked;
-      state.cfg.showScanSellSetColumn = !!document.getElementById("stch-show-scan-sell-set-column")?.checked;
-      state.cfg.showNoResultLogs = !!document.getElementById("stch-show-no-result-logs")?.checked;
-      state.cfg.showAdvancedSettings = !!document.getElementById("stch-show-advanced-settings")?.checked;
-      state.cfg.sidebarDisabled = !!document.getElementById("stch-sidebar-disabled")?.checked;
-      state.cfg.parallelOrderPricingEnabled = !!document.getElementById("stch-parallel-order-pricing")?.checked;
-      state.cfg.parallelOrderPricingConcurrency = readNumberInput(
-        "stch-parallel-order-pricing-concurrency",
-        state.cfg.parallelOrderPricingConcurrency ?? DEFAULT_CONFIG.parallelOrderPricingConcurrency,
-        { integer: true, min: 1, max: 20 }
-      );
-      state.cfg.parallelOtherRequestsEnabled = !!document.getElementById("stch-parallel-other-requests")?.checked;
-      state.cfg.parallelOtherRequestsConcurrency = readNumberInput(
-        "stch-parallel-other-requests-concurrency",
-        state.cfg.parallelOtherRequestsConcurrency ?? DEFAULT_CONFIG.parallelOtherRequestsConcurrency,
-        { integer: true, min: 1, max: 20 }
-      );
-      const buyModeEl = document.getElementById("stch-buy-mode");
-      if (state.cfg.foilScanMode) {
-        state.cfg.buyMode = buyModeEl?.dataset.normalValue || state.cfg.buyMode || DEFAULT_CONFIG.buyMode;
-      } else {
-        state.cfg.buyMode = buyModeEl?.dataset.normalValue || buyModeEl?.value || state.cfg.buyMode;
-        if (buyModeEl) delete buyModeEl.dataset.normalValue;
+      const [key, numberOptions] = configInputs.get(changedId);
+      const input = document.getElementById(changedId);
+      const previousSurplusItemMode = state.cfg.surplusItemMode;
+      const value = input.type === "checkbox" ? input.checked
+        : numberOptions ? readNumberInput(changedId, state.cfg[key] ?? DEFAULT_CONFIG[key], numberOptions)
+        : input.value || state.cfg[key];
+      if (value === state.cfg[key]) return;
+      state.cfg[key] = value;
+      if (key === "buyMode" || key === "foilScanMode") {
+        const buyModeEl = document.getElementById("stch-buy-mode");
+        state.cfg.buyMode = buyModeEl?.dataset.normalValue
+          || (state.cfg.foilScanMode ? state.cfg.buyMode : buyModeEl?.value)
+          || DEFAULT_CONFIG.buyMode;
+        if (!state.cfg.foilScanMode && buyModeEl) delete buyModeEl.dataset.normalValue;
       }
-      state.cfg.earlyPricePrediction = !!document.getElementById("stch-early-price-prediction")?.checked;
-      state.cfg.minimumPriceFallback = !!document.getElementById("stch-minimum-price-fallback")?.checked;
-      AUTOMATIC_STRATEGY_SETTING_ROWS.forEach(rule => {
-        const anchor = document.getElementById(`stch-auto-${rule.id}-wall-anchor`)?.value;
-        state.cfg[rule.anchorKey] = ["top", "bottom"].includes(anchor)
-          ? anchor
-          : state.cfg[rule.anchorKey];
-        state.cfg[rule.wallOffsetKey] = readNumberInput(
-          `stch-auto-${rule.id}-wall-offset`,
-          state.cfg[rule.wallOffsetKey] ?? DEFAULT_CONFIG[rule.wallOffsetKey]
-        );
-        state.cfg[rule.noWallOffsetKey] = readNumberInput(
-          `stch-auto-${rule.id}-no-wall-offset`,
-          state.cfg[rule.noWallOffsetKey] ?? DEFAULT_CONFIG[rule.noWallOffsetKey]
-        );
-      });
-      state.cfg.earlyPredictionAutoBlacklist = !!document.getElementById("stch-settings-early-prediction-auto-blacklist")?.checked;
-      state.cfg.orderCacheDays = readNumberInput(
-        "stch-order-cache-days",
-        state.cfg.orderCacheDays ?? DEFAULT_CONFIG.orderCacheDays,
-        { integer: true, min: 0 }
-      );
-      state.cfg.skipCachedOrderResults = !!document.getElementById("stch-skip-cached-orders")?.checked;
-      state.cfg.surplusOnlyTradable = !!document.getElementById("stch-surplus-only-tradable")?.checked;
-      state.cfg.surplusOnlyRecommended = !!document.getElementById("stch-surplus-only-recommended")?.checked;
-      state.cfg.surplusItemMode = getSurplusItemMode();
-      state.cfg.surplusIncludeFoil = !!document.getElementById("stch-surplus-include-foil")?.checked;
-      state.cfg.surplusKeepMaxLevelCards = !!document.getElementById("stch-surplus-keep-max-level-cards")?.checked;
-      state.cfg.surplusSellPriceSource = document.getElementById("stch-surplus-sell-price-source")?.value
-        || state.cfg.surplusSellPriceSource
-        || DEFAULT_CONFIG.surplusSellPriceSource;
-      state.cfg.surplusSellPriceAdjustment = readNumberInput(
-        "stch-surplus-sell-adjustment",
-        state.cfg.surplusSellPriceAdjustment ?? DEFAULT_CONFIG.surplusSellPriceAdjustment
-      );
-      state.cfg.grindReserveCopies = readNumberInput(
-        "stch-grind-reserve-copies",
-        state.cfg.grindReserveCopies ?? DEFAULT_CONFIG.grindReserveCopies,
-        { integer: true, min: 0 }
-      );
-      state.cfg.grindIncludePointsShopItems = !!document.getElementById("stch-grind-include-points-shop")?.checked;
-      state.cfg.craftInterval = readNumberInput(
-        "stch-craft-interval",
-        state.cfg.craftInterval ?? DEFAULT_CONFIG.craftInterval,
-        { integer: true, min: 200 }
-      );
-      state.cfg.craftMode = document.getElementById("stch-craft-mode")?.value || state.cfg.craftMode;
       saveConfig(state.cfg);
-      const craftMaxPages = document.getElementById("stch-craft-max-pages");
-      if (craftMaxPages) craftMaxPages.value = String(state.cfg.maxBadgePages);
-      updateResultColumns();
-      updateOrderResultColumns();
-      applyScanModeTheme();
+      if (key === "maxBadgePages") {
+        document.getElementById("stch-craft-max-pages").value = String(state.cfg.maxBadgePages);
+      }
+      if (key === "showScanCompletionColumn" || key === "showScanSellSetColumn" || key === "includeDrops") {
+        updateResultColumns();
+        updateOrderResultColumns();
+      }
+      if (key === "foilScanMode" || key === "buyMode") applyScanModeTheme();
       if (changedId === "stch-order-cache-days") {
         pruneOrderCache(true);
         renderOrderResults();
@@ -957,31 +893,10 @@ import {
         updateOrderSummary();
       }
     };
-    const cfgIds = ["stch-threshold", "stch-req-interval",
-      "stch-max-pages", "stch-include-drops",
-      "stch-foil-scan-mode",
-      "stch-parallel-order-pricing", "stch-parallel-order-pricing-concurrency",
-      "stch-parallel-other-requests", "stch-parallel-other-requests-concurrency",
-      "stch-show-scan-completion-column", "stch-show-scan-sell-set-column",
-      "stch-show-no-result-logs", "stch-show-advanced-settings", "stch-sidebar-disabled", "stch-buy-mode",
-      "stch-early-price-prediction", "stch-minimum-price-fallback", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
-      "stch-skip-cached-orders", "stch-craft-interval",
-      "stch-craft-mode", "stch-surplus-item-mode",
-      "stch-surplus-only-tradable", "stch-surplus-only-recommended", "stch-surplus-sell-price-source",
-      "stch-surplus-sell-adjustment", "stch-surplus-include-foil", "stch-surplus-keep-max-level-cards",
-      "stch-grind-reserve-copies",
-      "stch-grind-include-points-shop",
-      ...AUTOMATIC_STRATEGY_SETTING_ROWS.flatMap(rule => [
-        `stch-auto-${rule.id}-wall-anchor`,
-        `stch-auto-${rule.id}-wall-offset`,
-        `stch-auto-${rule.id}-no-wall-offset`,
-      ])];
-    cfgIds.forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.addEventListener("input", () => syncConfigFromInputs(id));
-      el.addEventListener("change", () => syncConfigFromInputs(id));
-    });
+    for (const id of configInputs.keys()) {
+      const input = document.getElementById(id);
+      input?.addEventListener(input.type === "number" ? "input" : "change", () => syncConfigFromInputs(id));
+    }
 
     const orderPriceSourceIds = [
       "stch-order-price-source",
@@ -1355,9 +1270,11 @@ import {
         state.grindGemPrice = null;
         renderGrindResults();
       }
-      if (processingModeIncludesCards(mode)) await startSurplusScan();
+      const inventorySnapshot = processingModeIncludesCards(mode) && processingModeIncludesDecorations(mode)
+        ? {} : undefined;
+      if (processingModeIncludesCards(mode)) await startSurplusScan({ inventorySnapshot });
       if (!processingBatchStopped && processingModeIncludesDecorations(mode)) {
-        await startGrindScan({ preserveLog: processingModeIncludesCards(mode) });
+        await startGrindScan({ inventorySnapshot, preserveLog: processingModeIncludesCards(mode) });
       }
     });
     document.getElementById("stch-surplus-stop-btn").addEventListener("click", event => {
@@ -1595,8 +1512,6 @@ import {
 
     renderBlacklist();
     applySurplusItemMode();
-    renderSurplusResults();
-    renderGrindResults();
     renderItemCollection();
     pruneOrderCache(true);
     renderOrderResults();

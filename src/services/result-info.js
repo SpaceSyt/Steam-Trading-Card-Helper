@@ -28,7 +28,7 @@ import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurre
     return state.orderResults.filter(info => state.selectedOrderResults.has(getResultKey(info)));
   }
 
-  export async function refreshResultInfo(existing, queue) {
+  export async function refreshResultInfo(existing, queue, observations) {
     const profileUrl = getProfileUrl();
     if (!profileUrl) throw new Error("未找到 Profile URL");
 
@@ -56,7 +56,7 @@ import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurre
     let minVolume = Infinity;
     const setsToTarget = Math.max(0, info.targetLevel - info.level);
     const noPriceCards = [];
-    const marketRecords = [];
+    const marketRecords = observations || [];
     const cardPrices = new Array(info.cards.length);
     let failedPriceCount = 0;
 
@@ -120,7 +120,7 @@ import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurre
         }
       );
     } finally {
-      persistMarketObservations(marketRecords);
+      if (!observations) persistMarketObservations(marketRecords);
     }
 
     info.cardPrices = cardPrices.filter(Boolean);

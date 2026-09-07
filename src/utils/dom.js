@@ -1,3 +1,43 @@
+  const inventoryTiles = new WeakMap();
+
+  export function invalidateInventoryTile(item) {
+    inventoryTiles.delete(item);
+  }
+
+  export function renderInventoryTiles(list, items, selected, getKey, createTile) {
+    const tiles = items.map(item => {
+      let tile = inventoryTiles.get(item);
+      const key = getKey(item);
+      if (!tile) {
+        tile = createTile(item, key);
+        inventoryTiles.set(item, tile);
+      }
+      tile.classList.toggle("selected", selected.has(key));
+      return tile;
+    });
+    const retained = new Set(tiles);
+    for (const child of [...list.children]) {
+      if (!retained.has(child)) child.remove();
+    }
+    let next = list.firstChild;
+    for (const tile of tiles) {
+      if (tile !== next) list.insertBefore(tile, next);
+      next = tile.nextSibling;
+    }
+  }
+
+  export function createFrameScheduler(update) {
+    let pending = false;
+    return () => {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => {
+        pending = false;
+        update();
+      });
+    };
+  }
+
   export function createTextSpan(className, text) {
     const span = document.createElement("span");
     span.className = className;

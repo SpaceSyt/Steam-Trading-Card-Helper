@@ -1,3 +1,5 @@
+import { showConfirmation } from "../ui/confirmation.js";
+
 import { state } from "../state.js";
 
 import { RequestQueue } from "../request/queue.js";
@@ -430,42 +432,13 @@ import {
   }
 
   function showProcessingConfirmation(options) {
-    return new Promise(resolve => {
-      const backdrop = document.createElement("div");
-      backdrop.id = "stch-order-dialog-backdrop";
-      backdrop.innerHTML = `
-        <div class="stch-order-dialog">
-          <h3>${options.title}</h3>
-          <div class="stch-order-summary"></div>
-          <div class="stch-order-list"></div>
-          <div class="stch-order-note"></div>
-          <div class="stch-order-dialog-actions">
-            <div class="stch-btn alt" data-action="cancel">取消</div>
-            <div class="stch-btn ${options.danger ? "stch-btn-danger" : ""}" data-action="confirm">${options.confirmLabel}</div>
-          </div>
-        </div>
-      `;
-
-      backdrop.querySelector(".stch-order-summary").innerHTML = options.summaryHtml;
-      const list = backdrop.querySelector(".stch-order-list");
+    return showConfirmation(options, list => {
       options.rows.forEach(rowInfo => {
         const row = document.createElement("div");
         row.className = `stch-order-item stch-processing-dialog-item ${options.rowClass || ""}`.trim();
         rowInfo.forEach(text => row.appendChild(createTextSpan("", text)));
         list.appendChild(row);
       });
-      backdrop.querySelector(".stch-order-note").textContent = options.note;
-
-      const finish = confirmed => {
-        backdrop.remove();
-        resolve(confirmed);
-      };
-      backdrop.querySelector('[data-action="cancel"]').addEventListener("click", () => finish(false));
-      backdrop.querySelector('[data-action="confirm"]').addEventListener("click", () => finish(true));
-      backdrop.addEventListener("click", event => {
-        if (event.target === backdrop) finish(false);
-      });
-      document.body.appendChild(backdrop);
     });
   }
 
