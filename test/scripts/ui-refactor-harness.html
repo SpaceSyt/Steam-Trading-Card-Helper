@@ -1,0 +1,137 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>STCH UI regression harness</title>
+<pre id="result">Running</pre>
+<script type="module">
+  const results = [];
+  const errors = [];
+  addEventListener("error", event => errors.push(event.message));
+  addEventListener("unhandledrejection", event => errors.push(String(event.reason)));
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const check = (name, run) => { run(); results.push(name); };
+  const input = (id, value, event = "input") => {
+    const element = document.getElementById(id);
+    if (typeof value === "boolean") element.checked = value;
+    else element.value = value;
+    element.dispatchEvent(new Event(event, { bubbles: true }));
+  };
+  const text = id => document.getElementById(id).textContent;
+  const store = new Map();
+  let requests = 0;
+  window.unsafeWindow = window;
+  window.GM_getValue = (key, fallback) => store.get(key) ?? fallback;
+  window.GM_setValue = (key, value) => store.set(key, value);
+  window.confirm = () => true;
+  window.fetch = () => { requests++; throw new Error("Unexpected network request"); };
+  try {
+    const { state } = await import("../../src/state.js");
+    const { DEFAULT_CONFIG } = await import("../../src/config.js");
+    const { setActiveCurrencyContext, createCurrencyContext } = await import("../../src/services/currency.js");
+    const { buildModal } = await import("../../src/ui/modal.js");
+    const { renderResults, renderOrderResults, refreshPricingSummaries } = await import("../../src/ui/render.js");
+    const { getResultKey } = await import("../../src/services/result-info.js");
+    state.currencyContext = setActiveCurrencyContext(createCurrencyContext(23, { source: "configured", isFallback: true }));
+    state.cfg.sidebarDisabled = true;
+    state.cfg.priceAdjustment = 0;
+    state.cfg.automaticPricingEnabled = false;
+    const info = {
+      appid: "999001", gameName: "Pricing fixture", level: 0, targetLevel: 5,
+      totalInSet: 2, isFoil: false, minVolume: 10, currencyId: 23, cachedAt: Date.now(),
+      cheapestSetCostCents: 70, fullSetCostCents: 70, level5CostCents: 350,
+      cards: [
+        { name: "A", owned: 0, lowestCents: 30, medianCents: 32, marketHashName: "999001-A", priceSource: "lowest" },
+        { name: "B", owned: 0, lowestCents: 40, medianCents: 42, marketHashName: "999001-B", priceSource: "lowest" },
+      ],
+    };
+    state.results = [info];
+    state.orderResults = [structuredClone(info)];
+    state.selectedResults.add(getResultKey(info));
+    state.selectedOrderResults.add(getResultKey(info));
+    buildModal({ suppressOnboarding: true });
+    const scanRow = document.querySelector("#stch-list [data-appid]");
+    const orderRow = document.querySelector("#stch-order-list [data-appid]");
+    const rowText = scanRow.textContent;
+    check("manual pricing updates totals without replacing rows or selections", () => {
+      input("stch-price-adjustment", "0.05");
+      assert(text("stch-summary").includes("0.80"), "Scan total did not update");
+      assert(text("stch-order-summary").includes("0.80"), "Order total did not update");
+      assert(scanRow === document.querySelector("#stch-list [data-appid]"), "Scan row replaced");
+      assert(orderRow === document.querySelector("#stch-order-list [data-appid]"), "Order row replaced");
+      assert(scanRow.textContent === rowText, "Original scan prices changed");
+      assert(orderRow.querySelector("input").checked, "Selection lost");
+      assert(document.getElementById("stch-order-page-price-adjustment").value === "0.05", "Pricing controls not synchronized");
+    });
+    check("automatic pricing and its draft refresh totals without rebuilding", () => {
+      input("stch-auto-pricing", true, "change");
+      input("stch-price-adjustment", "0.03");
+      assert(text("stch-summary").includes("0.76"), "Automatic estimate incorrect");
+      assert(orderRow === document.querySelector("#stch-order-list [data-appid]"), "Automatic pricing replaced rows");
+      input("stch-auto-pricing", false, "change");
+      assert(text("stch-order-summary").includes("0.80"), "Manual adjustment not restored");
+    });
+    check("missing prices remain incomplete", () => {
+      info.cards[0].lowestCents = null;
+      info.cards[0].medianCents = null;
+      info.hasIncompletePricing = true;
+      refreshPricingSummaries();
+      assert((text("stch-summary").match(/-/g) || []).length === 3, "Incomplete totals displayed as complete");
+      info.cards[0].lowestCents = 30;
+      info.cards[0].medianCents = 32;
+      info.hasIncompletePricing = false;
+    });
+    check("expired orders are removed during a pricing refresh", () => {
+      state.orderResults[0].cachedAt = 1;
+      refreshPricingSummaries();
+      assert(state.orderResults.length === 0, "Expired order retained");
+      assert(state.selectedOrderResults.size === 0, "Expired selection retained");
+      assert(text("stch-order-list").includes("订购缓存为空"), "Expired row still visible");
+    });
+    check("settings synchronize shared fields and scan controls", () => {
+      input("stch-max-pages", "7");
+      assert(document.getElementById("stch-craft-max-pages").value === "7", "Craft page limit not synchronized");
+      input("stch-craft-max-pages", "8");
+      assert(state.cfg.maxBadgePages === 8 && document.getElementById("stch-max-pages").value === "8", "Scan page limit not synchronized");
+      input("stch-foil-scan-mode", true, "change");
+      assert(document.getElementById("stch-buy-mode").disabled, "Foil mode did not lock buy mode");
+      input("stch-foil-scan-mode", false, "change");
+      input("stch-settings-auto-bl-enabled", true, "change");
+      assert(document.getElementById("stch-auto-bl-enabled").checked, "Blacklist toggle not synchronized");
+      input("stch-surplus-item-mode", "background", "change");
+      assert(state.cfg.surplusItemMode === "background", "Processing mode not saved");
+    });
+    check("settings pages and personalization stay functional", () => {
+      const page = document.querySelector("[data-settings-page='personalization']");
+      page.click();
+      assert(document.querySelector("[data-settings-panel='personalization']").classList.contains("active"), "Settings page did not activate");
+      const color = document.querySelector("[data-tab-color='scan']");
+      color.value = "#123456";
+      color.dispatchEvent(new Event("blur"));
+      assert(state.cfg.tabColors.scan.toLowerCase() === "#123456", "Tab color not saved");
+    });
+    check("currency changes rebuild the modal with working listeners", () => {
+      const previous = document.getElementById("stch-modal");
+      input("stch-currency-fallback", "1", "change");
+      assert(previous !== document.getElementById("stch-modal"), "Modal not rebuilt");
+      assert(document.querySelectorAll("#stch-modal").length === 1, "Duplicate modal");
+      assert(state.currencyContext.currencyId === 1 && state.results.length === 0, "Currency state not reset");
+      input("stch-max-pages", "9");
+      assert(state.cfg.maxBadgePages === 9, "Rebuilt settings listeners missing");
+    });
+    check("restoring defaults preserves blacklist and rebuilds settings", () => {
+      state.cfg.blacklist = "999001";
+      document.getElementById("stch-settings-reset").click();
+      assert(state.cfg.maxBadgePages === DEFAULT_CONFIG.maxBadgePages, "Defaults not restored");
+      assert(state.cfg.blacklist === "999001", "Blacklist lost");
+      assert(text("stch-settings-action-status") === "已恢复默认设定", "Reset status missing");
+      renderResults();
+      renderOrderResults();
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert(errors.length === 0, errors.join("\n"));
+    assert(requests === 0, "UI changes sent network requests");
+    window.__uiRefactorResult = { passed: true, checks: results, requests };
+  } catch (error) {
+    window.__uiRefactorResult = { passed: false, checks: results, error: error.stack, errors };
+  }
+  document.getElementById("result").textContent = JSON.stringify(window.__uiRefactorResult);
+</script>

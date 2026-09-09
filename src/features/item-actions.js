@@ -25,7 +25,8 @@ import {
 
 import { surplusStatus, grindStatus } from "../status-controllers.js";
 
-import { fetchHighestBuyPrice, fetchMarketOrderDepth, getOrderPriceSourceLabel } from "./orders.js";
+import { fetchHighestBuyPrice, fetchMarketOrderDepth } from "../services/market-orders.js";
+import { getOrderPriceSourceLabel } from "../ui/pricing-controls.js";
 
 import { getSelectedSurplusResults, renderSurplusResults } from "./surplus.js";
 

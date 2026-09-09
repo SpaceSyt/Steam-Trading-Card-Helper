@@ -102,3 +102,14 @@ export function bindPricingControls(refreshBuySummaries) {
     render();
   });
 }
+
+export function getOrderPriceSourceLabel(priceSource) {
+  if (priceSource === "instant") return "速售";
+  if (priceSource === "follow") return "跟价";
+  if (priceSource === "conservative") return "保守";
+  if (priceSource === "balanced") return "平衡";
+  if (priceSource === "aggressive") return "抢单";
+  if (priceSource === "median") return "平均价格";
+  if (priceSource === "highest") return "求购最高";
+  return "在售最低";
+}

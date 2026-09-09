@@ -30,12 +30,23 @@ function compactMainModalHtml(source) {
   return compacted;
 }
 
-const banner = normalizeNewlines(
+const plus = process.argv.includes("--plus");
+const filename = plus ? "steam-trading-card-helper-plus.user.js" : "steam-trading-card-helper.user.js";
+let banner = normalizeNewlines(
   readFileSync(join(root, "src", "meta.txt"), "utf8")
 ).replace(/__VERSION__/g, pkg.version);
 
+if (plus) {
+  banner = banner.replace(/^(\/\/ @name\s+).+$/m, "$1Steam Trading Card Helper Plus")
+    .replace(/^(\/\/ @name:zh-CN\s+).+$/m, "$1Steam 卡牌助手 Plus")
+    .replace(/^(\/\/ @description\s+).+$/m, "$1Badge and inventory tools with native Steam trade offer valuation")
+    .replace(/^(\/\/ @description:zh-CN\s+).+$/m, "$1徽章与库存工具，增强 Steam 原生交易报价页，显示双方估价与差额")
+    .replace(/^\/\/ @(?:downloadURL|updateURL)[^\n]*\n/gm, "")
+    .replace("// @grant        GM_addStyle", "// @match        https://steamcommunity.com/tradeoffer/*\n// @grant        GM_addStyle");
+}
+
 await build({
-  entryPoints: [join(root, "src", "index.js")],
+  entryPoints: [join(root, "src", plus ? "plus/index.js" : "index.js")],
   bundle: true,
   format: "iife",
   charset: "utf8",
@@ -69,7 +80,7 @@ await build({
     },
   }],
   banner: { js: banner },
-  outfile: join(root, "steam-trading-card-helper.user.js"),
+  outfile: join(root, filename),
 });
 
-console.log(`built steam-trading-card-helper.user.js v${pkg.version}`);
+console.log(`built ${filename} v${pkg.version}`);

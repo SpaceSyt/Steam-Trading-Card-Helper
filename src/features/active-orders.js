@@ -10,7 +10,7 @@ import {
   fetchActiveBuyOrderSnapshot,
   getCurrencyMarketKey,
   getOrderCurrencyContext,
-} from "./orders.js";
+} from "../services/market-orders.js";
 import { formatMoney } from "../utils/format.js";
 import { getMarketMinimumPriceCents, getSessionId } from "../utils/steam.js";
 import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";

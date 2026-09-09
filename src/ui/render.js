@@ -13,11 +13,10 @@ import { getResultKey, getSelectedOrderResults, getSelectedResults } from "../se
 import { pruneOrderCache, upsertOrderResult, getOrderCacheAgeDays } from "../services/order-cache.js";
 
 import { getMultibuyQuantity, openMultibuy } from "../features/multibuy.js";
-import { getPendingOrderExpectedQuantity } from "../features/orders.js";
+import { getPendingOrderExpectedQuantity } from "../services/market-orders.js";
 
 import { updateBulkActionState, updateOrderActionState } from "./action-state.js";
 
-import { updateResultColumns } from "../features/scan.js";
 import { getActiveOrderPricingProfile } from "../config.js";
 import { calculateResultPricingTotals } from "../services/pricing-estimate.js";
 import { enableCheckboxDragSelection } from "./checkbox-drag.js";
@@ -455,4 +454,19 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     list?.classList.toggle("stch-show-drops", showDrops);
     list?.classList.toggle("stch-show-completion", state.cfg.showScanCompletionColumn !== false);
     list?.classList.toggle("stch-show-sell-set", state.cfg.showScanSellSetColumn !== false);
+  }
+
+  export function updateResultColumns() {
+    const showDrops = state.cfg.includeDrops
+      && state.results.some(info => Number(info.dropsRemaining) > 0);
+    const list = document.getElementById("stch-list");
+    list?.classList.toggle("stch-show-drops", showDrops);
+    list?.classList.toggle("stch-show-completion", state.cfg.showScanCompletionColumn !== false);
+    list?.classList.toggle("stch-show-sell-set", state.cfg.showScanSellSetColumn !== false);
+  }
+
+  export function refreshPricingSummaries() {
+    updateSummary();
+    if (pruneOrderCache(true)) renderOrderResults();
+    else updateOrderSummary({ prune: false });
   }

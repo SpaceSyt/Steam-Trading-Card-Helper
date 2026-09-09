@@ -7,7 +7,10 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test \"test/unit/*.test.js\"",
-    "check": "npm run test && npm run build"
+    "check": "npm run test && npm run test:plus && npm run build:all",
+    "build:plus": "node scripts/build.mjs --plus",
+    "build:all": "npm run build && npm run build:plus",
+    "test:plus": "node --test \"test/plus/*.test.js\""
   },
   "devDependencies": {
     "esbuild": "^0.28.1"

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>原生交易页估价验证</title>
+<style>
+  body { margin: 0; padding: 24px; background: #1b1b1b; color: #d6d7d8; font: 14px Arial, sans-serif; }
+  main { width: 720px; max-width: 100%; margin: auto; }
+  header { padding: 18px; margin-bottom: 16px; background: #304057; }
+  .offer { width: 360px; max-width: calc(100% - 32px); margin-left: auto; padding: 16px; border: 1px solid #4d4b49; background: #202020; }
+  h2 { margin: 0; padding: 10px 0; font-size: 18px; font-weight: normal; color: #b9d4ec; }
+  .slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px; border: 1px solid #444; background: #000; }
+  .item { box-sizing: border-box; height: 84px; padding: 10px 6px; background: linear-gradient(#3a5065, #26333c); border: 2px solid #555; font-size: 13px; }
+  .amount { display: block; margin-top: 20px; }
+  .native-confirm { display: block; margin: 14px 0 22px; padding: 8px; background: #355779; }
+  .native-notice { padding: 20px 0; color: #a8baca; }
+  .send { display: block; margin: 20px auto; padding: 12px 32px; color: #aaa; background: #444; border: 1px solid #666; font-size: 17px; }
+</style>
+<main><header>您正在与交易伙伴交易</header><section class="offer">
+  <h2>您的物品：</h2><div id="your_slots" class="slots"></div><div id="your_slots_currency"></div>
+  <label class="native-confirm"><input type="checkbox" id="native-confirm"> 点击这里确认交易内容。</label>
+  <h2>交易伙伴的物品：</h2><div id="their_slots" class="slots"></div><div id="their_slots_currency"></div>
+  <div class="native-notice">交易伙伴将通过 Steam 收到此交易请求的通知。</div>
+  <button type="button" class="send" disabled>发起请求</button>
+</section></main>
+<script>
+  window.g_rgCurrentTradeStatus = { me: { assets: [], currency: [] }, them: { assets: [], currency: [] } };
+  window.setOffer = function (yours, theirs) {
+    [yours, theirs].forEach((assets, index) => {
+      const root = document.getElementById(index ? 'their_slots' : 'your_slots');
+      g_rgCurrentTradeStatus[index ? 'them' : 'me'].assets = assets.map(item => ({ appid: item.appid || '753', contextid: '6', assetid: item.id, amount: item.offerAmount ?? 1 }));
+      root.replaceChildren(...assets.map(item => {
+        const el = document.createElement('div');
+        el.className = 'item';
+        el.rgItem = { appid: '753', contextid: '6', marketable: 1, amount: 999, ...item };
+        el.textContent = item.label || item.market_hash_name;
+        const amount = document.createElement('span');
+        amount.className = 'amount'; amount.textContent = '×' + (item.offerAmount ?? 1);
+        el.appendChild(amount);
+        return el;
+      }));
+    });
+  };
+</script></html>
