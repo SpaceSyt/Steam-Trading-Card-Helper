@@ -74,7 +74,8 @@
       info.cards[0].medianCents = null;
       info.hasIncompletePricing = true;
       refreshPricingSummaries();
-      assert((text("stch-summary").match(/-/g) || []).length === 3, "Incomplete totals displayed as complete");
+      const missingTotals = [...document.querySelectorAll("#stch-summary b")].filter(element => element.textContent === "-");
+      assert(missingTotals.length === 3, "Incomplete totals displayed as complete");
       info.cards[0].lowestCents = 30;
       info.cards[0].medianCents = 32;
       info.hasIncompletePricing = false;

@@ -10,14 +10,20 @@
   .item { box-sizing: border-box; height: 84px; padding: 10px 6px; background: linear-gradient(#3a5065, #26333c); border: 2px solid #555; font-size: 13px; }
   .amount { display: block; margin-top: 20px; }
   .native-confirm { display: block; margin: 14px 0 22px; padding: 8px; background: #355779; }
+  #you_cantready { margin: 14px 0 22px; padding: 8px; background: #333; }
   .native-notice { padding: 20px 0; color: #a8baca; }
+  .foreign-count { margin: 12px 0; padding: 8px; border: 1px solid #444; background: #000; color: #e1e10f; }
   .send { display: block; margin: 20px auto; padding: 12px 32px; color: #aaa; background: #444; border: 1px solid #666; font-size: 17px; }
 </style>
 <main><header>您正在与交易伙伴交易</header><section class="offer">
+  <section id="trade_yours">
   <h2>您的物品：</h2><div id="your_slots" class="slots"></div><div id="your_slots_currency"></div>
-  <label class="native-confirm"><input type="checkbox" id="native-confirm"> 点击这里确认交易内容。</label>
+  <div id="you_cantready"><span class="content">正在等待您提供一件或更多的物品。</span></div>
+  <label id="you_notready" class="native-confirm"><input type="checkbox" id="native-confirm"> 点击这里确认交易内容。</label>
+  </section><section id="trade_theirs">
   <h2>交易伙伴的物品：</h2><div id="their_slots" class="slots"></div><div id="their_slots_currency"></div>
   <div class="native-notice">交易伙伴将通过 Steam 收到此交易请求的通知。</div>
+  </section>
   <button type="button" class="send" disabled>发起请求</button>
 </section></main>
 <script>
@@ -37,5 +43,32 @@
         return el;
       }));
     });
+    const populated = yours.length + theirs.length > 0;
+    document.getElementById('you_cantready').style.display = populated ? 'none' : '';
+    document.getElementById('you_notready').style.display = populated ? '' : 'none';
+  };
+  // Match the foreign plugins' ownership: SEE replaces blocks, AS retains and updates nodes.
+  window.updateForeignSummaries = function () {
+    for (const side of ['your', 'their']) {
+      const count = g_rgCurrentTradeStatus[side === 'your' ? 'me' : 'them'].assets.length;
+      const slots = document.getElementById(side + '_slots');
+      const id = 'trade_offer_' + side + '_sum';
+      document.getElementById(id)?.remove();
+      const summary = document.createElement('div');
+      summary.id = id;
+      summary.className = 'trade_offer_sum';
+      summary.innerHTML = '<b>Number of unique items: ' + count + ', worth ¥ 1.55</b><div>1x Poly Bridge 3 补充包 (补充包)</div><b>Total items: ' + count + '</b>';
+      slots.before(summary);
+      let container = document.getElementById(side + '_slots_count');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = side + '_slots_count';
+        container.className = 'foreign-count trade_item_box';
+        container.innerHTML = '<span id="' + side + '_items_count"></span>';
+        slots.after(container);
+      }
+      document.getElementById(side + '_items_count').textContent = count + ' 个物品';
+      container.style.display = count ? 'block' : 'none';
+    }
   };
 </script></html>

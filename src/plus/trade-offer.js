@@ -30,7 +30,9 @@ export function initTradeOffer() {
   retry.textContent = "重试估价";
   retry.className = "stch-trade-retry";
   comparison.append(text, retry);
-  slots[1].after(comparison);
+  const readyStatus = doc.getElementById("you_cantready") || doc.getElementById("you_notready");
+  if (readyStatus) readyStatus.before(comparison);
+  else slots[0].after(comparison);
   let frame = 0;
   let expiryTimer = 0;
   let stopped = false;

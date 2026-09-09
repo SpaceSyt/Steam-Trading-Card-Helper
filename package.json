@@ -7,12 +7,19 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test \"test/unit/*.test.js\"",
-    "check": "npm run test && npm run test:plus && npm run build:all",
+    "check": "npm run test && npm run test:plus && npm run test:locales && npm run build:all && npm run test:build",
     "build:plus": "node scripts/build.mjs --plus",
-    "build:all": "npm run build && npm run build:plus",
-    "test:plus": "node --test \"test/plus/*.test.js\""
+    "build:all": "npm run build && npm run build:plus && npm run build:plus:en && npm run build:en && npm run build:plus:standalone && npm run build:plus:standalone:en",
+    "test:plus": "node --test \"test/plus/*.test.js\"",
+    "build:en": "node scripts/build.mjs --en",
+    "build:plus:en": "node scripts/build.mjs --plus --en",
+    "test:locales": "node --test \"test/locales/*.test.js\"",
+    "build:plus:standalone": "node scripts/build.mjs --plus --standalone",
+    "build:plus:standalone:en": "node scripts/build.mjs --plus --standalone --en",
+    "test:build": "node --test \"test/build/*.test.js\""
   },
   "devDependencies": {
+    "acorn": "^8.18.0",
     "esbuild": "^0.28.1"
   }
 }

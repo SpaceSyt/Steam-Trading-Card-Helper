@@ -1,0 +1,3 @@
+/* Preserve foreign-owned nodes while suppressing their duplicate trade summaries. */
+#trade_offer_your_sum, #trade_offer_their_sum,
+#your_slots_count, #their_slots_count { display: none !important; }
