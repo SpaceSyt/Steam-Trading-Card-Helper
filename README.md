@@ -1,6 +1,8 @@
 # Steam Trading Card Helper
 
-Steam 卡牌助手是一款 Tampermonkey 用户脚本，用于扫描 Steam 卡牌价格、估算徽章成本、辅助购买、管理订购单，以及批量处理社区物品。
+简体中文 | [English](README-en.md)
+
+Steam 卡牌助手是一款 Tampermonkey 脚本，用于扫描 Steam 卡牌价格、估算徽章成本、辅助购买、自动购买、管理订购单，以及批量处理社区物品。
 
 > [!IMPORTANT]
 > v2.6.2 将卡牌查价、徽章扫描、合成扫描、价格刷新和多余物品检测接入统一并发。**HTML 类请求并发默认关闭**；开启后可极大提升各种扫描速度。并发会略微增加浏览器、网络和 Steam 服务器的瞬时压力，中高端设备通常没有明显性能影响。
@@ -24,9 +26,16 @@ Steam 卡牌助手是一款 Tampermonkey 用户脚本，用于扫描 Steam 卡�
 ## 安装
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/)。
-2. 打开 [用户脚本安装链接](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper.user.js)。
+2. 从下表选择一个版本，打开对应的安装链接。
 3. 进入自己的 Steam 徽章页，例如 `steamcommunity.com/id/xxx/badges/`。
 4. 点击页面中的 **Steam Trading Card Helper**。
+
+| 版本 | 中文 | English |
+| --- | --- | --- |
+| 普通版 | [安装](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper-standard.user.js) | [Install](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper-en.user.js) |
+| Plus 兼容版 | [安装](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper-plus.user.js) | [Install](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper-plus-en.user.js) |
+
+[历史安装入口](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper.user.js)继续提供 **Plus 中文兼容版**，与表中的 Plus 中文版功能一致。普通版和 Plus 有各自的更新地址；切换版本时先停用旧版，同一浏览器只启用一个版本。Plus 独立版可按下方开发说明自行构建，不属于默认安装入口。
 
 首次打开会显示使用说明，之后可以在 **设置 → 使用说明** 中再次查看。
 
@@ -169,9 +178,45 @@ Steam multibuy 始终使用扫描到的在售最低价加手动买价调整，�
 
 ## 开发
 
-- `npm test`：运行自动化测试。
-- `npm run build`：生成 `steam-trading-card-helper.user.js`。
-- `npm run check`：运行测试并重新构建用户脚本。
+### 选择与构建版本
+
+普通版专注徽章、卡牌、订购、价格估算、制作和多余物品处理；**Plus** 包含普通版全部功能，并将逐步增加更多 Steam 原生页面的修改与增强，不仅限于原有的脚本小面板。目前已支持原生交易报价页估价，显示双方物品种类、数量、估算总价和差额。
+
+语言和功能版本在构建时选择，Plus 提供两种构建：
+
+- **兼容版（默认）**：取消与其他插件的部分冲突或重复显示，目前仅兼容 Steam Economy Enhancer（SEE）和 Augmented Steam。当前会隐藏 SEE 的交易摘要、逐项名称清单和总数量，以及 Augmented Steam 的黄色物品数量栏；保留单价标签、全选及 Steam 原生交易确认和风险提示。
+- **独立版（`--standalone`）**：不包含上述兼容规则。
+
+兼容版不会关闭其他插件的后台请求。普通版不增强 Steam 原生内容页，因此不另生成兼容版。所有版本均需 Tampermonkey；同一浏览器只启用本项目的一个版本，切换版本时先停用旧版。
+
+以下构建命令适用于 **develop** 分支。复现 **2.7.1** 时，请检出 [RELEASE-2.7.1.md](https://github.com/SpaceSyt/Steam-Trading-Card-Helper/blob/master/RELEASE-2.7.1.md) 指定的 develop 提交；master 保留历史源码，仅用于发布产物。
+
+安装 Node.js 和 npm 后，在仓库根目录安装构建依赖，然后选择一条构建命令：
+
+```sh
+npm ci
+```
+
+| 版本 | 构建命令 | 输出文件 |
+| --- | --- | --- |
+| 普通版 · 中文 | `npm run build` | `steam-trading-card-helper.user.js` |
+| Plus · 中文 · 兼容 | `npm run build:plus` | `steam-trading-card-helper-plus.user.js` |
+| Plus · 英文 · 兼容 | `npm run build:plus:en` | `steam-trading-card-helper-plus-en.user.js` |
+| 普通版 · 英文 | `npm run build:en` | `build/steam-trading-card-helper-en.user.js` |
+| Plus · 中文 · 独立 | `npm run build:plus:standalone` | `build/steam-trading-card-helper-plus-standalone.user.js` |
+| Plus · 英文 · 独立 | `npm run build:plus:standalone:en` | `build/steam-trading-card-helper-plus-standalone-en.user.js` |
+
+`steam-trading-card-helper.user.js` 是 develop 的普通中文构建文件，发布到 master 时命名为 `steam-trading-card-helper-standard.user.js`；其更新地址也指向该普通版路径。普通英文从 `build/` 发布到 master 根目录。`npm run build:plus` 另生成 `build/steam-trading-card-helper.user.js`，仅用于历史 Plus 中文入口；发布时不可用普通中文构建覆盖该入口。独立版不设置自动更新地址，避免切换到默认兼容版。
+
+也可通过 `npm run build -- --plus --en` 或 `node scripts/build.mjs --plus --en` 构建 Plus 英文兼容版；加上 `--standalone` 则生成独立版。`--standalone` 必须配合 `--plus` 使用。
+
+构建后，将所选 `.user.js` 文件的完整内容导入 Tampermonkey 的新脚本并保存。Plus 兼容版使用默认名称，独立版名称带有“独立版”或 `(Standalone)`。
+
+- `npm test`：运行普通版单元测试。
+- `npm run test:plus`：运行 Plus 测试。
+- `npm run test:locales`：检查英文翻译。
+- `npm run check`：运行上述测试，构建并校验全部版本。
+
 
 ## 免责声明
 
