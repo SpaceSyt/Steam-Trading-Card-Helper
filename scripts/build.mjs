@@ -1,5 +1,5 @@
 import { build, transform } from "esbuild";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { localizeSource, localizeStyles } from "./localize.mjs";
@@ -39,12 +39,11 @@ const unknown = process.argv.slice(2).filter(argument => !["--plus", "--en", "--
 if (unknown.length) throw new Error(`Unknown build option: ${unknown.join(", ")}`);
 if (standalone && !plus) throw new Error("Standalone requires --plus. Use: npm run build -- --plus --standalone");
 const filename = `steam-trading-card-helper${plus ? "-plus" : ""}${standalone ? "-standalone" : ""}${english ? "-en" : ""}.user.js`;
-const publishedFilename = !plus && !english ? "steam-trading-card-helper-standard.user.js" : filename;
 const outputDirectory = standalone || (!plus && english) ? join(root, "build") : root;
 const translations = english ? JSON.parse(readFileSync(join(root, "src/locales/en.json"), "utf8")) : null;
 let banner = normalizeNewlines(
   readFileSync(join(root, "src", "meta.txt"), "utf8")
-).replace(/__VERSION__/g, pkg.version).replace(/__FILENAME__/g, publishedFilename);
+).replace(/__VERSION__/g, pkg.version);
 
 if (plus) {
   banner = banner.replace(/^(\/\/ @name\s+).+$/m, "$1Steam Trading Card Helper Plus")
@@ -61,8 +60,12 @@ if (english) {
 
 if (standalone) {
   banner = banner.replace(/^(\/\/ @name\s+)(.+)$/m, "$1$2 (Standalone)")
-    .replace(/^(\/\/ @name:zh-CN\s+)(.+)$/m, "$1$2（独立版）")
-    .replace(/^\/\/ @(?:downloadURL|updateURL)[^\n]*\n/gm, "");
+    .replace(/^(\/\/ @name:zh-CN\s+)(.+)$/m, "$1$2（独立版）");
+}
+
+// Only Chinese Plus compatibility is published at the existing master entry.
+if (!compatibility || english) {
+  banner = banner.replace(/^\/\/ @(?:downloadURL|updateURL)[^\n]*\n/gm, "");
 }
 
 await build({
@@ -117,14 +120,3 @@ await build({
 });
 
 console.log(`built ${filename} v${pkg.version}`);
-
-// Keep the historical master path on Chinese Plus without changing the standard build output.
-if (plus && !english && !standalone) {
-  const legacyFilename = "steam-trading-card-helper.user.js";
-  const legacyDirectory = join(root, "build");
-  mkdirSync(legacyDirectory, { recursive: true });
-  const legacySource = readFileSync(join(outputDirectory, filename), "utf8")
-    .replaceAll(`/master/${filename}`, `/master/${legacyFilename}`);
-  writeFileSync(join(legacyDirectory, legacyFilename), legacySource);
-  console.log(`built build/${legacyFilename} v${pkg.version} (legacy Plus alias)`);
-}
