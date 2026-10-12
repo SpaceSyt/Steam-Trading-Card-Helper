@@ -19,14 +19,26 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
     return Number.isFinite(number) && number >= 0 ? number : null;
   }
 
+  function isExplicitZero(value) {
+    return value === 0 || (typeof value === "string"
+      && /^[+-]?(?:0+(?:\.0*)?|\.0+)(?:e[+-]?\d+)?$/i.test(value.trim()));
+  }
+
   function getRenderQueries(listingHtml) {
-    const renderContextMatch = String(listingHtml || "").match(
-      /window\.SSR\.renderContext=JSON\.parse\(("(?:\\.|[^"\\])*")\);/
+    const html = String(listingHtml || "");
+    const ssrDataMatch = html.match(
+      /<script\b(?=[^>]*\sid\s*=\s*["']valve-ssr-data["'])(?=[^>]*\stype\s*=\s*["']application\/json["'])[^>]*>([\s\S]*?)<\/script\s*>/i
     );
-    if (!renderContextMatch) return [];
+    const renderContextMatch = !ssrDataMatch && html.match(
+      /window\.SSR\.renderContext\s*=\s*JSON\.parse\(\s*("(?:\\.|[^"\\])*")\s*\)\s*;/
+    );
+    if (!ssrDataMatch && !renderContextMatch) return [];
 
     try {
-      const renderContext = JSON.parse(JSON.parse(renderContextMatch[1]));
+      // Read only Steam's data envelope; never execute the hydration script.
+      const renderContext = ssrDataMatch
+        ? JSON.parse(ssrDataMatch[1])?.renderContext
+        : JSON.parse(JSON.parse(renderContextMatch[1]));
       const queryData = JSON.parse(renderContext?.queryData || "{}");
       return Array.isArray(queryData?.queries) ? queryData.queries : [];
     } catch (_) {
@@ -142,6 +154,10 @@ import { parseCompactBuyOrderLevels } from "../services/order-wall.js";
         highestBuyCents,
         lowestSellCents,
         currency,
+        noBuyOrders: isExplicitZero(orderbook?.cBuyOrders)
+          && (orderbook?.amtMaxBuyOrder == null || isExplicitZero(orderbook.amtMaxBuyOrder))
+          && (orderbook?.rgCompactBuyOrders === undefined
+            || (Array.isArray(orderbook.rgCompactBuyOrders) && orderbook.rgCompactBuyOrders.length === 0)),
         sellOrderCount: parseCount(
           orderbook?.cSellOrders ?? orderbook?.sell_order_count
         ),

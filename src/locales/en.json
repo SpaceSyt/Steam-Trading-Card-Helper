@@ -777,5 +777,13 @@
   "{{0}}: 当前模式下无需购买卡牌": "{{0}}: no cards needed in the current mode",
   "{{0}}: 无法确认 Steam 钱包币种，已停止打开批量购买": "{{0}}: cannot determine Steam wallet currency; multibuy not opened",
   "{{0}}: 打开批量购买 ({{1}} 张, 模式: {{2}})": "{{0}}: opening multibuy ({{1}} cards, mode: {{2}})",
-  "恢复默认价格": "Restore default prices"
+  "恢复默认价格": "Restore default prices",
+  "商品页缺少有效币种": "Listing page has no valid currency",
+  "商品页缺少可用的最高求购价格": "Listing page has no usable highest buy price",
+  "{{0}} 种卡牌缺少市场标识": "{{0}} card types have no market identifier",
+  "{{0}} 种卡牌无法定价": "{{0}} card types could not be priced",
+  "{{0}} 种卡牌已被订单或待同步记录覆盖": "{{0}} card types are covered by orders or pending records",
+  "{{0}} 种卡牌在当前模式下无需购买": "{{0}} card types need no purchase in the current mode",
+  "未生成订购单：{{0}}": "No orders planned: {{0}}",
+  "无可用卡牌数据": "No available card data"
 }

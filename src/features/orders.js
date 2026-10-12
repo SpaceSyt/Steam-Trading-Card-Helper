@@ -38,6 +38,12 @@ const { log, setStatus } = scanStatus;
 
 const { setStatus: setOrderStatus } = orderStatus;
 
+function describeOrderError(error) {
+  if (Number(error?.status) > 0) return `HTTP ${error.status}`;
+  return error?.message || error?.error
+    || (typeof error === "string" ? error : "网络请求失败");
+}
+
   export async function addManualOrderAppid() {
     if (isPriceOverviewProbeBlocked(state.orderActionRunning)) return;
     const input = document.getElementById("stch-order-appid");
@@ -150,6 +156,7 @@ const { setStatus: setOrderStatus } = orderStatus;
     const plan = [];
     const skipped = {
       covered: 0,
+      notNeeded: 0,
       missingPrice: 0,
       missingHash: 0,
       clamped: 0,
@@ -159,6 +166,7 @@ const { setStatus: setOrderStatus } = orderStatus;
     };
     const candidates = [];
     const marketRecords = [];
+    let firstPricingError = "";
 
     for (const info of selected) {
       for (const card of info.cards) {
@@ -173,7 +181,10 @@ const { setStatus: setOrderStatus } = orderStatus;
           card.owned,
           getBadgeTargetLevel(info)
         );
-        if (targetQuantity <= 0) continue;
+        if (targetQuantity <= 0) {
+          skipped.notNeeded++;
+          continue;
+        }
 
         const activeQuantity = activeOrders.get(card.marketHashName)?.quantity || 0;
         const pendingQuantity = getPendingOrderExpectedQuantity(card.marketHashName);
@@ -281,8 +292,10 @@ const { setStatus: setOrderStatus } = orderStatus;
           );
         } else {
           if (pricingError) {
+            const message = describeOrderError(pricingError);
+            if (!firstPricingError) firstPricingError = message;
             logFn(
-              `  ${info.gameName} · ${card.name}: ${pricingError?.message || pricingError}，已跳过`,
+              `  ${info.gameName} · ${card.name}: ${message}，已跳过`,
               "warn"
             );
           }
@@ -338,6 +351,7 @@ const { setStatus: setOrderStatus } = orderStatus;
     return {
       plan,
       skipped,
+      firstPricingError,
       priceSource,
       adjustmentCents,
       minimumCents,
@@ -512,7 +526,14 @@ const { setStatus: setOrderStatus } = orderStatus;
       const activeOrders = await loadActiveBuyOrders(queue);
       const planData = await buildBuyOrderPlan(selected, activeOrders, ui);
       if (planData.plan.length === 0) {
-        finalStatus = `无需提交订购单：已有订单已覆盖，或没有可用的${getOrderPriceSourceLabel(planData.priceSource)}`;
+        const { skipped, firstPricingError } = planData;
+        const reasons = [];
+        if (skipped.missingHash) reasons.push(`${skipped.missingHash} 种卡牌缺少市场标识`);
+        if (skipped.missingPrice) reasons.push(`${skipped.missingPrice} 种卡牌无法定价`);
+        if (skipped.covered) reasons.push(`${skipped.covered} 种卡牌已被订单或待同步记录覆盖`);
+        if (skipped.notNeeded) reasons.push(`${skipped.notNeeded} 种卡牌在当前模式下无需购买`);
+        finalStatus = `未生成订购单：${reasons.join("；") || "无可用卡牌数据"}`;
+        if (firstPricingError) finalStatus += `；${firstPricingError}`;
         logFn(finalStatus, "warn");
         return;
       }
@@ -541,7 +562,7 @@ const { setStatus: setOrderStatus } = orderStatus;
         } catch (error) {
           failed++;
           logFn(
-            `  ✗ ${item.gameName} · ${item.cardName}: ${error?.message || error}`,
+            `  ✗ ${item.gameName} · ${item.cardName}: ${describeOrderError(error)}`,
             "err"
           );
         }
@@ -550,7 +571,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       finalStatus = `长期订购单提交结束: 成功 ${submitted}, 失败 ${failed}`;
       logFn(finalStatus, failed ? "warn" : "ok");
     } catch (error) {
-      finalStatus = `无法提交长期订购单: ${error?.message || error}`;
+      finalStatus = `无法提交长期订购单: ${describeOrderError(error)}`;
       logFn(finalStatus, "err");
     } finally {
       queue.stop();

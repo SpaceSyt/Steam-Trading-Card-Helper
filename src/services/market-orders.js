@@ -72,19 +72,18 @@ export function getPendingOrderExpectedQuantity(marketHashName) {
 }
 
 function validateListingSnapshot(snapshot, currencyId) {
-  if (
-    Number.isInteger(snapshot?.currency)
-    && snapshot.currency > 0
-    && snapshot.currency !== currencyId
-  ) {
+  if (!snapshot) throw new Error("商品页缺少可用的 SSR 订单簿数据");
+  if (!Number.isInteger(snapshot.currency) || snapshot.currency <= 0) {
+    throw new Error("商品页缺少有效币种");
+  }
+  if (snapshot.currency !== currencyId) {
     throw new Error(`商品页币种不一致 (${snapshot.currency}/${currencyId})`);
   }
-  if (
-    Number.isInteger(snapshot?.currency)
-    && snapshot.currency > 0
-    && !(Number.isFinite(snapshot.highestBuyCents) && snapshot.highestBuyCents > 0)
-  ) {
+  if (snapshot.noBuyOrders) {
     throw createNoBuyOrdersError();
+  }
+  if (!(Number.isFinite(snapshot.highestBuyCents) && snapshot.highestBuyCents > 0)) {
+    throw new Error("商品页缺少可用的最高求购价格");
   }
 }
 
@@ -157,9 +156,6 @@ export async function fetchHighestBuyPrice(marketHashName, queue = null, options
         throw new Error(
           `商品页币种不一致 (${newOrderbook.currency}/${currencyContext.currencyId})`
         );
-      }
-      if (newOrderbook.highestBuyCents <= 0) {
-        throw createNoBuyOrdersError();
       }
       const observedAt = Date.now();
       observeRecord(normalizeListingOrderbook(newOrderbook, {

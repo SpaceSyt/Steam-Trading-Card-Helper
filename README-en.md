@@ -26,9 +26,16 @@ The sidebar shows the account and a reference price for a Sack of Gems. This can
 ## Installation
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/).
-2. Open the [userscript installation link](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper.user.js).
+2. Choose one edition and language from the installation links below.
 3. Go to your Steam badges page, such as `steamcommunity.com/id/xxx/badges/`.
 4. Click **Steam Trading Card Helper** on the page.
+
+| Edition | 中文 | English |
+| --- | --- | --- |
+| Standard | [安装](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper-standard.user.js) | [Install](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper-en.user.js) |
+| Plus compatibility | [安装](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper-plus.user.js) | [Install](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper-plus-en.user.js) |
+
+The [legacy installation link](https://raw.githubusercontent.com/SpaceSyt/Steam-Trading-Card-Helper/master/steam-trading-card-helper.user.js) continues to provide **Chinese Plus compatibility**, with the same features as the Chinese Plus link above. Standard and Plus have separate update URLs. Disable the old edition before switching and enable only one edition in the same browser. Plus standalone is an optional local build described below, outside the default installation links.
 
 Instructions appear the first time you open the script. You can view them again under **Settings → Instructions**.
 
@@ -182,6 +189,8 @@ Language and edition are selected at build time. Plus offers two builds:
 
 The compatibility edition does not disable other extensions' background requests. The standard edition does not enhance Steam's native content pages, so it has no separate compatibility build. All versions require Tampermonkey. Enable only one version of this project in the same browser, and disable the old version before switching.
 
+The build commands below apply to **develop**. To reproduce **2.7.1**, check out the develop commit specified in [RELEASE-2.7.1.md](https://github.com/SpaceSyt/Steam-Trading-Card-Helper/blob/master/RELEASE-2.7.1.md); master retains historical source files and is used for artifact publication only.
+
 After installing Node.js and npm, install build dependencies from the repository root, then choose a build command:
 
 ```sh
@@ -196,6 +205,8 @@ npm ci
 | Standard · English | `npm run build:en` | `build/steam-trading-card-helper-en.user.js` |
 | Plus · Chinese · Standalone | `npm run build:plus:standalone` | `build/steam-trading-card-helper-plus-standalone.user.js` |
 | Plus · English · Standalone | `npm run build:plus:standalone:en` | `build/steam-trading-card-helper-plus-standalone-en.user.js` |
+
+`steam-trading-card-helper.user.js` is the standard Chinese build output on develop. Publish it to master as `steam-trading-card-helper-standard.user.js`; its update URLs point to that standard-edition path. Publish standard English from `build/` to the master root. `npm run build:plus` also generates `build/steam-trading-card-helper.user.js` for the legacy Chinese Plus entry only; never overwrite that entry with the standard Chinese build. Standalone builds have no automatic update URLs, so they cannot switch to the default compatibility edition through an update.
 
 You can also build the Plus English compatibility edition with `npm run build -- --plus --en` or `node scripts/build.mjs --plus --en`. Add `--standalone` to generate the standalone edition. `--standalone` must be used with `--plus`.
 

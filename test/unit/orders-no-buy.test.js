@@ -33,7 +33,9 @@ const {
 const {
   buildBuyOrderPlan,
   loadActiveBuyOrders,
+  submitBuyOrdersForSelection,
 } = await import("../../src/features/orders.js");
+const { RequestQueue } = await import("../../src/request/queue.js");
 
 beforeEach(() => {
   state.cfg.currencyId = 23;
@@ -307,4 +309,224 @@ test("existing-order parse diagnostics block order planning", async () => {
     () => loadActiveBuyOrders({ fetch: async () => ({ data }) }),
     /无法完整解析现有 Steam 订购单（1 项）/,
   );
+});
+
+test("unknown or contradictory buy data never enables the no-buy fallback", async () => {
+  for (const automaticPricingEnabled of [true, false]) {
+    for (const data of [
+      { eCurrency: 23 },
+      { eCurrency: 23, cBuyOrders: 10 },
+      { eCurrency: 23, cBuyOrders: 10, amtMaxBuyOrder: 0 },
+      { eCurrency: 23, cBuyOrders: 0, amtMaxBuyOrder: "invalid" },
+      { eCurrency: 23, cBuyOrders: 0, rgCompactBuyOrders: [45, 10] },
+      { cBuyOrders: 0 },
+      { eCurrency: 1, cBuyOrders: 0 },
+    ]) {
+      Object.assign(state.cfg, {
+        buyMode: "buy1", automaticPricingEnabled, orderPriceSource: "highest",
+        automaticPriceStrategy: "aggressive", minimumPriceFallback: true,
+      });
+      const ui = makeUi();
+      ui.queue.fetch = async () => ({ status: 200, text: makeOrderbookHtml(data) });
+      const result = await buildBuyOrderPlan(selected, new Map(), ui);
+      assert.equal(result.plan.length, 0, JSON.stringify(data));
+      assert.equal(result.skipped.minimumPriceFallback, 0);
+      assert.equal(result.skipped.missingPrice, 1);
+      assert.ok(result.firstPricingError);
+    }
+  }
+});
+
+test("invalid zero-buy evidence never enables the minimum-price fallback", async () => {
+  const invalidValues = [
+    "", " ", "\t\n", ".", ",", "'", "’", false, true,
+    [], [0], [0, 0], {}, { value: 0 }, "invalid", "1e-999", "0x0",
+  ];
+  const payloads = [
+    ...[...invalidValues, null, undefined, 1, -1, "1", "-1", "0.1"].map(cBuyOrders => ({
+      eCurrency: 23, cBuyOrders, amtMaxBuyOrder: 0,
+    })),
+    ...invalidValues.map(amtMaxBuyOrder => ({
+      eCurrency: 23, cBuyOrders: 0, amtMaxBuyOrder,
+    })),
+    ...[null, false, "", {}, [0, 0], [45, 10]].map(rgCompactBuyOrders => ({
+      eCurrency: 23, cBuyOrders: 0, amtMaxBuyOrder: 0, rgCompactBuyOrders,
+    })),
+  ];
+  for (const automaticPricingEnabled of [true, false]) {
+    Object.assign(state.cfg, {
+      buyMode: "buy1", automaticPricingEnabled, orderPriceSource: "highest",
+      minimumPriceFallback: true,
+    });
+    for (const data of payloads) {
+      state.highestBuyPrices.clear();
+      state.marketOrderDepths.clear();
+      const ui = makeUi();
+      ui.queue.fetch = async () => ({ status: 200, text: makeOrderbookHtml(data) });
+      const result = await buildBuyOrderPlan(selected, new Map(), ui);
+      assert.equal(result.skipped.minimumPriceFallback, 0, JSON.stringify(data));
+      assert.ok(result.plan.every(item => !item.minimumPriceFallback), JSON.stringify(data));
+      // Positive prices retain their existing non-fallback pricing behavior.
+      if (!(Number(data.amtMaxBuyOrder) > 0)) {
+        assert.equal(result.plan.length, 0, JSON.stringify(data));
+        assert.equal(result.skipped.missingPrice, 1);
+        assert.ok(result.firstPricingError);
+      }
+    }
+  }
+});
+
+test("explicit numeric zeros retain fallback with absent or empty compact depth", async () => {
+  const zeros = [0, -0, "0", "00", " 0 ", "+0", "-0", "0.0", ".0", "0.", "0e0", "0e+4"];
+  const payloads = [
+    ...zeros.map(cBuyOrders => ({ eCurrency: 23, cBuyOrders, amtMaxBuyOrder: 0 })),
+    ...[...zeros, null, undefined].map(amtMaxBuyOrder => ({
+      eCurrency: 23, cBuyOrders: 0, amtMaxBuyOrder, rgCompactBuyOrders: [],
+    })),
+  ];
+  for (const automaticPricingEnabled of [true, false]) {
+    Object.assign(state.cfg, {
+      buyMode: "buy1", automaticPricingEnabled, orderPriceSource: "highest",
+      minimumPriceFallback: true,
+    });
+    for (const data of payloads) {
+      const ui = makeUi();
+      ui.queue.fetch = async () => ({ status: 200, text: makeOrderbookHtml(data) });
+      const result = await buildBuyOrderPlan(selected, new Map(), ui);
+      assert.equal(result.plan.length, 1, JSON.stringify(data));
+      assert.equal(result.plan[0].minimumFallbackReason, "no-buy-orders");
+      assert.equal(result.skipped.minimumPriceFallback, 1);
+      assert.equal(result.firstPricingError, "");
+    }
+  }
+});
+
+test("real queue HTTP errors preserve status without leaking response bodies", async () => {
+  Object.assign(state.cfg, { buyMode: "buy1", automaticPricingEnabled: true, minimumPriceFallback: true });
+  for (const status of [429, 500]) {
+    const queue = new RequestQueue(0, state, null, null, {
+      fetch: async () => ({ status, ok: false, text: async () => "PRIVATE_RESPONSE_SENTINEL" }),
+    });
+    const logs = [];
+    try {
+      const result = await buildBuyOrderPlan(selected, new Map(), { queue, log: text => logs.push(text), setStatus: () => {} });
+      assert.equal(result.plan.length, 0);
+      assert.equal(result.firstPricingError, `HTTP ${status}`);
+      assert.match(logs.join(""), new RegExp(`HTTP ${status}`));
+      assert.doesNotMatch(logs.join(""), /object Object|PRIVATE_RESPONSE_SENTINEL/);
+    } finally {
+      queue.stop();
+    }
+  }
+});
+
+test("empty submission preserves pricing errors and distinguishes missing identity and owned cards", async () => {
+  const originalFetch = RequestQueue.prototype.fetch;
+  const originalGetElement = document.getElementById;
+  const originalResults = state.orderResults;
+  const originalSelection = state.selectedOrderResults;
+  const status = { textContent: "", style: {} };
+  let listingRequests = 0;
+  document.getElementById = id => id === "stch-order-status" ? status : null;
+  RequestQueue.prototype.fetch = async (url, options = {}) => {
+    assert.equal(options.method || "GET", "GET");
+    if (url.includes("/market/mylistings?")) return { data: { success: true, results_html: "" } };
+    assert.ok(url.includes("/market/listings/753/"));
+    listingRequests++;
+    throw { status: 429, text: "PRIVATE_RESPONSE_SENTINEL" };
+  };
+  try {
+    Object.assign(state.cfg, { buyMode: "complete1", automaticPricingEnabled: true, minimumPriceFallback: true });
+    state.selectedOrderResults = new Set(["123_0"]);
+    state.orderResults = [{ ...selected[0], cards: [
+      selected[0].cards[0],
+      { name: "Missing", owned: 0 },
+      { name: "Owned", marketHashName: "123-Owned", owned: 1 },
+    ] }];
+    await submitBuyOrdersForSelection("order");
+    assert.equal(listingRequests, 1);
+    assert.match(status.textContent, /1 种卡牌缺少市场标识/);
+    assert.match(status.textContent, /1 种卡牌无法定价/);
+    assert.match(status.textContent, /1 种卡牌在当前模式下无需购买/);
+    assert.match(status.textContent, /HTTP 429/);
+    assert.doesNotMatch(status.textContent, /object Object|PRIVATE_RESPONSE_SENTINEL|已被订单/);
+    assert.equal(state.orderSubmissionRunning, false);
+  } finally {
+    RequestQueue.prototype.fetch = originalFetch;
+    document.getElementById = originalGetElement;
+    state.orderResults = originalResults;
+    state.selectedOrderResults = originalSelection;
+  }
+});
+
+test("modern SSR supports order pricing with one listing GET and no fallback", async () => {
+  for (const automaticPricingEnabled of [false, true]) {
+    Object.assign(state.cfg, {
+      buyMode: "buy1", automaticPricingEnabled, orderPriceSource: "highest",
+      automaticPriceStrategy: "aggressive", minimumPriceFallback: true,
+    });
+    state.highestBuyPrices.clear();
+    state.marketOrderDepths.clear();
+    let requests = 0;
+    const ui = makeUi();
+    ui.queue.fetch = async (url, options = {}) => {
+      requests++;
+      assert.equal(options.method || "GET", "GET");
+      assert.ok(url.includes(encodeURIComponent(MARKET_HASH_NAME)));
+      const legacy = makeOrderbookHtml({ eCurrency: 23, amtMaxBuyOrder: 45, cBuyOrders: 10, rgCompactBuyOrders: [45, 10] });
+      const context = JSON.parse(JSON.parse(legacy.match(/JSON\.parse\((.*)\);/)[1]));
+      return { status: 200, text: `<script type="application/json" id="valve-ssr-data">${JSON.stringify({ renderContext: context })}</script>` };
+    };
+    const result = await buildBuyOrderPlan(selected, new Map(), ui);
+    assert.equal(requests, 1);
+    assert.equal(result.plan.length, 1);
+    assert.equal(result.skipped.minimumPriceFallback, 0);
+    assert.equal(result.firstPricingError, "");
+  }
+});
+
+test("modern SSR mismatches and incomplete depth never trigger minimum-price fallback", async () => {
+  for (const automaticPricingEnabled of [false, true]) {
+    for (const kind of ["currency", "item", "truncated", "contradictory-zero", "invalid-zero"]) {
+      if (!automaticPricingEnabled && kind === "truncated") continue;
+      state.highestBuyPrices.clear();
+      state.marketOrderDepths.clear();
+      Object.assign(state.cfg, {
+        buyMode: "buy1", automaticPricingEnabled, orderPriceSource: "highest",
+        automaticPriceStrategy: "aggressive", minimumPriceFallback: true,
+      });
+      const data = { eCurrency: kind === "currency" ? 1 : 23, amtMaxBuyOrder: 45, cBuyOrders: 10, rgCompactBuyOrders: [45, kind === "truncated" ? 9 : 10] };
+      if (kind === "contradictory-zero") { data.cBuyOrders = 0; data.amtMaxBuyOrder = 0; }
+      if (kind === "invalid-zero") { data.cBuyOrders = false; data.amtMaxBuyOrder = 0; data.rgCompactBuyOrders = []; }
+      const legacy = makeOrderbookHtml(data, kind === "item" ? "123-Other Card" : MARKET_HASH_NAME);
+      const context = JSON.parse(JSON.parse(legacy.match(/JSON\.parse\((.*)\);/)[1]));
+      const ui = makeUi();
+      let requests = 0;
+      ui.queue.fetch = async () => {
+        requests++;
+        return { status: 200, text: `<script type="application/json" id="valve-ssr-data">${JSON.stringify({ renderContext: context })}</script>` };
+      };
+      const result = await buildBuyOrderPlan(selected, new Map(), ui);
+      assert.equal(requests, 1);
+      assert.equal(result.plan.length, 0, `${automaticPricingEnabled}/${kind}`);
+      assert.equal(result.skipped.minimumPriceFallback, 0);
+      assert.ok(result.firstPricingError);
+    }
+  }
+});
+
+test("modern SSR explicit zero buy orders retain the configured minimum-price fallback", async () => {
+  for (const automaticPricingEnabled of [false, true]) {
+    Object.assign(state.cfg, {
+      buyMode: "buy1", automaticPricingEnabled, orderPriceSource: "highest", minimumPriceFallback: true,
+    });
+    const legacy = makeOrderbookHtml({ eCurrency: 23, cBuyOrders: 0, amtMaxBuyOrder: 0, rgCompactBuyOrders: [] });
+    const context = JSON.parse(JSON.parse(legacy.match(/JSON\.parse\((.*)\);/)[1]));
+    const ui = makeUi();
+    ui.queue.fetch = async () => ({ status: 200, text: `<script type="application/json" id="valve-ssr-data">${JSON.stringify({ renderContext: context })}</script>` });
+    const result = await buildBuyOrderPlan(selected, new Map(), ui);
+    assert.equal(result.plan.length, 1);
+    assert.equal(result.plan[0].minimumFallbackReason, "no-buy-orders");
+    assert.equal(result.skipped.minimumPriceFallback, 1);
+  }
 });
