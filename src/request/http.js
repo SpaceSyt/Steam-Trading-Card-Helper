@@ -1,3 +1,7 @@
+  export function marketFetch(url, options) {
+    return window.fetch(url, options);
+  }
+
   export async function stchRequestText(url) {
     if (typeof GM_xmlhttpRequest === "function") {
       return new Promise((resolve, reject) => {
@@ -20,7 +24,7 @@
       });
     }
 
-    const response = await window.fetch(url, { credentials: "include" });
+    const response = await marketFetch(url, { credentials: "include" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.text();
   }

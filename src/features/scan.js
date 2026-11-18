@@ -1,6 +1,6 @@
 import { state } from "../state.js";
 
-import { DEFAULT_CONFIG } from "../config.js";
+import { applyScanModeTheme, setScanPhase } from "../ui/scan-controls.js";
 
 import { EARLY_PREDICTION_MARGIN } from "../constants.js";
 
@@ -16,7 +16,7 @@ import {
   PRICE_CARD_ERROR_KINDS,
   PRICE_CARD_OUTCOMES,
   applyPriceCardResult,
-  priceCard,
+  priceBadgeCard,
   predictFullSetLowerBound,
 } from "../parsers/price.js";
 
@@ -26,11 +26,13 @@ import { getBadgeModeLabel, getGameCardsUrl, getBadgeTargetLevel } from "../util
 
 import {
   getCachedOrderResult,
+  createOrderCacheIndex,
   getOrderCacheAgeDays,
   saveOrderCache,
 } from "../services/order-cache.js";
 
 import { persistMarketObservations } from "../services/market-observations.js";
+import { getMinCardVolume } from "../services/result-info.js";
 
 import { addToBlacklist } from "./blacklist.js";
 
@@ -51,7 +53,7 @@ import { scanStatus } from "../status-controllers.js";
 import {
   createRequestQueuePool,
   getHtmlRequestConcurrency,
-  runWithConcurrency,
+  createBadgePriceScheduler,
 } from "../utils/concurrency.js";
 
 const { log, setStatus, setProgress, hideProgress } = scanStatus;
@@ -79,57 +81,12 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
     );
   }
 
+  let skipPricingBadge = null;
+
   export function skipCurrentBadge() {
-    state.skipCurrent = true;
+    if (skipPricingBadge) skipPricingBadge();
+    else state.skipCurrent = true;
     log("跳过当前徽章...", "warn");
-  }
-
-  export function setScanPhase(phase) {
-    const btn = document.getElementById("stch-scan-btn");
-    if (!btn) return;
-    btn.textContent = "开始扫描";
-    switch (phase) {
-      case "phase1": btn.textContent = "扫描中: 徽章列表"; break;
-      case "phase2": btn.textContent = "扫描中: 卡牌详情+查价"; break;
-      case "phase3": btn.textContent = "扫描完成"; break;
-      case "scanning": btn.textContent = "扫描中..."; break;
-      case "done": btn.textContent = "扫描完成"; break;
-    }
-  }
-
-  export function updateResultColumns() {
-    const showDrops = state.cfg.includeDrops
-      && state.results.some(info => Number(info.dropsRemaining) > 0);
-    const list = document.getElementById("stch-list");
-    list?.classList.toggle("stch-show-drops", showDrops);
-    list?.classList.toggle("stch-show-completion", state.cfg.showScanCompletionColumn !== false);
-    list?.classList.toggle("stch-show-sell-set", state.cfg.showScanSellSetColumn !== false);
-  }
-
-  export function applyScanModeTheme() {
-    const enabled = !!state.cfg.foilScanMode;
-    document.getElementById("stch-tab-scan")?.classList.toggle("stch-foil-mode", enabled);
-    const foilLabel = document.getElementById("stch-foil-mode-label");
-    const foilInput = document.getElementById("stch-foil-scan-mode");
-    const buyMode = document.getElementById("stch-buy-mode");
-    const buyModeLabel = document.getElementById("stch-buy-mode-label");
-    foilLabel?.classList.toggle("active", enabled);
-    foilLabel?.classList.toggle("disabled", state.scanning);
-    if (foilInput) foilInput.disabled = !!state.scanning;
-    if (buyMode) {
-      if (enabled) {
-        if (!buyMode.dataset.normalValue && buyMode.value !== "complete1") {
-          buyMode.dataset.normalValue = buyMode.value;
-        }
-        buyMode.value = "complete1";
-        buyMode.disabled = true;
-      } else {
-        buyMode.disabled = false;
-        buyMode.value = buyMode.dataset.normalValue || state.cfg.buyMode || DEFAULT_CONFIG.buyMode;
-        delete buyMode.dataset.normalValue;
-      }
-    }
-    buyModeLabel?.classList.toggle("stch-control-disabled", enabled);
   }
 
   export async function startScan() {
@@ -169,12 +126,24 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
       )
     );
 
-
-    state.queue = queue;
+    let cancelOverview = () => false;
+    const overviewQueue = new RequestQueue(cfg.requestInterval, {
+      get cfg() { return state.cfg; },
+      get skipCurrent() { return cancelOverview(); },
+    }, setStatus, log, { stopPredicate: () => state.stopRequested });
+    const scheduleBadgePrices = createBadgePriceScheduler({
+      fetch(url, options, isCancelled) {
+        cancelOverview = isCancelled;
+        return overviewQueue.fetch(url, options);
+      },
+    });
+    const stopQueues = () => { queue.stop(); overviewQueue.stop(); };
+    const pendingBadges = new Map();
+    state.queue = { stop: stopQueues };
     const profileUrl = getProfileUrl();
     if (!profileUrl) {
       log("未找到 Profile URL", "err");
-      queue.stop();
+      stopQueues();
       state.scanning = false;
       state.queue = null;
       hideProgress();
@@ -208,8 +177,6 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
       setScanPhase("phase2");
       setStatus("扫描卡牌价格中");
 
-      let processed = 0;
-      let skipped = 0;
       const getThresholdCents = () => Math.round((Number(state.cfg.threshold) || 0) * 100);
       let blacklistSource = null;
       let blacklistedAppids = new Set();
@@ -224,36 +191,35 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
         return blacklistedAppids;
       };
 
-      for (const b of badges) {
+      const cachedOrders = cfg.skipCachedOrderResults ? createOrderCacheIndex() : null;
+      for (const [index, b] of badges.entries()) {
+        skipPricingBadge = null;
         if (state.stopRequested) { log("已手动停止", "warn"); break; }
         if (state.skipCurrent) {
           state.skipCurrent = false;
           log(`[${b.appid}] 跳过 (手动)`, "warn");
-          skipped++;
           continue;
         }
         // blacklist check
         if (getBlacklistedAppids().has(String(b.appid))) {
           log(`[${b.appid}] ${b.gameName || ""}: 在游戏/AppID黑名单中, 跳过`, "info");
-          skipped++;
           continue;
         }
         if (cfg.skipCachedOrderResults) {
-          const cached = getCachedOrderResult(b);
+          const cached = getCachedOrderResult(b, cachedOrders);
           if (cached) {
             log(
               `[${b.appid}] ${b.gameName || cached.gameName || ""}: 订购缓存内已有结果 ` +
               `(${getOrderCacheAgeDays(cached.cachedAt)} 天)，跳过扫描`,
               "info"
             );
-            skipped++;
             continue;
           }
         }
-        processed++;
-        setProgress(processed, badges.length,
-          `阶段2: 获取卡牌详情 ${processed}/${badges.length} · ${b.gameName || b.appid}`);
+        setProgress(index - pendingBadges.size, badges.length,
+          `阶段2: 获取卡牌详情 ${index + 1}/${badges.length} · ${b.gameName || b.appid}`);
 
+        const reportError = e => log(`[${b.appid}] ${b.gameName || ""}: 出错 ${e?.error || e?.status || JSON.stringify(e)}`, "err");
         try {
           const url = getGameCardsUrl(profileUrl, b.appid, b, { language: "english" });
           let res;
@@ -264,22 +230,24 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
             if (state.skipCurrent) {
               state.skipCurrent = false;
               log("已跳过当前徽章", "warn");
-              skipped++;
               continue;
             }
             log(`[${b.appid}] ${b.gameName || ""}: 拉取 gamecards 网络错误`, "warn");
-            skipped++;
+            continue;
+          }
+          if (state.stopRequested) break;
+          if (state.skipCurrent) {
+            state.skipCurrent = false;
+            log(`[${b.appid}] ${b.gameName || ""}: 已跳过当前徽章`, "warn");
             continue;
           }
           if (!res || !res.text) {
             log(`[${b.appid}] ${b.gameName || ""}: 拉取 gamecards 失败`, "warn");
-            skipped++;
             continue;
           }
           // skip non-trading-card badges
           if (!res.text.includes('badge_card_set_card')) {
             log(`[${b.appid}] ${b.gameName || ""}: 无卡牌套组 (可能是社区徽章)`, "info");
-            skipped++;
             continue;
           }
 
@@ -296,19 +264,16 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
 
           if (info.totalInSet === 0 || info.need === 0) {
             log(`[${b.appid}] ${info.gameName}: Lv${info.level}, 套卡完整或无卡牌`, "info");
-            skipped++;
             continue;
           }
 
           if (!state.cfg.includeDrops && info.dropsRemaining > 0) {
             log(`[${b.appid}] ${info.gameName}: 还有 ${info.dropsRemaining} 张掉落，跳过 (可勾选“包含掉落”来扫描)`, "info");
-            skipped++;
             continue;
           }
 
           if (info.level >= info.targetLevel) {
             log(`[${b.appid}] ${info.gameName}: 已满级 Lv${info.level}/${info.targetLevel}`, "info");
-            skipped++;
             continue;
           }
 
@@ -318,20 +283,17 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           let setCostCents = 0;
           let fullSetCostCents = 0;
           let level5CostCents = 0;
-          let minVolume = Infinity;
           const setsToTarget = Math.max(0, info.targetLevel - info.level);
-          let allPriced = true;
           let thresholdSkip = false;
-          let cancelledCurrent = false;
+          let skippedByUser = false;
+          const skipBadge = () => { skippedByUser = true; };
+          skipPricingBadge = skipBadge;
+          const isCancelled = () => thresholdSkip || skippedByUser || queue.stopped || state.stopRequested;
           const noPriceCards = [];
           let failedPriceCount = 0;
 
-          await runWithConcurrency(info.cards, concurrency, async card => {
-            if (thresholdSkip) return;
-            if (state.stopRequested || state.skipCurrent) {
-              cancelledCurrent = true;
-              return;
-            }
+          const priceOne = async (card, cardQueue) => {
+            if (isCancelled()) return;
             if (!card.marketHashName) {
               log(`  ⚠ 卡牌 "${card.name}" 无 market hash name，保留为缺价`, "warn");
               applyPriceCardResult(card, {
@@ -347,17 +309,8 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               return;
             }
 
-            const pk = await priceCard(card.marketHashName, queue, {
-              preferListing: true,
-              requireMedian: true,
-              requireVolume: true,
-              persistMarketCache: false,
-            });
-            if (thresholdSkip) return;
-            if (state.stopRequested || state.skipCurrent) {
-              cancelledCurrent = true;
-              return;
-            }
+            const pk = await priceBadgeCard(card.marketHashName, cardQueue);
+            if (isCancelled()) return;
             if (pk?.record) marketRecords.push(pk.record);
             const appliedPrice = applyPriceCardResult(card, pk, info.currencyId);
             if (appliedPrice.outcome === PRICE_CARD_OUTCOMES.ERROR) {
@@ -374,7 +327,6 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
               noPriceCards.push(card);
               return;
             }
-            if (pk.volume < minVolume) minVolume = pk.volume;
             if (pk.estimated) {
               info.hasEstimated = true;
               info.hasMedianFallback = true;
@@ -401,7 +353,6 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
             const hasIncompletePricing = noPriceCards.length + failedPriceCount > 0;
             if (!hasIncompletePricing && fullSetCostCents > getThresholdCents()) {
               log(`  → 已查${info.cardPrices.length}/${info.totalInSet}张, 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(getThresholdCents())}，跳过`, "info");
-              allPriced = false;
               thresholdSkip = true;
               return;
             }
@@ -447,82 +398,73 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
                     log(`  → 自动加入游戏黑名单失败: ${describeBlacklistWriteError(added)}`, "warn");
                   }
                 }
-                allPriced = false;
                 thresholdSkip = true;
                 return;
               }
             }
-          });
-
-          if (cancelledCurrent) {
-            if (state.skipCurrent) {
-              state.skipCurrent = false;
+          };
+          const { complete } = await scheduleBadgePrices(info.cards, concurrency, queue, isCancelled, priceOne);
+          const finishBadge = () => {
+            if (queue.stopped || state.stopRequested) return;
+            if (skippedByUser) {
               log(`[${b.appid}] ${info.gameName}: 已跳过当前徽章`, "warn");
-              skipped++;
-              continue;
+              return;
             }
-            if (state.stopRequested) {
-              log("已手动停止", "warn");
-              break;
+            if (thresholdSkip) return;
+
+            info.noPriceDataCount = noPriceCards.length;
+            info.failedPriceCount = failedPriceCount;
+            info.hasIncompletePricing = noPriceCards.length + failedPriceCount > 0;
+
+            info.cheapestSetCostCents = info.hasIncompletePricing ? null : setCostCents;
+            info.fullSetCostCents = info.hasIncompletePricing ? null : fullSetCostCents;
+            info.level5CostCents = info.hasIncompletePricing ? null : level5CostCents;
+            info.minVolume = getMinCardVolume(info.cards);
+            const autoBlCents = Math.round((state.cfg.autoBlackThreshold || 0) * 100);
+            if (!info.hasIncompletePricing && state.cfg.autoBlackEnabled && autoBlCents > 0 && fullSetCostCents > autoBlCents) {
+              const added = addToBlacklist(b.appid, info.gameName || b.gameName || "", 1, 0, {
+                priceMinor: fullSetCostCents,
+                currencyId: info.cardPrices[0]?.currencyId || state.cfg.currencyId,
+                accuracy: info.hasEstimated ? "estimated" : "exact",
+                reason: info.hasEstimated ? "fallback" : "complete",
+                observedAt: Date.now(),
+              });
+              if (added.ok) {
+                blacklistedAppids.add(String(b.appid));
+                log(`  → 自动加入游戏黑名单: 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(autoBlCents)}`, "info");
+                return;
+              }
+              log(`  → 自动加入游戏黑名单失败: ${describeBlacklistWriteError(added)}`, "warn");
             }
-          }
 
-          if (!allPriced) {
-            if (!thresholdSkip) {
-              log(`  → 部分卡牌无法取价, 跳过`, "warn");
+            if (!info.hasIncompletePricing && fullSetCostCents > getThresholdCents()) {
+              log(`  → 整套卡牌价格已大于上限(${formatMoney(fullSetCostCents)} > ${formatMoney(getThresholdCents())})，跳过`, "info");
+              return;
             }
-            skipped++;
-            continue;
-          }
 
-          info.noPriceDataCount = noPriceCards.length;
-          info.failedPriceCount = failedPriceCount;
-          info.hasIncompletePricing = noPriceCards.length + failedPriceCount > 0;
-
-          info.cheapestSetCostCents = info.hasIncompletePricing ? null : setCostCents;
-          info.fullSetCostCents = info.hasIncompletePricing ? null : fullSetCostCents;
-          info.level5CostCents = info.hasIncompletePricing ? null : level5CostCents;
-          info.minVolume = minVolume === Infinity ? 0 : minVolume;
-          const autoBlCents = Math.round((state.cfg.autoBlackThreshold || 0) * 100);
-          if (!info.hasIncompletePricing && state.cfg.autoBlackEnabled && autoBlCents > 0 && fullSetCostCents > autoBlCents) {
-            const added = addToBlacklist(b.appid, info.gameName || b.gameName || "", 1, 0, {
-              priceMinor: fullSetCostCents,
-              currencyId: info.cardPrices[0]?.currencyId || state.cfg.currencyId,
-              accuracy: info.hasEstimated ? "estimated" : "exact",
-              reason: info.hasEstimated ? "fallback" : "complete",
-              observedAt: Date.now(),
-            });
-            if (added.ok) {
-              blacklistedAppids.add(String(b.appid));
-              log(`  → 自动加入游戏黑名单: 全套 ${formatMoney(fullSetCostCents)} > ${formatMoney(autoBlCents)}`, "info");
-              skipped++;
-              continue;
+            state.results.push(info);
+            renderGameRow(info);
+            if (info.hasIncompletePricing) {
+              log(
+                `[${b.appid}] ${info.gameName}: 缺价 ` +
+                `${noPriceCards.length + failedPriceCount}/${info.totalInSet}，已保留`,
+                "warn"
+              );
             }
-            log(`  → 自动加入游戏黑名单失败: ${describeBlacklistWriteError(added)}`, "warn");
-          }
-
-          if (!info.hasIncompletePricing && fullSetCostCents > getThresholdCents()) {
-            log(`  → 整套卡牌价格已大于上限(${formatMoney(fullSetCostCents)} > ${formatMoney(getThresholdCents())})，跳过`, "info");
-            skipped++;
-            continue;
-          }
-
-          state.results.push(info);
-          renderGameRow(info);
-          if (info.hasIncompletePricing) {
-            log(
-              `[${b.appid}] ${info.gameName}: 缺价 ` +
-              `${noPriceCards.length + failedPriceCount}/${info.totalInSet}，已保留`,
-              "warn"
-            );
-          }
-
+          };
+          const finished = complete.then(finishBadge).catch(reportError)
+            .finally(() => pendingBadges.delete(skipBadge));
+          pendingBadges.set(skipBadge, { b, finished });
         } catch (e) {
-          log(`[${b.appid}] ${b.gameName || ""}: 出错 ${e?.error || e?.status || JSON.stringify(e)}`, "err");
-          skipped++;
+          reportError(e);
         }
       }
 
+      for (const [skipBadge, { b, finished }] of pendingBadges) {
+        skipPricingBadge = skipBadge;
+        setProgress(badges.length - pendingBadges.size, badges.length, `等待补价 · ${b.gameName || b.appid}`);
+        await finished;
+      }
       const resultCount = state.results.length;
       if (!state.stopRequested && !queue.stopped) {
         updateSummary();
@@ -539,7 +481,9 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
     } catch (e) {
       log(`扫描中断: ${e?.message || JSON.stringify(e)}`, "err");
     } finally {
-      queue.stop();
+      skipPricingBadge = null;
+      stopQueues();
+      await Promise.all(Array.from(pendingBadges.values(), badge => badge.finished));
       persistMarketObservations(marketRecords);
       try {
         if (state.results.length > 0) saveOrderCache();

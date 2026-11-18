@@ -10,7 +10,7 @@ import {
   PRICE_CARD_ERROR_KINDS,
   PRICE_CARD_OUTCOMES,
   applyPriceCardResult,
-  priceCard,
+  priceBadgeCard,
 } from "../parsers/price.js";
 
 import { persistMarketObservations } from "./market-observations.js";
@@ -18,6 +18,16 @@ import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurre
 
   export function getResultKey(info) {
     return `${info.appid}_${info.isFoil ? 1 : 0}`;
+  }
+
+  export function getMinCardVolume(cards, total = cards.length) {
+    let minimum = cards.length && cards.length === total ? Infinity : null;
+    for (const { volume } of cards) {
+      if (volume === 0) return 0;
+      if (volume == null) minimum = null;
+      else if (minimum !== null) minimum = Math.min(minimum, volume);
+    }
+    return minimum;
   }
 
   export function getSelectedResults() {
@@ -28,7 +38,7 @@ import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurre
     return state.orderResults.filter(info => state.selectedOrderResults.has(getResultKey(info)));
   }
 
-  export async function refreshResultInfo(existing, queue) {
+  export async function refreshResultInfo(existing, queue, observations) {
     const profileUrl = getProfileUrl();
     if (!profileUrl) throw new Error("未找到 Profile URL");
 
@@ -53,10 +63,9 @@ import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurre
     let setCostCents = 0;
     let fullSetCostCents = 0;
     let level5CostCents = 0;
-    let minVolume = Infinity;
     const setsToTarget = Math.max(0, info.targetLevel - info.level);
     const noPriceCards = [];
-    const marketRecords = [];
+    const marketRecords = observations || [];
     const cardPrices = new Array(info.cards.length);
     let failedPriceCount = 0;
 
@@ -78,12 +87,7 @@ import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurre
           failedPriceCount++;
           return;
         }
-        const pk = await priceCard(card.marketHashName, queue, {
-          preferListing: true,
-          requireMedian: true,
-          requireVolume: true,
-          persistMarketCache: false,
-        });
+        const pk = await priceBadgeCard(card.marketHashName, queue);
         if (pk?.record) marketRecords.push(pk.record);
         const appliedPrice = applyPriceCardResult(card, pk, info.currencyId);
         if (appliedPrice.outcome === PRICE_CARD_OUTCOMES.ERROR) {
@@ -94,7 +98,6 @@ import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurre
           noPriceCards.push(card);
           return;
         }
-        minVolume = Math.min(minVolume, pk.volume);
         if (pk.estimated) {
           info.hasEstimated = true;
           info.hasMedianFallback = true;
@@ -120,7 +123,7 @@ import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurre
         }
       );
     } finally {
-      persistMarketObservations(marketRecords);
+      if (!observations) persistMarketObservations(marketRecords);
     }
 
     info.cardPrices = cardPrices.filter(Boolean);
@@ -131,6 +134,6 @@ import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurre
     info.cheapestSetCostCents = info.hasIncompletePricing ? null : setCostCents;
     info.fullSetCostCents = info.hasIncompletePricing ? null : fullSetCostCents;
     info.level5CostCents = info.hasIncompletePricing ? null : level5CostCents;
-    info.minVolume = minVolume === Infinity ? 0 : minVolume;
+    info.minVolume = getMinCardVolume(info.cards);
     return info;
   }

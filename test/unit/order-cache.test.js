@@ -11,6 +11,7 @@ globalThis.window = {};
 globalThis.unsafeWindow = {};
 
 const { state } = await import("../../src/state.js");
+const { getMinCardVolume } = await import("../../src/services/result-info.js");
 const {
   createOrderCacheEnvelope,
   decodeOrderCache,
@@ -108,9 +109,19 @@ test("incomplete prices remain unavailable after order-cache normalization", () 
   assert.equal(normalized.cheapestSetCostCents, null);
   assert.equal(normalized.fullSetCostCents, null);
   assert.equal(normalized.level5CostCents, null);
-  assert.equal(normalized.cheapestSetFormatted, "-");
-  assert.equal(normalized.fullSetFormatted, "-");
-  assert.equal(normalized.level5Formatted, "-");
+});
+
+test("set volume preserves unknown and observed zero through the order cache", () => {
+  for (const [volumes, expected] of [
+    [[], null], [[7, 3], 3], [[null, 3], null], [[3, null], null],
+    [[0, null], 0], [[null, 0], 0],
+  ]) {
+    const cards = volumes.map(volume => ({ volume }));
+    const normalized = makeOrderResult("456", { cards, minVolume: getMinCardVolume(cards) });
+    assert.equal(normalized.minVolume, expected);
+  }
+  assert.equal(getMinCardVolume(legacyItem.cardPrices, legacyItem.cards.length), 42);
+  assert.equal(getMinCardVolume([{ volume: 3 }], 2), null);
 });
 
 test("corrupt cache is diagnosed without treating it as a migration", () => {

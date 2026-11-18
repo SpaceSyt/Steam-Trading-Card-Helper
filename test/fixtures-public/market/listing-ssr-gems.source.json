@@ -1,0 +1,21 @@
+{
+  "url": "https://steamcommunity.com/market/listings/753/753-Sack%20of%20Gems?l=english",
+  "status": 200,
+  "fetchedAt": "2026-10-12T12:03:11.6059739Z",
+  "bytes": 552498,
+  "rawSha256": "78fa18fcb17f90da0f9973952c6598e6c6139d88546756b8c5fc8edb285cf086",
+  "fixtureSha256": "988551ce7bc5692583af038d577b8845361286a605c8fe56080add18f2fba353",
+  "fixturePath": "test/fixtures-public/market/listing-ssr-gems.html",
+  "sanitization": "Credential-free public GET. Retained only keyed orderbook data and description name/icons; removed Config, UserConfig, loaderData, clientAssets, nonce, unrelated queries, history and query lifecycle metadata. Re-serialized the observed application/json envelope without executing scripts.",
+  "observed": {
+    "legacyAssignment": false,
+    "loggedIn": false,
+    "currency": 1,
+    "highestBuyMinor": 63,
+    "lowestSellMinor": 64,
+    "buyCount": 335174,
+    "sellCount": 26773,
+    "buyLevels": 56,
+    "sellLevels": 419
+  }
+}

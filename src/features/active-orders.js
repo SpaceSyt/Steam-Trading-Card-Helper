@@ -1,4 +1,7 @@
+import { marketFetch } from "../request/http.js";
 import { state } from "../state.js";
+import { createLongTermBuyOrder, getBuyOrderSession } from "./orders.js";
+import { showConfirmation } from "../ui/confirmation.js";
 import { RequestQueue } from "../request/queue.js";
 import {
   aggregateActiveBuyOrders,
@@ -8,9 +11,8 @@ import { calculateAutomaticBuyPrice } from "../services/order-wall.js";
 import { getActiveOrderPricingProfile } from "../config.js";
 import {
   fetchActiveBuyOrderSnapshot,
-  getCurrencyMarketKey,
   getOrderCurrencyContext,
-} from "./orders.js";
+} from "../services/market-orders.js";
 import { formatMoney } from "../utils/format.js";
 import { getMarketMinimumPriceCents, getSessionId } from "../utils/steam.js";
 import { enableCheckboxDragSelection } from "../ui/checkbox-drag.js";
@@ -32,6 +34,7 @@ import {
   getHtmlRequestConcurrency,
   runWithConcurrency,
 } from "../utils/concurrency.js";
+import { setStatusText } from "../utils/dom.js";
 
 const LOWEST_SELL_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -43,11 +46,7 @@ function createElement(tag, className = "", text = "") {
 }
 
 function setStatus(text, type = "") {
-  const element = document.getElementById("stch-active-orders-status");
-  if (!element) return;
-  element.textContent = text || "";
-  element.className = `stch-status-text${type ? ` ${type}` : ""}`;
-  element.style.display = text ? "" : "none";
+  setStatusText("stch-active-orders-status", text, type);
 }
 
 function appendCancelLog(text, type = "") {
@@ -85,39 +84,21 @@ function getSmartPricingContext() {
   }
 }
 
-function getSmartComparison(group, pricingContext) {
-  if (group.appid !== "753") {
-    return { available: false, label: "非社区物品，暂无定价缓存", className: "unavailable" };
+function smartPriceDelta(group) {
+  return group.suggestedMinor * group.remainingQuantity - group.frozenMinor;
+}
+
+function updateSmartCell(group) {
+  const cell = group._smartCell;
+  const price = group.suggestedMinor;
+  if (price) {
+    const delta = smartPriceDelta(group);
+    cell.className = "stch-active-order-smart" + (delta < 0 ? " saving" : delta > 0 ? " increase" : "");
+    cell.textContent = (delta < 0 ? "↓ " : delta > 0 ? "↑ " : "") + formatMoney(price, group.quoteCurrencyId);
+  } else {
+    cell.className = "stch-active-order-smart unavailable";
+    cell.textContent = group.lowestSellState === "loading" ? "查询中" : price === null ? "无可用买价" : "—";
   }
-  if (!pricingContext) {
-    return { available: false, label: "无法确认钱包币种", className: "unavailable" };
-  }
-  const cacheKey = getCurrencyMarketKey(group.marketHashName, pricingContext.currencyId);
-  const depth = state.marketOrderDepths.get(cacheKey)?.depth;
-  if (!depth) return { available: false, label: "暂无智能定价缓存", className: "unavailable" };
-  const quote = calculateAutomaticBuyPrice(depth, {
-    strategy: pricingContext.strategy,
-    strategyRule: pricingContext.strategyRule,
-    adjustmentMinor: pricingContext.adjustmentMinor,
-    minimumPriceMinor: pricingContext.minimumPriceMinor,
-  });
-  if (!quote?.finalPriceMinor) {
-    return { available: false, label: "缓存无法生成建议价", className: "unavailable" };
-  }
-  const representative = group.remainingQuantity > 0
-    ? Math.round(group.frozenMinor / group.remainingQuantity)
-    : group.minPriceMinor;
-  const delta = representative - quote.finalPriceMinor;
-  const sign = delta > 0 ? "+" : "−";
-  return {
-    available: true,
-    suggestedMinor: quote.finalPriceMinor,
-    deltaMinor: delta,
-    label: delta === 0
-      ? `与建议价 ${formatMoney(quote.finalPriceMinor)} 一致`
-      : `${delta > 0 ? "高于" : "低于"}建议价 ${sign}${formatMoney(Math.abs(delta))}`,
-    className: delta > 0 ? "high" : (delta < 0 ? "low" : "matched"),
-  };
 }
 
 function getVisibleGroups() {
@@ -125,6 +106,22 @@ function getVisibleGroups() {
   return state.activeBuyOrderGroups.filter(group => (
     (group.gameName || `App ${group.appid}`) === state.activeOrdersGameFilter
   ));
+}
+
+function selectVisibleOrders(matches) {
+  if (isSharedActionBusy()) return;
+  const visible = getVisibleGroups();
+  for (const group of visible) {
+    const selected = matches(group);
+    if (selected) state.selectedActiveBuyOrderGroups.add(group.key);
+    else state.selectedActiveBuyOrderGroups.delete(group.key);
+    const row = group._smartCell?.parentElement;
+    if (row) {
+      row.querySelector(".stch-active-order-cb").checked = selected;
+      row.classList.toggle("selected", selected);
+    }
+  }
+  updateSummary(visible);
 }
 
 function applyCachedLowestSellPrices(groups) {
@@ -148,12 +145,21 @@ function applyCachedLowestSellPrices(groups) {
 function updateHeaderSelectionState(visibleGroups = getVisibleGroups()) {
   const checkbox = document.getElementById("stch-active-orders-select-all");
   if (!checkbox) return;
-  const selectedCount = visibleGroups.filter(group => (
-    state.selectedActiveBuyOrderGroups.has(group.key)
-  )).length;
+  let selectedCount = 0;
+  for (const group of visibleGroups) {
+    if (state.selectedActiveBuyOrderGroups.has(group.key)) selectedCount++;
+  }
   checkbox.checked = visibleGroups.length > 0 && selectedCount === visibleGroups.length;
   checkbox.indeterminate = selectedCount > 0 && selectedCount < visibleGroups.length;
   checkbox.disabled = isSharedActionBusy() || visibleGroups.length === 0;
+  const disabled = checkbox.disabled || !visibleGroups.some(group => group.suggestedMinor);
+  for (const id of ["overpriced", "underpriced"]) {
+    const button = document.getElementById("stch-active-orders-" + id);
+    if (button) {
+      button.disabled = disabled;
+      button.classList.toggle("disabled", disabled);
+    }
+  }
 }
 
 function renderGameFilter() {
@@ -219,6 +225,7 @@ function updateSummary(visibleGroups = getVisibleGroups()) {
 }
 
 let summaryFrame = 0;
+let imageObserver = null;
 function scheduleSummaryUpdate() {
   if (summaryFrame) return;
   summaryFrame = requestAnimationFrame(() => {
@@ -227,7 +234,40 @@ function scheduleSummaryUpdate() {
   });
 }
 
-function renderOrderRow(group, smartPricingContext) {
+function observeImage(image, list) {
+  const load = () => {
+    image.src = image.dataset.src;
+    delete image.dataset.src;
+  };
+  if (!("IntersectionObserver" in window)) {
+    image.loading = "lazy";
+    load();
+    return;
+  }
+  imageObserver ||= new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      imageObserver.unobserve(entry.target);
+      entry.target.src = entry.target.dataset.src;
+      delete entry.target.dataset.src;
+    });
+  }, { root: list });
+  imageObserver.observe(image);
+}
+
+function getCachedCardImages() {
+  const images = new Map();
+  [state.results, state.orderResults].forEach(results => results.forEach(info => {
+    info.cards.forEach(card => {
+      if (card.marketHashName && card.imageUrl && !images.has(card.marketHashName)) {
+        images.set(card.marketHashName, card.imageUrl);
+      }
+    });
+  }));
+  return images;
+}
+
+function renderOrderRow(group, imageUrl) {
   const row = createElement("div", "stch-active-order-row");
   row.dataset.groupKey = group.key;
   row.classList.toggle("selected", state.selectedActiveBuyOrderGroups.has(group.key));
@@ -236,9 +276,9 @@ function renderOrderRow(group, smartPricingContext) {
   item.href = group.listingUrl;
   item.target = "_blank";
   item.rel = "noopener noreferrer";
-  if (group.imageUrl) {
+  if (imageUrl) {
     const image = createElement("img", "stch-active-order-image");
-    image.src = group.imageUrl;
+    image.dataset.src = imageUrl;
     image.alt = "";
     item.appendChild(image);
   }
@@ -272,10 +312,9 @@ function renderOrderRow(group, smartPricingContext) {
   frozen.appendChild(createElement("span", "stch-active-order-value", formatMoney(group.frozenMinor)));
   row.appendChild(frozen);
 
-  const comparison = getSmartComparison(group, smartPricingContext);
-  const smart = createElement("div", `stch-active-order-smart ${comparison.className}`, comparison.label);
-  if (comparison.available) smart.title = `使用当前智能定价设置与已缓存订单簿计算；建议价 ${formatMoney(comparison.suggestedMinor)}`;
-  row.appendChild(smart);
+  group._smartCell = createElement("div");
+  updateSmartCell(group);
+  row.appendChild(group._smartCell);
 
   const select = createElement("label", "stch-active-order-select");
   const checkbox = createElement("input", "stch-active-order-cb");
@@ -296,7 +335,9 @@ function renderOrderRow(group, smartPricingContext) {
 
 export function renderActiveBuyOrders() {
   const list = document.getElementById("stch-active-orders-list");
-  if (!list) return;
+  if (!list) return updateAllActionStates();
+  imageObserver?.disconnect();
+  imageObserver = null;
   renderGameFilter();
   const visible = getVisibleGroups();
   list.innerHTML = "";
@@ -308,26 +349,12 @@ export function renderActiveBuyOrders() {
     ));
   } else {
     const fragment = document.createDocumentFragment();
-    const smartPricingContext = getSmartPricingContext();
     const header = createElement("div", "stch-active-order-header");
     ["物品", "买价", "最低售价", "剩余", "冻结金额", "智能定价"].forEach(label => {
       header.appendChild(createElement("span", "", label));
     });
-    const selectAllWrap = createElement("label", "stch-active-order-select-all-wrap");
-    const selectAll = createElement("input", "stch-active-order-select-all");
-    selectAll.id = "stch-active-orders-select-all";
-    selectAll.type = "checkbox";
-    selectAll.setAttribute("aria-label", "全选当前游戏的订购单");
-    selectAllWrap.appendChild(selectAll);
-    header.appendChild(selectAllWrap);
-    selectAll.addEventListener("change", () => {
-      visible.forEach(group => {
-        if (selectAll.checked) state.selectedActiveBuyOrderGroups.add(group.key);
-        else state.selectedActiveBuyOrderGroups.delete(group.key);
-      });
-      renderActiveBuyOrders();
-    });
     fragment.appendChild(header);
+    const cachedCardImages = getCachedCardImages();
     let previousGame = null;
     visible.forEach(group => {
       const game = group.gameName || `App ${group.appid}`;
@@ -335,11 +362,27 @@ export function renderActiveBuyOrders() {
         fragment.appendChild(createElement("div", "stch-active-order-game-separator", game));
         previousGame = game;
       }
-      fragment.appendChild(renderOrderRow(group, smartPricingContext));
+      fragment.appendChild(renderOrderRow(
+        group,
+        cachedCardImages.get(group.marketHashName) || group.imageUrl
+      ));
     });
     list.appendChild(fragment);
+    list.querySelectorAll(".stch-active-order-image[data-src]")
+      .forEach(image => observeImage(image, list));
   }
   updateSummary(visible);
+}
+
+function applyActiveBuyOrderSnapshot(snapshot) {
+  state.activeBuyOrders = snapshot.orders;
+  state.activeBuyOrderGroups = aggregateActiveBuyOrders(snapshot.orders);
+  applyCachedLowestSellPrices(state.activeBuyOrderGroups);
+  state.activeOrdersLoadedAt = snapshot.observedAt;
+  const keys = new Set(state.activeBuyOrderGroups.map(group => group.key));
+  state.selectedActiveBuyOrderGroups.forEach(key => {
+    if (!keys.has(key)) state.selectedActiveBuyOrderGroups.delete(key);
+  });
 }
 
 export async function refreshActiveBuyOrders() {
@@ -358,15 +401,7 @@ export async function refreshActiveBuyOrders() {
   );
   try {
     const snapshot = await fetchActiveBuyOrderSnapshot(queue);
-    state.activeBuyOrders = snapshot.orders;
-    state.activeBuyOrderGroups = aggregateActiveBuyOrders(snapshot.orders);
-    applyCachedLowestSellPrices(state.activeBuyOrderGroups);
-    state.activeOrdersLoadedAt = snapshot.observedAt;
-    const keys = new Set(state.activeBuyOrderGroups.map(group => group.key));
-    state.selectedActiveBuyOrderGroups.forEach(key => {
-      if (!keys.has(key)) state.selectedActiveBuyOrderGroups.delete(key);
-    });
-    renderActiveBuyOrders();
+    applyActiveBuyOrderSnapshot(snapshot);
     setStatus(
       snapshot.diagnostics.length
         ? `已读取 ${snapshot.orders.length} 笔；另有 ${snapshot.diagnostics.length} 行无法确认，未纳入操作`
@@ -378,12 +413,11 @@ export async function refreshActiveBuyOrders() {
   } finally {
     queue.stop();
     state.activeOrdersLoading = false;
-    updateHeaderSelectionState();
-    updateAllActionStates();
+    renderActiveBuyOrders();
   }
 }
 
-async function querySelectedLowestSellPrices() {
+export async function querySelectedOrderPrices() {
   if (isPriceOverviewProbeBlocked(
     state.activeOrdersLoading || state.activeOrderPriceQueryRunning
   )) return;
@@ -393,34 +427,53 @@ async function querySelectedLowestSellPrices() {
   if (groups.length === 0) return;
 
   state.activeOrderPriceQueryRunning = true;
-  groups.forEach(group => { group.lowestSellState = "loading"; });
-  renderActiveBuyOrders();
+  function updatePriceCells(group) {
+    updateLowestSellCell(group);
+    if (group._smartCell?.isConnected) updateSmartCell(group);
+  }
+  groups.forEach(group => {
+    group.lowestSellState = "loading";
+    group.lowestSellMinor = null;
+    group.suggestedMinor = null;
+    group.quoteCurrencyId = null;
+    state.activeOrderLowestPrices.delete(group.key);
+    updatePriceCells(group);
+  });
+  updateHeaderSelectionState();
   updateAllActionStates();
   const queue = createRequestQueuePool(
     getHtmlRequestConcurrency(state.cfg),
     () => new RequestQueue(
       state.cfg.requestInterval,
       state,
-      text => setStatus(text || "正在查询最低售价"),
+      text => setStatus(text || "正在查价"),
       null,
       { stopPredicate: () => false }
     )
   );
   let found = 0;
-  let missing = 0;
+  let quotes = 0;
+  setStatus("正在查价");
   const observations = [];
   try {
     const currencyId = getOrderCurrencyContext().currencyId;
+    const pricing = getSmartPricingContext();
     let completed = 0;
-    await runWithConcurrency(groups, getHtmlRequestConcurrency(state.cfg), async (group, index) => {
-      setStatus(`正在查询最低售价 ${index + 1}/${groups.length}：${group.displayName}`);
+    await runWithConcurrency(groups, getHtmlRequestConcurrency(state.cfg), async group => {
       const result = await priceCard(group.marketHashName, queue, {
         appid: group.appid,
         currencyId,
-        preferListing: true,
+        includeBuyDepth: Boolean(pricing),
         persistMarketCache: false,
       });
       if (result?.record) observations.push(result.record);
+      if (pricing && result.buyDepth?.currencyId === pricing.currencyId) {
+        group.suggestedMinor = calculateAutomaticBuyPrice(result.buyDepth, pricing)?.finalPriceMinor ?? null;
+        if (group.suggestedMinor) {
+          group.quoteCurrencyId = pricing.currencyId;
+          quotes++;
+        }
+      }
       const lowest = Number(result?.record?.lowestSellMinor);
       if (isPriceCardPriced(result) && Number.isSafeInteger(lowest) && lowest > 0) {
         group.lowestSellMinor = lowest;
@@ -436,26 +489,28 @@ async function querySelectedLowestSellPrices() {
         group.lowestSellState = isPriceCardNoPrice(result) || !isPriceCardError(result)
           ? "missing"
           : "failed";
-        missing += 1;
       }
-      updateLowestSellCell(group);
+      updatePriceCells(group);
       completed++;
-      setStatus(`正在查询最低售价 ${completed}/${groups.length}`);
+      setStatus(`正在查价 ${completed}/${groups.length}`);
     });
     setStatus(
-      missing ? `最低售价查询完成：成功 ${found} 项，缺失或失败 ${missing} 项` : `最低售价查询完成：${found} 项`,
-      missing ? "warn" : "ok"
+      `查价完成：智能买价 ${quotes}/${groups.length} 项，最低售价 ${found}/${groups.length} 项`,
+      quotes < groups.length || found < groups.length ? "warn" : "ok"
     );
   } catch (error) {
-    setStatus(`最低售价查询中断：${error?.message || error}`, "err");
+    setStatus(`查价中断：${error?.message || error}`, "err");
   } finally {
     queue.stop();
     if (observations.length > 0) persistMarketObservations(observations);
     groups.forEach(group => {
-      if (group.lowestSellState === "loading") group.lowestSellState = "failed";
+      if (group.lowestSellState === "loading") {
+        group.lowestSellState = "failed";
+        updatePriceCells(group);
+      }
     });
     state.activeOrderPriceQueryRunning = false;
-    renderActiveBuyOrders();
+    updateHeaderSelectionState();
     updateAllActionStates();
   }
 }
@@ -463,7 +518,7 @@ async function querySelectedLowestSellPrices() {
 async function cancelBuyOrder(order) {
   const sessionid = getSessionId();
   if (!sessionid) throw new Error("未找到 Steam sessionid");
-  const response = await window.fetch("https://steamcommunity.com/market/cancelbuyorder/", {
+  const response = await marketFetch("https://steamcommunity.com/market/cancelbuyorder/", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
@@ -478,6 +533,126 @@ async function cancelBuyOrder(order) {
   }
   if (!isCancelBuyOrderResponseSuccessful(response.ok, data)) {
     throw new Error(`Steam 返回未确认结果（HTTP ${response.status}）`);
+  }
+}
+
+async function getCancelledOrderQuantity(order, sessionId) {
+  const params = new URLSearchParams({ sessionid: sessionId, buy_orderid: order.orderId });
+  const response = await marketFetch(`https://steamcommunity.com/market/getbuyorderstatus/?${params}`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  const data = await response.json();
+  const quantity = Number(data?.quantity_remaining);
+  if (!response.ok || data?.success !== 1 || ![0, false, "0"].includes(data.active)
+    || !/^\d+$/.test(String(data.quantity_remaining)) || !Number.isSafeInteger(quantity)
+    || quantity > order.remainingQuantity) {
+    throw new Error(`无法确认订单 ${order.orderId} 撤销后的剩余数量`);
+  }
+  return quantity;
+}
+
+export async function relistSelectedBuyOrders() {
+  if (isSharedActionBusy()) return;
+  const selected = state.activeBuyOrderGroups.filter(group => state.selectedActiveBuyOrderGroups.has(group.key));
+  const groups = selected.filter(group => group.suggestedMinor);
+  if (!groups.length) return;
+  const skipped = selected.length - groups.length;
+
+  state.activeOrdersCancelling = true;
+  updateAllActionStates();
+  let changed = false;
+  let completed = 0;
+  let failure = "";
+  try {
+    const sessionId = getBuyOrderSession();
+    const currencyId = getOrderCurrencyContext().currencyId;
+    if (groups.some(group => group.quoteCurrencyId !== currencyId)) throw new Error("钱包币种已改变，请重新查价");
+    const total = groups.reduce((sum, group) => sum + group.suggestedMinor * group.remainingQuantity, 0);
+    const confirmed = await showConfirmation({
+      title: "重挂选中订购单",
+      summaryHtml: `${groups.length} 项 · ${formatMoney(total)}`
+        + (skipped ? ` · 已跳过 ${skipped} 项无可用买价` : ""),
+      note: "将撤销原单，再按所示单价重挂未成交数量。撤单后可能无法重新下单。",
+      confirmLabel: "重挂选中",
+    }, list => {
+      for (const group of groups) {
+        const row = createElement("div", "stch-order-item");
+        row.append(createElement("span", "", group.displayName),
+          createElement("span", "", `× ${group.remainingQuantity}`),
+          createElement("span", "stch-order-price-basis", `${priceLabel(group)} → ${formatMoney(group.suggestedMinor)}`),
+          createElement("span", "", formatMoney(group.suggestedMinor * group.remainingQuantity)));
+        list.appendChild(row);
+      }
+    });
+    if (!confirmed) return;
+
+    const log = document.getElementById("stch-active-orders-log");
+    log?.replaceChildren();
+    const snapshot = await fetchActiveBuyOrderSnapshot();
+    const current = new Map(aggregateActiveBuyOrders(snapshot.orders).map(group => [group.key, group]));
+    for (const group of groups) {
+      const live = current.get(group.key);
+      const ambiguous = snapshot.diagnostics.some(row => group.orders.some(order => order.orderId === row.orderId)
+        || (row.appid === group.appid && row.marketHashName === group.marketHashName));
+      if (ambiguous || live?.orderCount !== group.orderCount || group.orders.some(order =>
+        !live.orders.some(other => other.orderId === order.orderId && other.remainingQuantity === order.remainingQuantity
+          && other.unitPriceMinor === order.unitPriceMinor)
+      )) {
+        applyActiveBuyOrderSnapshot(snapshot);
+        throw new Error("订购单已变动或无法核对，请刷新后重新查价");
+      }
+    }
+
+    for (const group of groups) {
+      const { displayName, marketHashName, suggestedMinor } = group;
+      let quantity = 0;
+      setStatus(`正在重挂 ${completed + 1}/${groups.length}：${displayName}`);
+      for (const order of group.orders) {
+        if (getBuyOrderSession() !== sessionId || getOrderCurrencyContext().currencyId !== currencyId) {
+          throw new Error("Steam 会话或币种已改变");
+        }
+        changed = true;
+        try {
+          await cancelBuyOrder(order);
+        } catch (error) {
+          throw new Error(`${displayName} · 撤单结果未确认（${order.orderId}）：${error.message}`);
+        }
+        appendCancelLog(`已撤销 ${displayName} · ${order.orderId}`, "ok");
+        quantity += await getCancelledOrderQuantity(order, sessionId);
+      }
+      if (quantity > 0) {
+        if (getBuyOrderSession() !== sessionId) throw new Error("Steam 会话或币种已改变");
+        try {
+          await createLongTermBuyOrder({
+            marketAppid: group.appid, marketHashName, cardName: displayName, currencyId,
+            quantity, totalPriceCents: suggestedMinor * quantity,
+          }, { setStatus, log: appendCancelLog });
+        } catch (error) {
+          throw new Error(`${displayName} · 原单已撤销，新单未确认：${error.message}`);
+        }
+      }
+      appendCancelLog(`${displayName} · ${formatMoney(suggestedMinor)} × ${quantity}`, "ok");
+      completed++;
+    }
+  } catch (error) {
+    failure = error?.message || String(error);
+    appendCancelLog(failure, "err");
+  } finally {
+    if (changed) {
+      try {
+        applyActiveBuyOrderSnapshot(await fetchActiveBuyOrderSnapshot());
+      } catch (error) {
+        applyActiveBuyOrderSnapshot({ orders: [], observedAt: 0 });
+        const refreshError = `读取失败：${error?.message || error}`;
+        appendCancelLog(refreshError, "err");
+        failure ||= refreshError;
+      }
+    }
+    state.activeOrdersCancelling = false;
+    renderActiveBuyOrders();
+    if (failure) setStatus(`重挂停止（已完成 ${completed}/${groups.length}）：${failure}`, "err");
+    else if (changed) setStatus(`重挂完成：${completed} 项`, "ok");
   }
 }
 
@@ -522,7 +697,6 @@ async function cancelGroups(groups) {
   });
   state.activeOrdersCancelling = false;
   renderActiveBuyOrders();
-  updateAllActionStates();
   if (failures.length) {
     const preview = failures.slice(0, 3).map(item => `${item.order.displayName}: ${item.message}`).join("；");
     setStatus(`撤单完成：成功 ${succeeded.size}，失败 ${failures.length}。${preview}`, "warn");
@@ -535,6 +709,15 @@ export function initActiveBuyOrdersUi() {
   const list = document.getElementById("stch-active-orders-list");
   if (!list || list.dataset.ready === "1") return;
   list.dataset.ready = "1";
+  document.getElementById("stch-active-orders-select-all")?.addEventListener("change", event => {
+    const checked = event.currentTarget.checked;
+    selectVisibleOrders(() => checked);
+  });
+  for (const [id, direction] of [["overpriced", -1], ["underpriced", 1]]) {
+    document.getElementById("stch-active-orders-" + id)?.addEventListener("click", () => {
+      selectVisibleOrders(group => Boolean(group.suggestedMinor) && direction * smartPriceDelta(group) > 0);
+    });
+  }
   enableCheckboxDragSelection(list, {
     checkboxSelector: ".stch-active-order-cb",
     activationSelector: ".stch-active-order-select",
@@ -547,7 +730,10 @@ export function initActiveBuyOrdersUi() {
     void refreshActiveBuyOrders();
   });
   document.getElementById("stch-active-orders-query-prices")?.addEventListener("click", () => {
-    void querySelectedLowestSellPrices();
+    void querySelectedOrderPrices();
+  });
+  document.getElementById("stch-active-orders-relist")?.addEventListener("click", () => {
+    void relistSelectedBuyOrders();
   });
   document.getElementById("stch-active-orders-cancel-selected")?.addEventListener("click", () => {
     const selected = state.activeBuyOrderGroups.filter(group => state.selectedActiveBuyOrderGroups.has(group.key));

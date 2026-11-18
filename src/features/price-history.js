@@ -23,6 +23,7 @@ import {
   getHtmlRequestConcurrency,
   runWithConcurrency,
 } from "../utils/concurrency.js";
+import { setStatusText } from "../utils/dom.js";
 
 const MARKET_APPID = "753";
 const RANGE_MS = Object.freeze({
@@ -46,12 +47,7 @@ function getCurrencyId() {
 }
 
 function setHistoryStatus(text, kind = "") {
-  const element = document.getElementById("stch-history-status");
-  if (!element) return;
-  element.textContent = text || "";
-  element.classList.toggle("err", kind === "err");
-  element.classList.toggle("warn", kind === "warn");
-  element.style.display = text ? "" : "none";
+  setStatusText("stch-history-status", text, kind);
 }
 
 function setRefreshRunning(running) {
@@ -553,7 +549,6 @@ async function refreshAllPrices() {
       const overview = await priceCard(item.marketHashName, queue, {
         appid: MARKET_APPID,
         currencyId,
-        preferListing: true,
         requireVolume: true,
         persistMarketCache: false,
         onMetadata: value => { metadata = mergeMetadata(metadata, value); },

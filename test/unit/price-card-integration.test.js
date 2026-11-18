@@ -8,6 +8,7 @@ import {
   isPriceCardError,
   isPriceCardNoPrice,
   isPriceCardPriced,
+  priceBadgeCard,
   priceCard,
 } from "../../src/parsers/price.js";
 import {
@@ -56,6 +57,7 @@ class FakeRequestQueue {
   async fetch(url, options = {}) {
     const parsedUrl = new URL(url);
     this.calls.push({ url: parsedUrl, options });
+    if (parsedUrl.pathname.startsWith("/market/listings/")) return { status: 200, text: "" };
     const payload = this.payloadByCurrency[parsedUrl.searchParams.get("currency")];
     assert.ok(payload, `missing synthetic payload for ${parsedUrl.href}`);
     return {
@@ -139,7 +141,6 @@ test("priceCard uses listing orderbook and transaction history before priceoverv
   Date.now = () => observedAt;
 
   const result = await priceCard(MARKET_HASH_NAME, queue, {
-    preferListing: true,
     requireMedian: true,
     requireVolume: true,
     persistMarketCache: false,
@@ -151,6 +152,122 @@ test("priceCard uses listing orderbook and transaction history before priceoverv
   assert.equal(result.medianCents, 35);
   assert.equal(result.volume, 10);
   assert.equal(result.record.source, MARKET_DATA_SOURCES.LISTING_PAGE);
+});
+
+function badgePriceQueue(orderbook, history) {
+  const queries = Object.entries({ orderbook, pricehistory: history })
+    .filter(([, data]) => data != null)
+    .map(([type, data]) => ({
+      queryKey: ["market", type, 753, MARKET_HASH_NAME],
+      state: { data },
+    }));
+  const envelope = { renderContext: { queryData: JSON.stringify({ queries }) } };
+  const text = `<script type="application/json" id="valve-ssr-data">${JSON.stringify(envelope)}</script>`;
+  return {
+    calls: [],
+    async fetch(url) {
+      const path = new URL(url).pathname;
+      this.calls.push(path);
+      if (path.startsWith("/market/listings/")) return { status: 200, text };
+      assert.equal(path, "/market/priceoverview/");
+      return { status: 200, data: { success: true, lowest_price: "¥ 0.41" } };
+    },
+  };
+}
+
+test("badge scans retain the HTML ask and distinguish absent history from zero recent sales", async () => {
+  initializeActiveCurrency(23);
+  const book = { eCurrency: 23, amtMinSellOrder: 32 };
+  const now = Math.floor(Date.now() / 1000);
+  for (const [prices, volume, median] of [
+    [undefined, null, null],
+    [[], 0, null],
+    [[{ time: now - 3 * 86400, price_median: 0.28, purchases: 7 }], 0, null],
+    [[{ time: now - 3600, price_median: 0.35, purchases: 7 }], 7, 35],
+  ]) {
+    const queue = badgePriceQueue(book, prices && { ecurrency: 23, prices });
+    const result = await priceBadgeCard(MARKET_HASH_NAME, queue);
+    assert.equal(queue.calls.length, 1);
+    assert.equal(result.lowestSellCents, 32);
+    assert.equal(result.estimated, false);
+    assert.equal(result.record.medianMinor, median);
+    assert.equal(result.volume, volume);
+    assert.equal(result.record.volume, volume);
+  }
+  assert.equal(gmWrites.length, 0);
+});
+
+test("a confirmed HTML median can price a badge card without a sell order", async () => {
+  initializeActiveCurrency(23);
+  const history = { ecurrency: 23, prices: [
+    { time: Math.floor(Date.now() / 1000) - 3600, price_median: 0.35, purchases: 7 },
+  ] };
+  const queue = badgePriceQueue(null, history);
+  const result = await priceBadgeCard(MARKET_HASH_NAME, queue);
+  assert.equal(queue.calls.length, 1);
+  assert.equal(result.lowestSellCents, 35);
+  assert.equal(result.estimated, true);
+});
+
+test("badge scans fall back once when HTML provides no usable price in the active currency", async () => {
+  initializeActiveCurrency(23);
+  for (const [book, history] of [
+    [null, null],
+    [{ eCurrency: 23, amtMinSellOrder: 0 }, { ecurrency: 23, prices: [] }],
+    [{ eCurrency: 1, amtMinSellOrder: 32 }, null],
+    [{ amtMinSellOrder: 32 }, { ecurrency: 23, prices: [] }],
+    [{ eCurrency: 23, amtMinSellOrder: 32 }, { ecurrency: 1, prices: [] }],
+  ]) {
+    const queue = badgePriceQueue(book, history);
+    const result = await priceBadgeCard(MARKET_HASH_NAME, queue);
+    assert.equal(queue.calls.length, 2);
+    assert.match(queue.calls[0], /^\/market\/listings\//);
+    assert.equal(queue.calls[1], "/market/priceoverview/");
+    assert.equal(result.lowestSellCents, 41);
+    assert.equal(result.volume, null);
+    assert.equal(result.record.source, MARKET_DATA_SOURCES.PRICE_OVERVIEW);
+  }
+});
+
+test("a confirmed empty sell book needs no second request, while an incomplete book falls back", async () => {
+  initializeActiveCurrency(23);
+  for (const count of [0, 5]) {
+    const queue = badgePriceQueue({ eCurrency: 23, cSellOrders: count }, null);
+    const result = await priceCard(MARKET_HASH_NAME, queue);
+    assert.equal(queue.calls.length, count ? 2 : 1);
+    assert.equal(result.record.lowestSellMinor, count ? 41 : null);
+  }
+});
+
+test("a rate-limited market listing does not start a priceoverview request", async () => {
+  initializeActiveCurrency(23);
+  for (const rejected of [true, false]) {
+    const calls = [];
+    const result = await priceCard(MARKET_HASH_NAME, { async fetch(url) {
+      calls.push(new URL(url).pathname);
+      if (rejected) throw { status: 429, text: "Too Many Requests" };
+      return { status: 429, text: "Too Many Requests" };
+    } });
+    assert.equal(result.httpStatus, 429);
+    assert.deepEqual(calls, ["/market/listings/753/" + encodeURIComponent(MARKET_HASH_NAME)]);
+  }
+});
+
+test("callers requiring a median or volume still fetch missing data", async () => {
+  initializeActiveCurrency(23);
+  const optional = badgePriceQueue({ eCurrency: 23, amtMinSellOrder: 32 }, null);
+  const item = await priceCard(MARKET_HASH_NAME, optional, { includeHistory: true });
+  assert.equal(item.record.lowestSellMinor, 32);
+  assert.equal(item.record.volume, null);
+  assert.equal(optional.calls.length, 1);
+  for (const requirement of ["requireMedian", "requireVolume"]) {
+    const queue = badgePriceQueue({ eCurrency: 23, amtMinSellOrder: 32 }, null);
+    const result = await priceCard(MARKET_HASH_NAME, queue, {
+      [requirement]: true, persistMarketCache: false,
+    });
+    assert.equal(queue.calls.length, 2);
+    assert.equal(result.record.source, MARKET_DATA_SOURCES.PRICE_OVERVIEW);
+  }
 });
 
 test("priceCard follows the active CNY/USD context and keeps their cached records isolated", async () => {
@@ -184,8 +301,10 @@ test("priceCard follows the active CNY/USD context and keeps their cached record
     onPersist: result => persistenceResults.push(result),
   });
 
-  assert.equal(queue.calls.length, 2);
-  for (const [call, currencyId] of queue.calls.map((call, index) => [call, [23, 1][index]])) {
+  assert.equal(queue.calls.length, 4);
+  for (const [index, currencyId] of [23, 1].entries()) {
+    assert.match(queue.calls[index * 2].url.pathname, /^\/market\/listings\/753\//);
+    const call = queue.calls[index * 2 + 1];
     assert.equal(call.url.origin, "https://steamcommunity.com");
     assert.equal(call.url.pathname, "/market/priceoverview/");
     assert.equal(call.url.searchParams.get("appid"), "753");
@@ -276,7 +395,7 @@ test("priceCard preserves a successful response with no price data", async () =>
     observedAt,
   });
 
-  assert.equal(queue.calls[0].url.searchParams.get("currency"), "23");
+  assert.equal(queue.calls[1].url.searchParams.get("currency"), "23");
   assert.deepEqual(result, {
     outcome: PRICE_CARD_OUTCOMES.NO_PRICE,
     noPriceData: true,
@@ -466,7 +585,7 @@ test("an HKD page context sends currency 29 instead of the configured CNY fallba
 
   const result = await priceCard(MARKET_HASH_NAME, queue);
 
-  assert.equal(queue.calls[0].url.searchParams.get("currency"), "29");
+  assert.equal(queue.calls[1].url.searchParams.get("currency"), "29");
   assert.equal(result.currencyId, 29);
   assert.equal(result.lowestSellCents, 26);
   assert.equal(result.medianCents, 27);

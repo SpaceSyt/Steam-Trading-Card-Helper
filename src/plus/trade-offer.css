@@ -1,0 +1,15 @@
+.stch-trade-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 10px 0;
+  color: #d6d7d8;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.stch-trade-summary span { white-space: nowrap; }
+.stch-trade-comparison { margin: 12px 0; color: #d6d7d8; font-size: 14px; line-height: 1.5; }
+.stch-trade-comparison[data-direction="gain"] { color: #a4d86c; }
+.stch-trade-comparison[data-direction="loss"] { color: #ff8b83; }
+.stch-trade-retry { margin-left: 10px; padding: 3px 8px; border: 1px solid #677584; border-radius: 2px; background: #30445a; color: #fff; font: inherit; cursor: pointer; }
+.stch-trade-retry:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }

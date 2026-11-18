@@ -60,3 +60,32 @@ export async function runWithConcurrency(items, concurrency, operation) {
   const count = Math.min(Math.max(1, concurrency), items.length);
   await Promise.all(Array.from({ length: count }, () => worker()));
 }
+
+export function createBadgePriceScheduler(overviewQueue) {
+  let overviewTail = Promise.resolve();
+  return async function scanListings(cards, concurrency, htmlQueue, isCancelled, priceOne) {
+    const jobs = [];
+    let failure;
+    await runWithConcurrency(cards, concurrency, card => new Promise(releaseListing => {
+      if (isCancelled()) return releaseListing();
+      const cardQueue = {
+        fetch(url, options) {
+          if (options?.requestPolicy !== "priceoverview") return htmlQueue.fetch(url, options, isCancelled);
+          releaseListing();
+          const response = overviewTail.then(() => {
+            if (isCancelled()) throw { status: 0, error: "skipped" };
+            return overviewQueue.fetch(url, options, isCancelled);
+          });
+          // Apply this card's price and threshold decision before starting another fallback.
+          overviewTail = job;
+          return response;
+        },
+      };
+      const job = Promise.resolve().then(() => priceOne(card, cardQueue))
+        .catch(error => { failure ??= error; })
+        .finally(releaseListing);
+      jobs.push(job);
+    }));
+    return { complete: Promise.all(jobs).then(() => { if (failure) throw failure; }) };
+  };
+}

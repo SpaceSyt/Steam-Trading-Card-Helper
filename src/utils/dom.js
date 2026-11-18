@@ -1,3 +1,43 @@
+  const inventoryTiles = new WeakMap();
+
+  export function invalidateInventoryTile(item) {
+    inventoryTiles.delete(item);
+  }
+
+  export function renderInventoryTiles(list, items, selected, getKey, createTile) {
+    const tiles = items.map(item => {
+      let tile = inventoryTiles.get(item);
+      const key = getKey(item);
+      if (!tile) {
+        tile = createTile(item, key);
+        inventoryTiles.set(item, tile);
+      }
+      tile.classList.toggle("selected", selected.has(key));
+      return tile;
+    });
+    const retained = new Set(tiles);
+    for (const child of [...list.children]) {
+      if (!retained.has(child)) child.remove();
+    }
+    let next = list.firstChild;
+    for (const tile of tiles) {
+      if (tile !== next) list.insertBefore(tile, next);
+      next = tile.nextSibling;
+    }
+  }
+
+  export function createFrameScheduler(update) {
+    let pending = false;
+    return () => {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => {
+        pending = false;
+        update();
+      });
+    };
+  }
+
   export function createTextSpan(className, text) {
     const span = document.createElement("span");
     span.className = className;
@@ -22,6 +62,8 @@
   export function appendInventoryImage(root, imageUrl, label) {
     const image = document.createElement(imageUrl ? "img" : "div");
     if (imageUrl) {
+      image.loading = "lazy";
+      image.decoding = "async";
       image.src = imageUrl;
       image.alt = label || "";
     } else {
@@ -29,6 +71,45 @@
       image.textContent = label || "?";
     }
     root.appendChild(image);
+  }
+
+  export function createInventoryTile({
+    key,
+    selected,
+    title,
+    imageUrl,
+    label,
+    className = "",
+    volumeZero = false,
+    nameColor = "",
+    backgroundColor = "",
+  }) {
+    const tile = document.createElement("div");
+    tile.className = `stch-inv-tile${className ? ` ${className}` : ""}`;
+    tile.dataset.key = key;
+    tile.classList.toggle("selected", selected);
+    tile.classList.toggle("stch-volume-zero", volumeZero);
+    tile.title = title;
+    if (nameColor) tile.style.borderColor = nameColor;
+    if (backgroundColor) tile.style.backgroundColor = backgroundColor;
+    appendInventoryImage(tile, imageUrl, label);
+    return tile;
+  }
+
+  export function appendInventoryTileText(root, tagName, className, text, title = "") {
+    const element = document.createElement(tagName);
+    element.className = className;
+    element.textContent = text;
+    element.title = title;
+    root.appendChild(element);
+  }
+
+  export function setStatusText(id, text, type = "") {
+    const element = document.getElementById(id);
+    if (!element) return;
+    element.textContent = text || "";
+    element.className = `stch-status-text${type ? ` ${type}` : ""}`;
+    element.style.display = text ? "" : "none";
   }
 
   export function getFirstText(root, selectors) {

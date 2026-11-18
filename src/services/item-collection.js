@@ -94,9 +94,16 @@ export function isItemCollectionHealthy() {
   return state.itemCollectionHealthy !== false;
 }
 
+let indexedItems;
+let collectedKeys = new Set();
+
 export function isItemCollected(item, category = item?.category) {
+  if (indexedItems !== state.itemCollectionItems) {
+    indexedItems = state.itemCollectionItems;
+    collectedKeys = new Set((indexedItems || []).map(entry => entry.key));
+  }
   const key = getItemCollectionKey(item, category);
-  return !!key && (state.itemCollectionItems || []).some(entry => entry.key === key);
+  return !!key && collectedKeys.has(key);
 }
 
 export function addItemCollectionEntries(entries) {

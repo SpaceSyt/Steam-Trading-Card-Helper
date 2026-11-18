@@ -48,6 +48,7 @@ test("listing SSR snapshot includes order counts, description name, and image", 
     highestBuyCents: 29,
     lowestSellCents: 32,
     currency: 23,
+    noBuyOrders: false,
     sellOrderCount: 28684,
     displayName: "Sack of Gems",
     imageUrl: "https://community.fastly.steamstatic.com/economy/image/synthetic/large/icon/path",
@@ -56,6 +57,26 @@ test("listing SSR snapshot includes order counts, description name, and image", 
     parseMarketOrderbookFromListingHtml(html, MARKET_HASH_NAME),
     snapshot
   );
+});
+
+test("malformed history leaves orderbook prices available and volume unknown", () => {
+  const now = Math.floor(Date.now() / 1000);
+  for (const prices of [undefined, null, {}, [{}], [{ time: now, purchases: 1 }]]) {
+    const html = makeSsrHtml([
+      {
+        queryKey: ["market", "orderbook", 753, MARKET_HASH_NAME],
+        state: { data: { amtMinSellOrder: 32, amtMaxBuyOrder: 29, eCurrency: 23 } },
+      },
+      {
+        queryKey: ["market", "pricehistory", 753, MARKET_HASH_NAME],
+        state: { data: { ecurrency: 23, prices } },
+      },
+    ]);
+    const snapshot = parseMarketListingSnapshotFromHtml(html, MARKET_HASH_NAME);
+    assert.equal(snapshot?.lowestSellCents, 32);
+    assert.equal(snapshot.highestBuyCents, 29);
+    assert.equal(snapshot.volume, undefined);
+  }
 });
 
 test("listing SSR derives recent median and volume from transaction history", () => {
@@ -83,6 +104,30 @@ test("listing SSR derives recent median and volume from transaction history", ()
   assert.equal(snapshot.historyCurrency, 23);
   assert.equal(snapshot.medianPriceMajor, 4.49);
   assert.equal(snapshot.volume, 10);
+});
+
+test("history alone supplies recent sales or confirms zero recent volume", () => {
+  const now = Math.floor(Date.now() / 1000);
+  const hour = 3600;
+  const oldSale = { time: now - 27 * hour, price_median: 5, purchases: 6 };
+  const sales = [
+    { time: now - 25 * hour, price_median: "bad" },
+    { time: now, price_median: 1, purchases: 2 },
+    oldSale,
+  ];
+  for (const [prices, volume, median] of [[sales, 2, 1], [[oldSale], 0, null], [[], 0, null]]) {
+    const html = makeSsrHtml([{
+      queryKey: ["market", "pricehistory", 753, MARKET_HASH_NAME],
+      state: { data: { ecurrency: 23, prices } },
+    }]);
+    const snapshot = parseMarketListingSnapshotFromHtml(html, MARKET_HASH_NAME);
+    assert.equal(snapshot.lowestSellCents, null);
+    assert.equal(snapshot.historyCurrency, 23);
+    assert.equal(snapshot.volume, volume);
+    assert.equal(snapshot.medianPriceMajor, median);
+    assert.equal(parseMarketListingSnapshotFromHtml(html, "753-Other"), null);
+    assert.equal(parseMarketListingSnapshotFromHtml(html, MARKET_HASH_NAME, { includeHistory: false }), null);
+  }
 });
 
 test("description metadata remains usable when the listing has no buy order", () => {
@@ -157,6 +202,7 @@ test("listing SSR exposes strictly validated buy-order depth", () => {
       highestBuyCents: 430,
       lowestSellCents: 438,
       currency: 23,
+      noBuyOrders: false,
       sellOrderCount: 100,
       displayName: "",
       imageUrl: "",

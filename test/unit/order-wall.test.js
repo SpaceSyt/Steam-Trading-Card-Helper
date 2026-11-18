@@ -180,7 +180,7 @@ test("automatic strategies price from the effective best after removing one isol
   }).finalPriceMinor, 61);
 });
 
-test("automatic wall pricing maps Gems to bottom, top, and top-plus-one defaults", async () => {
+test("automatic wall pricing maps Gems to bottom, top, and effective-best-plus-one defaults", async () => {
   const fixture = await readFixture("orderbook-wall-gems.json");
   const depth = {
     highestBuyMinor: fixture.state.data.amtMaxBuyOrder,
@@ -196,7 +196,7 @@ test("automatic wall pricing maps Gems to bottom, top, and top-plus-one defaults
   }).finalPriceMinor, 428);
   assert.equal(calculateAutomaticBuyPrice(depth, {
     strategy: "aggressive",
-  }).finalPriceMinor, 429);
+  }).finalPriceMinor, 431);
 });
 
 test("automatic no-wall pricing defaults to best minus two, minus one, and plus one", async () => {
@@ -272,4 +272,17 @@ test("automatic pricing applies adjustment and then guards below the lowest sell
   assert.equal(quote.adjustedPriceMinor, 106);
   assert.equal(quote.finalPriceMinor, 101);
   assert.equal(quote.wasSellGuardClamped, true);
+});
+
+test("aggressive ignores legacy wall anchors and selects the offset after filtering an isolated high", () => {
+  const depth = { highestBuyMinor: 130, lowestSellMinor: 150, buyLevels: [130, 1, 100, 10, 99, 10, 98, 80] };
+  const options = { strategy: "aggressive", strategyRule: { wallAnchor: "bottom", wallOffsetMinor: 2, noWallOffsetMinor: -3 } };
+  const wall = calculateAutomaticBuyPrice(depth, options);
+  assert.equal(wall.effectiveHighestBuyMinor, 100);
+  assert.equal(wall.detection.nearestCluster.bottomPriceMinor, 98);
+  assert.equal(wall.wallReferencePriceMinor, null);
+  assert.equal(wall.finalPriceMinor, 102);
+  const noWall = calculateAutomaticBuyPrice({ ...depth, buyLevels: [130, 1, 100, 10, 99, 10, 98, 12] }, options);
+  assert.equal(noWall.detection.nearestCluster, null);
+  assert.equal(noWall.finalPriceMinor, 97);
 });

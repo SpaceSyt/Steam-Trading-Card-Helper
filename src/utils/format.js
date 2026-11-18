@@ -1,5 +1,4 @@
 import {
-  CURRENCY_IDS,
   formatMinorAmount,
   formatMoney,
   getCurrencyStatus,
@@ -12,11 +11,6 @@ export {
   getCurrencyStatus,
   parseCurrencyAmount,
 };
-
-  // Compatibility helper for callers that still store and display CNY cents.
-  export function formatCNY(cents) {
-    return formatMinorAmount(cents, CURRENCY_IDS.CNY, { useGrouping: false });
-  }
 
   export function formatInt(value) {
     const number = Number(value);

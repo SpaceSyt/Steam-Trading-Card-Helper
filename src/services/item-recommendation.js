@@ -1,4 +1,5 @@
 import { formatMoney } from "../utils/format.js";
+import { invalidateInventoryTile } from "../utils/dom.js";
 import {
   getGemBreakEvenBuyerPrice,
   getGemValueSellerNetCents,
@@ -6,6 +7,7 @@ import {
 } from "../utils/market-fees.js";
 
 export function applyItemRecommendation(item, gemSackPriceCents) {
+  invalidateInventoryTile(item);
   item.gemSackPriceCents = gemSackPriceCents || 0;
   item.gemValueNetCents = getGemValueSellerNetCents(item.totalGems, gemSackPriceCents);
   item.unitGemValueNetCents = getGemValueSellerNetCents(item.gemValue, gemSackPriceCents);

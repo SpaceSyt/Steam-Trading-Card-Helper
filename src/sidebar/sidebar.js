@@ -118,7 +118,8 @@ import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action
     if (refresh) refresh.disabled = sidebarLoading;
   }
 
-  export async function refreshSidebarData({ forceGemPrice = false } = {}) {
+  export async function refreshSidebarData({ forceGemPrice = false, pricesOnly = false } = {}) {
+    if (pricesOnly && !sidebarData.gems) return;
     if (isPriceOverviewProbeBlocked(sidebarLoading || state.sidebarPriceRefreshing)) return;
     if (forceGemPrice) resetSessionGemPrice();
     sidebarLoading = true;
@@ -132,7 +133,7 @@ import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action
       renderSidebar();
 
       const [gemsResult, priceResult] = await Promise.allSettled([
-        loadSidebarGemInfo(profile.steamId),
+        pricesOnly ? sidebarData.gems : loadSidebarGemInfo(profile.steamId),
         loadSidebarGemPrice(),
       ]);
       if (gemsResult.status === "fulfilled") {
@@ -246,6 +247,10 @@ import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action
       refreshSidebarData({ forceGemPrice: true });
     });
 
+    const loadOnView = () => {
+      if (!sidebarData.gems && !sidebarData.error) void refreshSidebarData();
+    };
+    sidebar.addEventListener("pointerenter", loadOnView);
+    sidebar.addEventListener("focusin", loadOnView);
     renderSidebar();
-    refreshSidebarData();
   }

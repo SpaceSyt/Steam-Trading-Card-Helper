@@ -14,6 +14,7 @@ import { loadConfig } from "./config.js";
     recalculationRunning: false,
     orderSubmissionRunning: false,
     automaticPricingDraft: null,
+    sellAutomaticPricingDraft: null,
     pendingOrderQuantities: new Map(),
     highestBuyPrices: new Map(),
     marketOrderDepths: new Map(),

@@ -113,6 +113,32 @@ function assertStoppedAndClean(queue) {
 
 afterEach(resetPriceOverviewRateState);
 
+test("skipping a priceoverview retry keeps its remaining 429 cooldown for the next card", async () => {
+  const timers = new ManualTimers();
+  const state = { skipCurrent: false };
+  const calls = [];
+  const queue = createQueue({ timers, state, fetchImpl: async url => {
+    calls.push([url, timers.now()]);
+    return response(calls.length === 1 ? 429 : 200);
+  } });
+  const first = capture(queue.fetch(PRICE_URL));
+  await flushUntil(() => queue.cooling, "first card cooldown");
+  state.skipCurrent = true;
+  timers.advanceBy(250);
+  assert.equal((await first).reason.status, 429);
+  state.skipCurrent = false;
+  const secondUrl = PRICE_URL + "&card=2";
+  const second = queue.fetch(secondUrl);
+  await flushUntil(() => queue.cooling, "second card cooldown");
+  timers.advanceBy(59749);
+  await flushUntil(() => timers.pendingCount > 0, "last cooldown tick");
+  assert.equal(calls.length, 1);
+  timers.advanceBy(1);
+  await second;
+  assert.deepEqual(calls, [[PRICE_URL, 0], [secondUrl, 60000]]);
+  queue.stop();
+});
+
 test("a scoped stop predicate ignores another feature's stop flag", async () => {
   const state = {
     stopRequested: false,

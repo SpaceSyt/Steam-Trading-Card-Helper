@@ -300,9 +300,9 @@ export function normalizeListingPage(payload, context = {}) {
       currencyId: firstDefined(payloadCurrencyId, requestedCurrencyId),
       currencyCode: currencyMismatch ? null : firstDefined(context.currencyCode, context.currency_code),
     }),
-    lowestSellMinor: normalizeMinorAmount(data.lowestSellCents),
-    medianMinor: parseMajorAmountToMinor(data.medianPriceMajor, getMinorDigits(context)),
-    highestBuyMinor: normalizeMinorAmount(data.highestBuyCents),
+    lowestSellMinor: orderbookCurrencyId && normalizeMinorAmount(data.lowestSellCents),
+    medianMinor: historyCurrencyId && parseMajorAmountToMinor(data.medianPriceMajor, getMinorDigits(context)),
+    highestBuyMinor: orderbookCurrencyId && normalizeMinorAmount(data.highestBuyCents),
     volume: normalizeMarketVolume(data.volume),
   });
 }

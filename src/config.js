@@ -1,9 +1,10 @@
   import { DEFAULT_TAB_ORDER } from "./constants.js";
   import { normalizeTabColors, normalizeTabOrder } from "./services/tab-preferences.js";
+  import { normalizeProcessingMode } from "./services/processing-mode.js";
 
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 32;
+  export const CONFIG_SCHEMA_VERSION = 35;
 
   export const AUTOMATIC_PRICE_STRATEGY_CONFIG = Object.freeze({
     conservative: Object.freeze({
@@ -17,11 +18,26 @@
       noWallOffsetKey: "automaticBalancedNoWallOffset",
     }),
     aggressive: Object.freeze({
-      anchorKey: "automaticAggressiveWallAnchor",
       wallOffsetKey: "automaticAggressiveWallOffset",
       noWallOffsetKey: "automaticAggressiveNoWallOffset",
     }),
   });
+
+  export const SELL_AUTOMATIC_PRICE_STRATEGY_CONFIG = Object.freeze({
+    instant: { wallOffsetKey: "sellInstantOffset", noWallOffsetKey: "sellInstantOffset" },
+    follow: { wallOffsetKey: "sellFollowOffset", noWallOffsetKey: "sellFollowOffset" },
+    conservative: { anchorKey: "sellConservativeAnchor", wallOffsetKey: "sellConservativeOffset", noWallOffsetKey: "sellConservativeOffset" },
+  });
+  function strategyConfig(sell) {
+    return sell ? SELL_AUTOMATIC_PRICE_STRATEGY_CONFIG : AUTOMATIC_PRICE_STRATEGY_CONFIG;
+  }
+  function normalizeStrategy(strategy, sell) {
+    return Object.hasOwn(strategyConfig(sell), strategy) ? strategy : sell ? "follow" : "balanced";
+  }
+  const ALL_AUTOMATIC_STRATEGY_FIELDS = [
+    ...Object.values(AUTOMATIC_PRICE_STRATEGY_CONFIG),
+    ...Object.values(SELL_AUTOMATIC_PRICE_STRATEGY_CONFIG),
+  ];
 
   export const DEFAULT_CONFIG = {
     configVersion: CONFIG_SCHEMA_VERSION,
@@ -58,7 +74,6 @@
     automaticBalancedWallAnchor: "top",
     automaticBalancedWallOffset: 0,
     automaticBalancedNoWallOffset: -0.01,
-    automaticAggressiveWallAnchor: "top",
     automaticAggressiveWallOffset: 0.01,
     automaticAggressiveNoWallOffset: 0.01,
     parallelOrderPricingEnabled: false,
@@ -73,8 +88,16 @@
     surplusOnlyTradable: false,
     surplusOnlyRecommended: true,
     surplusItemMode: "card",
+    surplusIncludeFoil: false,
+    surplusKeepMaxLevelCards: true,
     surplusSellPriceSource: "lowest",
     surplusSellPriceAdjustment: 0,
+    sellAutomaticPricingEnabled: false,
+    sellAutomaticPriceStrategy: "follow",
+    sellInstantOffset: 0,
+    sellFollowOffset: -0.01,
+    sellConservativeAnchor: "bottom",
+    sellConservativeOffset: 0,
     grindReserveCopies: 1,
     grindIncludePointsShopItems: false,
     tabOrder: [...DEFAULT_TAB_ORDER],
@@ -110,6 +133,7 @@
       ? currencyId
       : defaults.currencyId;
     merged.automaticPricingEnabled = merged.automaticPricingEnabled === true;
+    merged.sellAutomaticPricingEnabled = merged.sellAutomaticPricingEnabled === true;
     merged.parallelOrderPricingEnabled = merged.parallelOrderPricingEnabled === true;
     merged.parallelOtherRequestsEnabled = merged.parallelOtherRequestsEnabled !== false;
     merged.showAdvancedSettings = merged.showAdvancedSettings === true;
@@ -118,6 +142,9 @@
     merged.showScanSellSetColumn = merged.showScanSellSetColumn !== false;
     merged.minimumPriceFallback = minimumPriceFallback;
     merged.surplusOnlyRecommended = legacyOnlyRecommended;
+    merged.surplusItemMode = normalizeProcessingMode(merged.surplusItemMode);
+    merged.surplusIncludeFoil = merged.surplusIncludeFoil === true;
+    merged.surplusKeepMaxLevelCards = merged.surplusKeepMaxLevelCards !== false;
     merged.tabOrder = normalizeTabOrder(merged.tabOrder);
     merged.tabColors = normalizeTabColors(merged.tabColors);
     const blacklistExpiryDays = Number(merged.blacklistExpiryDays);
@@ -132,13 +159,13 @@
     merged.parallelOtherRequestsConcurrency = Number.isFinite(parallelOtherRequestsConcurrency)
       ? Math.min(20, Math.max(1, Math.floor(parallelOtherRequestsConcurrency)))
       : defaults.parallelOtherRequestsConcurrency;
-    merged.automaticPriceStrategy = ["conservative", "balanced", "aggressive"]
-      .includes(merged.automaticPriceStrategy)
-      ? merged.automaticPriceStrategy
-      : defaults.automaticPriceStrategy;
+    for (const key of ["automaticPriceStrategy", "sellAutomaticPriceStrategy"]) {
+      merged[key] = normalizeStrategy(merged[key], key === "sellAutomaticPriceStrategy");
+    }
     for (const key of [
       "priceAdjustment",
-      ...Object.values(AUTOMATIC_PRICE_STRATEGY_CONFIG).flatMap(rule => [
+      "surplusSellPriceAdjustment",
+      ...ALL_AUTOMATIC_STRATEGY_FIELDS.flatMap(rule => [
         rule.wallOffsetKey,
         rule.noWallOffsetKey,
       ]),
@@ -146,8 +173,10 @@
       const value = Number(merged[key]);
       merged[key] = Number.isFinite(value) ? value : defaults[key];
     }
-    for (const rule of Object.values(AUTOMATIC_PRICE_STRATEGY_CONFIG)) {
-      merged[rule.anchorKey] = ["top", "bottom"].includes(merged[rule.anchorKey])
+    for (const rule of ALL_AUTOMATIC_STRATEGY_FIELDS) {
+      if (!rule.anchorKey) continue;
+      const anchors = rule.anchorKey === "sellConservativeAnchor" ? ["bottom", "previous"] : ["top", "bottom"];
+      merged[rule.anchorKey] = anchors.includes(merged[rule.anchorKey])
         ? merged[rule.anchorKey]
         : defaults[rule.anchorKey];
     }
@@ -155,22 +184,21 @@
     return merged;
   }
 
-  export function createAutomaticPricingDraft(cfg = DEFAULT_CONFIG, strategy = "balanced") {
-    const normalizedStrategy = Object.hasOwn(AUTOMATIC_PRICE_STRATEGY_CONFIG, strategy)
-      ? strategy
-      : DEFAULT_CONFIG.automaticPriceStrategy;
+  export function createAutomaticPricingDraft(cfg = DEFAULT_CONFIG, strategy = "balanced", sell = false) {
+    const normalizedStrategy = normalizeStrategy(strategy, sell);
     return {
       strategy: normalizedStrategy,
-      ...getAutomaticPriceStrategyRule(cfg, normalizedStrategy),
+      ...getAutomaticPriceStrategyRule(cfg, normalizedStrategy, sell),
     };
   }
 
-  export function getActiveOrderPricingProfile(cfg = DEFAULT_CONFIG, automaticDraft = null) {
-    if (cfg?.automaticPricingEnabled) {
-      const priceSource = ["conservative", "balanced", "aggressive"]
-        .includes(cfg.automaticPriceStrategy)
-        ? cfg.automaticPriceStrategy
-        : DEFAULT_CONFIG.automaticPriceStrategy;
+  export function getActiveOrderPricingProfile(cfg = DEFAULT_CONFIG, automaticDraft = null, sell = false) {
+    const enabledKey = sell ? "sellAutomaticPricingEnabled" : "automaticPricingEnabled";
+    const strategyKey = sell ? "sellAutomaticPriceStrategy" : "automaticPriceStrategy";
+    const sourceKey = sell ? "surplusSellPriceSource" : "orderPriceSource";
+    const adjustmentKey = sell ? "surplusSellPriceAdjustment" : "priceAdjustment";
+    if (cfg?.[enabledKey]) {
+      const priceSource = normalizeStrategy(cfg[strategyKey], sell);
       const draftRule = automaticDraft?.strategy === priceSource
         ? automaticDraft
         : null;
@@ -184,26 +212,24 @@
             wallOffsetMinor: draftRule.wallOffsetMinor,
             noWallOffsetMinor: draftRule.noWallOffsetMinor,
           }
-          : getAutomaticPriceStrategyRule(cfg, priceSource),
+          : getAutomaticPriceStrategyRule(cfg, priceSource, sell),
       };
     }
     return {
       automatic: false,
-      priceSource: ["lowest", "median", "highest"].includes(cfg?.orderPriceSource)
-        ? cfg.orderPriceSource
-        : DEFAULT_CONFIG.orderPriceSource,
-      adjustment: Number.isFinite(Number(cfg?.priceAdjustment))
-        ? Number(cfg.priceAdjustment)
-        : DEFAULT_CONFIG.priceAdjustment,
+      priceSource: ["lowest", "median", "highest"].includes(cfg?.[sourceKey])
+        ? cfg[sourceKey]
+        : DEFAULT_CONFIG[sourceKey],
+      adjustment: Number.isFinite(Number(cfg?.[adjustmentKey]))
+        ? Number(cfg[adjustmentKey])
+        : DEFAULT_CONFIG[adjustmentKey],
     };
   }
 
-  export function getAutomaticPriceStrategyRule(cfg = DEFAULT_CONFIG, strategy = "balanced") {
-    const normalizedStrategy = Object.hasOwn(AUTOMATIC_PRICE_STRATEGY_CONFIG, strategy)
-      ? strategy
-      : "balanced";
-    const fields = AUTOMATIC_PRICE_STRATEGY_CONFIG[normalizedStrategy];
-    const anchor = ["top", "bottom"].includes(cfg?.[fields.anchorKey])
+  export function getAutomaticPriceStrategyRule(cfg = DEFAULT_CONFIG, strategy = "balanced", sell = false) {
+    const normalizedStrategy = normalizeStrategy(strategy, sell);
+    const fields = strategyConfig(sell)[normalizedStrategy];
+    const anchor = (sell ? ["bottom", "previous"] : ["top", "bottom"]).includes(cfg?.[fields.anchorKey])
       ? cfg[fields.anchorKey]
       : DEFAULT_CONFIG[fields.anchorKey];
     const toMinor = key => {

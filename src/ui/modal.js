@@ -1,8 +1,7 @@
+import { priceControlsHtml, bindPricingControls } from "./pricing-controls.js";
 import { state } from "../state.js";
 
 import {
-  AUTOMATIC_PRICE_STRATEGY_CONFIG,
-  createAutomaticPricingDraft,
   saveConfig,
   DEFAULT_CONFIG,
 } from "../config.js";
@@ -10,16 +9,16 @@ import {
 import { ONBOARDING_SEEN_KEY, TAB_DEFINITIONS } from "../constants.js";
 
 import {
-  createCurrencyContext,
   getActiveCurrencyContext,
-  setActiveCurrencyContext,
 } from "../services/currency.js";
 
-import { startScan, requestStop, skipCurrentBadge, applyScanModeTheme, updateResultColumns } from "../features/scan.js";
+import { startScan, requestStop, skipCurrentBadge } from "../features/scan.js";
+import { applyScanModeTheme } from "./scan-controls.js";
+import { bindSettingsControls, getCurrencyDisplayStatus, AUTOMATIC_STRATEGY_SETTING_ROWS } from "./settings.js";
 
 import { recalculateSelectedResults, recalculateSelectedOrderResults } from "../features/recalculate.js";
 
-import { activatePriceHistoryTab, initPriceHistoryUi, resetPriceHistoryRuntime, stopPriceHistoryRefresh } from "../features/price-history.js";
+import { activatePriceHistoryTab, initPriceHistoryUi, stopPriceHistoryRefresh } from "../features/price-history.js";
 
 import {
   submitSelectedBuyOrders,
@@ -30,10 +29,10 @@ import {
 import {
   activateActiveBuyOrdersTab,
   initActiveBuyOrdersUi,
-  resetActiveBuyOrdersRuntime,
+  refreshActiveBuyOrders,
 } from "../features/active-orders.js";
 
-import { startCraftScan, requestCraftStop, setAllCraftCounts, submitCraftPlan, renderCraftResults } from "../features/craft.js";
+import { startCraftScan, requestCraftStop, setAllCraftCounts, submitCraftPlan } from "../features/craft.js";
 
 import { startSurplusScan, requestSurplusStop, renderSurplusResults, setAllVisibleSurplusSelection } from "../features/surplus.js";
 
@@ -58,120 +57,20 @@ import {
   updateBlRow,
 } from "../features/blacklist.js";
 
-import { renderResults, renderOrderResults, updateSummary, updateOrderSummary, updateOrderResultColumns } from "./render.js";
+import { renderResults, renderOrderResults, refreshPricingSummaries } from "./render.js";
 
-import { isSharedActionBusy, updateAllActionStates, updateSurplusActionState } from "./action-state.js";
+import { updateAllActionStates, updateSurplusActionState } from "./action-state.js";
 
-import { clearOrderCache, loadOrderCache, pruneOrderCache, readRawOrderCache } from "../services/order-cache.js";
+import { pruneOrderCache } from "../services/order-cache.js";
 
-import { refreshSidebarData, setSidebarEnabled } from "../sidebar/sidebar.js";
 import { applyTabColors, applyTabOrder, enableTabDragReordering } from "./tab-drag.js";
-import { normalizeHexColor, normalizeTabColors } from "../services/tab-preferences.js";
 import {
-  createDataBackup,
-  getDataBackupFileName,
-  parseDataBackup,
-  restoreDataBackup,
-  serializeDataBackup,
-} from "../services/data-backup.js";
+  normalizeProcessingMode,
+  processingModeIncludesCards,
+  processingModeIncludesDecorations,
+} from "../services/processing-mode.js";
 
   let modalEl = null;
-
-  function getCurrencySourceLabel(context) {
-    if (context?.source === "walletInfo") return "Steam 钱包识别";
-    if (context?.source === "application_config") return "Steam 页面钱包识别";
-    if (context?.source === "page") return "市场页面识别";
-    if (context?.isFallback || context?.source === "configured") return "用户设置回退";
-    return "未识别";
-  }
-
-  function getCurrencyDisplayStatus(context = getActiveCurrencyContext()) {
-    if (!context?.currencyId) return "未识别币种";
-    return `${context.code} (${context.symbol}) · ${getCurrencySourceLabel(context)}`
-      + `${context.verified ? "" : " · 格式/费用规则未验证"}`;
-  }
-
-  const MANUAL_ORDER_PRICE_OPTIONS = [
-    ["lowest", "在售最低"],
-    ["median", "平均价格"],
-    ["highest", "求购最高"],
-  ];
-  const AUTOMATIC_ORDER_PRICE_OPTIONS = [
-    ["conservative", "保守"],
-    ["balanced", "平衡"],
-    ["aggressive", "抢单"],
-  ];
-  const AUTOMATIC_STRATEGY_LABELS = Object.freeze({
-    conservative: "保守",
-    balanced: "平衡",
-    aggressive: "抢单",
-  });
-  const AUTOMATIC_STRATEGY_SETTING_ROWS = Object.entries(
-    AUTOMATIC_PRICE_STRATEGY_CONFIG
-  ).map(([id, fields]) => ({
-    id,
-    label: AUTOMATIC_STRATEGY_LABELS[id],
-    ...fields,
-  }));
-  function getOrderPriceOptionsHtml(automatic, selected) {
-    const options = automatic ? AUTOMATIC_ORDER_PRICE_OPTIONS : MANUAL_ORDER_PRICE_OPTIONS;
-    return options.map(([value, label]) => (
-      `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`
-    )).join("");
-  }
-
-  function getAutomaticPricingDraft(strategy, reset = false) {
-    const normalizedStrategy = ["conservative", "balanced", "aggressive"].includes(strategy)
-      ? strategy
-      : DEFAULT_CONFIG.automaticPriceStrategy;
-    if (
-      reset
-      || !state.automaticPricingDraft
-      || state.automaticPricingDraft.strategy !== normalizedStrategy
-    ) {
-      state.automaticPricingDraft = createAutomaticPricingDraft(
-        state.cfg,
-        normalizedStrategy
-      );
-    }
-    return state.automaticPricingDraft;
-  }
-
-  function resetCurrencyBoundState() {
-    state.results = [];
-    state.selectedResults = new Set();
-    state.orderResults = loadOrderCache();
-    state.selectedOrderResults = new Set();
-    state.pendingOrderQuantities = new Map();
-    state.highestBuyPrices = new Map();
-    state.marketOrderDepths = new Map();
-    resetActiveBuyOrdersRuntime();
-    resetPriceHistoryRuntime();
-    state.surplusResults = [];
-    state.selectedSurplusResults = new Set();
-    state.surplusGemPrice = null;
-    state.grindResults = [];
-    state.selectedGrindResults = new Set();
-    state.grindGemPrice = null;
-  }
-
-  function applyConfiguredCurrency(currencyId) {
-    const previous = getActiveCurrencyContext();
-    if (previous && !previous.isFallback && previous.source !== "unresolved") {
-      state.currencyContext = previous;
-      return false;
-    }
-    const next = setActiveCurrencyContext(createCurrencyContext(currencyId, {
-      source: "configured",
-      isFallback: true,
-    }));
-    state.currencyContext = next;
-    if (previous?.currencyId !== next?.currencyId) {
-      resetCurrencyBoundState();
-      return true;
-    }
-    return false;
-  }
 
   export function getOuterHeight(element) {
     if (!element) return 0;
@@ -261,36 +160,19 @@ import {
     const currencyContext = getActiveCurrencyContext();
     const currencySymbol = currencyContext?.symbol || "¤";
     const currencyStatus = getCurrencyDisplayStatus(currencyContext);
-    const automaticPricingEnabled = state.cfg.automaticPricingEnabled === true;
-    const activePriceSource = automaticPricingEnabled
-      ? state.cfg.automaticPriceStrategy
-      : state.cfg.orderPriceSource;
-    const automaticPricingDraft = automaticPricingEnabled
-      ? getAutomaticPricingDraft(activePriceSource)
-      : null;
-    const activePriceAdjustment = automaticPricingEnabled
-      ? automaticPricingDraft.noWallOffsetMinor / 100
-      : state.cfg.priceAdjustment;
-    const activeWallPriceAdjustment = automaticPricingDraft?.wallOffsetMinor / 100 || 0;
-    const initialPriceOptions = getOrderPriceOptionsHtml(
-      automaticPricingEnabled,
-      activePriceSource
-    );
-    const automaticPricingClass = automaticPricingEnabled ? "stch-auto-pricing-active" : "";
-    const automaticStrategySettingsHtml = AUTOMATIC_STRATEGY_SETTING_ROWS.map(rule => `
+    const progressHtml = prefix => `<div class="stch-progress" id="${prefix}progress-wrap" style="display:none"><div class="stch-progress-bar" id="${prefix}progress-bar" style="width:0"></div><div class="stch-progress-text" id="${prefix}progress-text">0/0</div></div>`;
+    const automaticStrategySettingsHtml = (sell = false) => AUTOMATIC_STRATEGY_SETTING_ROWS[Number(sell)].map(rule => `
       <div class="stch-auto-strategy-row">
         <span class="stch-auto-strategy-name">${rule.label}</span>
-        <label>有订单墙时
-          <select id="stch-auto-${rule.id}-wall-anchor" class="stch-input stch-auto-wall-anchor">
-            <option value="top" ${state.cfg[rule.anchorKey] === "top" ? "selected" : ""}>订单墙顶</option>
-            <option value="bottom" ${state.cfg[rule.anchorKey] === "bottom" ? "selected" : ""}>订单墙底</option>
-          </select>
-        </label>
-        <label>偏移 ${currencySymbol}
+        ${rule.anchorKey ? `<label>${sell ? "" : "有订单墙时"}
+          <select id="stch-${sell ? "sell-" : ""}auto-${rule.id}-wall-anchor" class="stch-input stch-auto-wall-anchor">
+            ${(sell ? [["bottom", "出售墙底"], ["previous", "出售墙中"]] : [["top", "订单墙顶"], ["bottom", "订单墙底"]]).map(([value, label]) => `<option value="${value}" ${state.cfg[rule.anchorKey] === value ? "selected" : ""}>${label}</option>`).join("")}
+          </select></label>` : ""}
+        ${sell ? "" : `<label>${rule.anchorKey ? "偏移" : "有订单墙时"} ${currencySymbol}
           <input id="stch-auto-${rule.id}-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.wallOffsetKey]}">
-        </label>
-        <label>无订单墙时 ${currencySymbol}
-          <input id="stch-auto-${rule.id}-no-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.noWallOffsetKey]}">
+        </label>`}
+        <label>${sell ? "偏移" : "无订单墙时"} ${currencySymbol}
+          <input id="stch-${sell ? "sell-" : ""}auto-${rule.id}-no-wall-offset" class="stch-input stch-auto-offset" type="number" step="0.01" value="${state.cfg[rule.noWallOffsetKey]}">
         </label>
       </div>
     `).join("");
@@ -346,7 +228,7 @@ import {
             </div>
             <div class="stch-onboarding-step">
               <b>4. 管理已下订购单</b>
-              “已下订购单”页显示 Steam 返回的当前剩余量。最低售价只在选择后手动查询并保留 10 分钟，智能价差只使用本次会话已有订单簿缓存。
+              选中订购单后点“查价”，可查看最低售价和按买单深度计算的智能买价。
             </div>
             <div class="stch-onboarding-step">
               <b>5. 批量合成徽章</b>
@@ -377,19 +259,7 @@ import {
               包含掉落
             </label>
           </div>
-          <div class="stch-toolbar">
-            <label id="stch-order-price-label" class="stch-primary-label ${automaticPricingClass}">购买价格
-              <select id="stch-order-price-source" class="stch-input" style="width:118px">
-                ${initialPriceOptions}
-              </select>
-            </label>
-            <label id="stch-price-wall-adjustment-label" class="stch-primary-label ${automaticPricingClass}" ${automaticPricingEnabled ? "" : "style=\"display:none\""}>有墙调整 ${currencySymbol} <input id="stch-price-wall-adjustment" class="stch-input" type="number" step="0.01" value="${activeWallPriceAdjustment}" style="width:68px"></label>
-            <label id="stch-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}"><span id="stch-price-adjustment-text">${automaticPricingEnabled ? "无墙调整" : "买价调整"}</span> ${currencySymbol} <input id="stch-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
-            <label class="stch-auto-pricing-toggle ${automaticPricingClass}">
-              <input id="stch-auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}>
-              智能定价模式
-            </label>
-          </div>
+          <div class="stch-toolbar">${priceControlsHtml("stch-order-", "stch-")}</div>
           <div class="stch-scan-actions">
             <div class="stch-btn" id="stch-scan-btn">开始扫描</div>
             <div class="stch-btn alt disabled" id="stch-stop-btn">停止</div>
@@ -399,10 +269,7 @@ import {
               <div class="stch-btn disabled" id="stch-submit-orders-btn">提交订购单</div>
             </div>
           </div>
-          <div class="stch-progress" id="stch-progress-wrap" style="display:none">
-            <div class="stch-progress-bar" id="stch-progress-bar" style="width:0"></div>
-            <div class="stch-progress-text" id="stch-progress-text">0/0</div>
-          </div>
+          ${progressHtml("stch-")}
           <div class="stch-summary" id="stch-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-summary"></span>
             <span class="stch-selected-count" id="stch-selected-count">已选择 0 项</span>
@@ -453,19 +320,7 @@ import {
             <div class="stch-btn alt disabled" id="stch-order-recalculate-btn">重新计算</div>
             <div class="stch-btn disabled" id="stch-order-submit-orders-btn">提交订购单</div>
           </div>
-          <div class="stch-toolbar">
-            <label id="stch-order-page-price-label" class="stch-primary-label ${automaticPricingClass}">购买价格
-              <select id="stch-order-page-price-source" class="stch-input" style="width:118px">
-                ${initialPriceOptions}
-              </select>
-            </label>
-            <label id="stch-order-page-price-wall-adjustment-label" class="stch-primary-label ${automaticPricingClass}" ${automaticPricingEnabled ? "" : "style=\"display:none\""}>有墙调整 ${currencySymbol} <input id="stch-order-page-price-wall-adjustment" class="stch-input" type="number" step="0.01" value="${activeWallPriceAdjustment}" style="width:68px"></label>
-            <label id="stch-order-page-price-adjustment-label" class="stch-primary-label ${automaticPricingClass}"><span id="stch-order-page-price-adjustment-text">${automaticPricingEnabled ? "无墙调整" : "买价调整"}</span> ${currencySymbol} <input id="stch-order-page-price-adjustment" class="stch-input" type="number" step="0.01" value="${activePriceAdjustment}" style="width:68px"></label>
-            <label class="stch-auto-pricing-toggle ${automaticPricingClass}">
-              <input id="stch-order-page-auto-pricing" type="checkbox" ${automaticPricingEnabled ? "checked" : ""}>
-              智能定价模式
-            </label>
-          </div>
+          <div class="stch-toolbar">${priceControlsHtml("stch-order-page-", "stch-order-page-")}</div>
           <div class="stch-summary" id="stch-order-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-order-summary"></span>
           </div>
@@ -481,6 +336,10 @@ import {
             </label>
             <button type="button" class="stch-btn alt" id="stch-active-orders-refresh">刷新</button>
             <button type="button" class="stch-btn alt disabled" id="stch-active-orders-query-prices">查价</button>
+            <label><input type="checkbox" class="stch-active-order-select-all" id="stch-active-orders-select-all" aria-label="全选当前游戏的订购单">全选</label>
+            <button type="button" class="stch-btn alt" id="stch-active-orders-overpriced">选中溢价</button>
+            <button type="button" class="stch-btn alt" id="stch-active-orders-underpriced">选中低价</button>
+            <button type="button" class="stch-btn alt disabled" id="stch-active-orders-relist">重挂选中</button>
             <button type="button" class="stch-btn alt stch-btn-danger disabled" id="stch-active-orders-cancel-selected">撤销选中</button>
           </div>
           <div class="stch-summary stch-active-orders-summary-row">
@@ -511,10 +370,7 @@ import {
               <div class="stch-btn disabled" id="stch-craft-submit-btn">确认合成</div>
             </div>
           </div>
-          <div class="stch-progress" id="stch-craft-progress-wrap" style="display:none">
-            <div class="stch-progress-bar" id="stch-craft-progress-bar" style="width:0"></div>
-            <div class="stch-progress-text" id="stch-craft-progress-text">0/0</div>
-          </div>
+          ${progressHtml("stch-craft-")}
           <div class="stch-summary" id="stch-craft-summary-row" style="display:none">
             <span class="stch-summary-text" id="stch-craft-summary"></span>
           </div>
@@ -550,8 +406,10 @@ import {
         <div class="stch-tab-content" id="stch-tab-surplus">
           <div class="stch-toolbar stch-surplus-main-toolbar">
             <label class="stch-primary-label">处理类型
-              <select id="stch-surplus-item-mode" class="stch-input" style="width:92px">
+              <select id="stch-surplus-item-mode" class="stch-input" style="width:172px">
+                <option value="all" ${state.cfg.surplusItemMode === "all" ? "selected" : ""}>全部（卡牌、背景和表情）</option>
                 <option value="card" ${state.cfg.surplusItemMode === "card" ? "selected" : ""}>卡牌</option>
+                <option value="decoration" ${state.cfg.surplusItemMode === "decoration" ? "selected" : ""}>装饰（背景和表情）</option>
                 <option value="background" ${state.cfg.surplusItemMode === "background" ? "selected" : ""}>背景</option>
                 <option value="emoticon" ${state.cfg.surplusItemMode === "emoticon" ? "selected" : ""}>表情</option>
               </select>
@@ -564,14 +422,8 @@ import {
               <input id="stch-surplus-only-recommended" type="checkbox" ${state.cfg.surplusOnlyRecommended ? "checked" : ""}>
               只显示建议分解
             </label>
-            <label class="stch-primary-label">出售价格
-              <select id="stch-surplus-sell-price-source" class="stch-input" style="width:118px">
-                <option value="lowest" ${state.cfg.surplusSellPriceSource === "lowest" ? "selected" : ""}>在售最低</option>
-                <option value="median" ${state.cfg.surplusSellPriceSource === "median" ? "selected" : ""}>平均价格</option>
-                <option value="highest" ${state.cfg.surplusSellPriceSource === "highest" ? "selected" : ""}>求购最高</option>
-              </select>
-            </label>
-            <label class="stch-primary-label">售价调整 ${currencySymbol} <input id="stch-surplus-sell-adjustment" class="stch-input" type="number" step="0.01" value="${state.cfg.surplusSellPriceAdjustment}" style="width:68px"></label>
+            ${priceControlsHtml("stch-surplus-sell-", "stch-surplus-sell-", true)}
+            <label><input id="stch-surplus-include-foil" type="checkbox" ${state.cfg.surplusIncludeFoil ? "checked" : ""}> 包含闪卡</label>
           </div>
           <div class="stch-scan-actions stch-surplus-action-row">
             <div class="stch-btn" id="stch-surplus-scan-btn">开始检测</div>
@@ -584,31 +436,20 @@ import {
               <div class="stch-btn stch-btn-danger disabled" id="stch-surplus-gem-btn">转化宝石</div>
             </div>
           </div>
-          <div class="stch-surplus-mode-panel" id="stch-surplus-card-panel">
-            <div class="stch-progress" id="stch-surplus-progress-wrap" style="display:none">
-              <div class="stch-progress-bar" id="stch-surplus-progress-bar" style="width:0"></div>
-              <div class="stch-progress-text" id="stch-surplus-progress-text">0/0</div>
-            </div>
+          <div class="stch-surplus-mode-panel" id="stch-surplus-processing-panel">
+            ${progressHtml("stch-surplus-")}
             <div class="stch-summary" id="stch-surplus-summary-row" style="display:none">
-              <span class="stch-summary-text" id="stch-surplus-summary"></span>
+              <span class="stch-summary-text stch-processing-summary" id="stch-surplus-summary"></span>
+              <span class="stch-summary-text stch-processing-summary" id="stch-grind-summary"></span>
             </div>
             <div class="stch-status-text" id="stch-surplus-status"></div>
-            <div class="stch-game-list stch-surplus-list" id="stch-surplus-list"></div>
-            <div class="stch-log-resizer" data-log="stch-surplus-log" data-content="stch-surplus-list"></div>
+            <div class="stch-game-list stch-surplus-list stch-inventory-grid" id="stch-processing-list">
+              <div class="stch-processing-results" id="stch-surplus-list"></div>
+              <div class="stch-processing-results" id="stch-grind-list"></div>
+              <div class="stch-inventory-empty" id="stch-processing-empty">尚未检测到物品</div>
+            </div>
+            <div class="stch-log-resizer" data-log="stch-surplus-log" data-content="stch-processing-list"></div>
             <div id="stch-surplus-log"></div>
-          </div>
-          <div class="stch-surplus-mode-panel" id="stch-surplus-grind-panel">
-            <div class="stch-progress" id="stch-grind-progress-wrap" style="display:none">
-              <div class="stch-progress-bar" id="stch-grind-progress-bar" style="width:0"></div>
-              <div class="stch-progress-text" id="stch-grind-progress-text">0/0</div>
-            </div>
-            <div class="stch-summary" id="stch-grind-summary-row" style="display:none">
-              <span class="stch-summary-text" id="stch-grind-summary"></span>
-            </div>
-            <div class="stch-status-text" id="stch-grind-status"></div>
-            <div class="stch-game-list stch-grind-list" id="stch-grind-list"></div>
-            <div class="stch-log-resizer" data-log="stch-grind-log" data-content="stch-grind-list"></div>
-            <div id="stch-grind-log"></div>
           </div>
         </div>
         <div class="stch-tab-content" id="stch-tab-collection">
@@ -665,8 +506,13 @@ import {
           <div class="stch-advanced-setting" style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">购买价格</div>
           <div class="stch-advanced-setting" style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-auto-strategy-settings stch-advanced-setting">
-            ${automaticStrategySettingsHtml}
+            ${automaticStrategySettingsHtml()}
             <div class="stch-auto-strategy-hint">* 订单墙是靠近有效最高买价、订单数量相对前面邻近价位显著增加的连续区域；墙顶是该区域最高价，墙底是最低价。</div>
+          </div>
+          <div class="stch-advanced-setting" style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">出售价格</div>
+          <div class="stch-advanced-setting" style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
+          <div class="stch-auto-strategy-settings stch-advanced-setting">
+            ${automaticStrategySettingsHtml(true)}
           </div>
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">卡牌价格扫描</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
@@ -702,10 +548,11 @@ import {
           <div style="color:#fff;font-weight:bold;font-size:16px;margin:18px 0 4px;">多余物品处理</div>
           <div style="border-bottom:1px solid #45556b;margin-bottom:12px;"></div>
           <div class="stch-toolbar">
+            <label><input id="stch-surplus-keep-max-level-cards" type="checkbox" ${state.cfg.surplusKeepMaxLevelCards ? "checked" : ""}> 保留满级卡牌</label>
             <label>默认保留 <input id="stch-grind-reserve-copies" class="stch-input" type="number" min="0" step="1" value="${state.cfg.grindReserveCopies}" style="width:55px"> 份背景/表情</label>
-            <label title="点数商店类副本按不可交易且不可上架的背景/表情识别">
+            <label title="优先保留不可交易且不可上架的背景/表情副本">
               <input id="stch-grind-include-points-shop" type="checkbox" ${state.cfg.grindIncludePointsShopItems ? "checked" : ""}>
-              重复物品计算包含点数商店物品
+              优先保留点数商店对应物品
             </label>
           </div>
               </div>
@@ -747,365 +594,27 @@ import {
 
     modal.querySelector(".stch-close").addEventListener("click", closeModal);
 
-    const activateSettingsPage = pageName => {
-      modal.querySelectorAll("[data-settings-page]").forEach(button => {
-        button.classList.toggle("active", button.dataset.settingsPage === pageName);
-      });
-      modal.querySelectorAll("[data-settings-panel]").forEach(panel => {
-        panel.classList.toggle("active", panel.dataset.settingsPanel === pageName);
-      });
-    };
-    modal.querySelectorAll("[data-settings-page]").forEach(button => {
-      button.addEventListener("click", () => activateSettingsPage(button.dataset.settingsPage));
-    });
-
-    const personalizationStatus = document.getElementById("stch-personalization-status");
-    const syncTabColorInput = (input, persist) => {
-      const id = input.dataset.tabColor;
-      const raw = input.value.trim();
-      const color = normalizeHexColor(raw);
-      const valid = raw === "" || !!color;
-      input.classList.toggle("invalid", !valid);
-      if (!valid) {
-        if (personalizationStatus) personalizationStatus.textContent = "请输入六位 HEX 色值";
-        return;
-      }
-      const next = { ...(state.cfg.tabColors || {}) };
-      if (color) next[id] = color;
-      else delete next[id];
-      state.cfg.tabColors = normalizeTabColors(next);
-      applyTabColors(tabsContainer, state.cfg.tabColors);
-      if (personalizationStatus) personalizationStatus.textContent = "";
-      if (persist) {
-        input.value = color;
-        saveConfig(state.cfg);
-        if (personalizationStatus) {
-          personalizationStatus.textContent = color ? "颜色已保存" : "已恢复默认颜色";
-        }
-      }
-    };
-    modal.querySelectorAll(".stch-tab-color-input[data-tab-color]").forEach(input => {
-      input.addEventListener("input", () => syncTabColorInput(input, false));
-      input.addEventListener("blur", () => syncTabColorInput(input, true));
-      input.addEventListener("keydown", event => {
-        if (event.key === "Enter") input.blur();
-      });
-    });
-
-    const readNumberInput = (id, fallback, options = {}) => {
-      const raw = document.getElementById(id)?.value;
-      let value = options.integer ? parseInt(raw, 10) : parseFloat(raw);
-      if (!Number.isFinite(value)) return fallback;
-      if (options.integer) value = Math.floor(value);
-      if (Number.isFinite(options.min)) value = Math.max(options.min, value);
-      if (Number.isFinite(options.max)) value = Math.min(options.max, value);
-      return value;
-    };
     const getSurplusItemMode = () => {
       const value = document.getElementById("stch-surplus-item-mode")?.value
         || state.cfg.surplusItemMode
         || DEFAULT_CONFIG.surplusItemMode;
-      return ["card", "background", "emoticon"].includes(value) ? value : "card";
+      return normalizeProcessingMode(value);
     };
     const applySurplusItemMode = () => {
-      const mode = getSurplusItemMode();
-      const cardPanel = document.getElementById("stch-surplus-card-panel");
-      const grindPanel = document.getElementById("stch-surplus-grind-panel");
-      cardPanel?.classList.toggle("active", mode === "card");
-      grindPanel?.classList.toggle("active", mode !== "card");
       renderSurplusResults();
       renderGrindResults();
       updateSurplusActionState();
     };
-    const syncConfigFromInputs = changedId => {
-      const previousSurplusItemMode = state.cfg.surplusItemMode || DEFAULT_CONFIG.surplusItemMode;
-      state.cfg.threshold = readNumberInput(
-        "stch-threshold",
-        state.cfg.threshold ?? DEFAULT_CONFIG.threshold,
-        { min: 0 }
-      );
-      state.cfg.requestInterval = readNumberInput(
-        "stch-req-interval",
-        state.cfg.requestInterval ?? DEFAULT_CONFIG.requestInterval,
-        { integer: true, min: 0 }
-      );
-      state.cfg.maxBadgePages = readNumberInput(
-        "stch-max-pages",
-        state.cfg.maxBadgePages ?? DEFAULT_CONFIG.maxBadgePages,
-        { integer: true, min: 1 }
-      );
-      state.cfg.includeDrops = !!document.getElementById("stch-include-drops")?.checked;
-      state.cfg.foilScanMode = !!document.getElementById("stch-foil-scan-mode")?.checked;
-      state.cfg.showScanCompletionColumn = !!document.getElementById("stch-show-scan-completion-column")?.checked;
-      state.cfg.showScanSellSetColumn = !!document.getElementById("stch-show-scan-sell-set-column")?.checked;
-      state.cfg.showNoResultLogs = !!document.getElementById("stch-show-no-result-logs")?.checked;
-      state.cfg.showAdvancedSettings = !!document.getElementById("stch-show-advanced-settings")?.checked;
-      state.cfg.sidebarDisabled = !!document.getElementById("stch-sidebar-disabled")?.checked;
-      state.cfg.parallelOrderPricingEnabled = !!document.getElementById("stch-parallel-order-pricing")?.checked;
-      state.cfg.parallelOrderPricingConcurrency = readNumberInput(
-        "stch-parallel-order-pricing-concurrency",
-        state.cfg.parallelOrderPricingConcurrency ?? DEFAULT_CONFIG.parallelOrderPricingConcurrency,
-        { integer: true, min: 1, max: 20 }
-      );
-      state.cfg.parallelOtherRequestsEnabled = !!document.getElementById("stch-parallel-other-requests")?.checked;
-      state.cfg.parallelOtherRequestsConcurrency = readNumberInput(
-        "stch-parallel-other-requests-concurrency",
-        state.cfg.parallelOtherRequestsConcurrency ?? DEFAULT_CONFIG.parallelOtherRequestsConcurrency,
-        { integer: true, min: 1, max: 20 }
-      );
-      const buyModeEl = document.getElementById("stch-buy-mode");
-      if (state.cfg.foilScanMode) {
-        state.cfg.buyMode = buyModeEl?.dataset.normalValue || state.cfg.buyMode || DEFAULT_CONFIG.buyMode;
-      } else {
-        state.cfg.buyMode = buyModeEl?.dataset.normalValue || buyModeEl?.value || state.cfg.buyMode;
-        if (buyModeEl) delete buyModeEl.dataset.normalValue;
-      }
-      state.cfg.earlyPricePrediction = !!document.getElementById("stch-early-price-prediction")?.checked;
-      state.cfg.minimumPriceFallback = !!document.getElementById("stch-minimum-price-fallback")?.checked;
-      AUTOMATIC_STRATEGY_SETTING_ROWS.forEach(rule => {
-        const anchor = document.getElementById(`stch-auto-${rule.id}-wall-anchor`)?.value;
-        state.cfg[rule.anchorKey] = ["top", "bottom"].includes(anchor)
-          ? anchor
-          : state.cfg[rule.anchorKey];
-        state.cfg[rule.wallOffsetKey] = readNumberInput(
-          `stch-auto-${rule.id}-wall-offset`,
-          state.cfg[rule.wallOffsetKey] ?? DEFAULT_CONFIG[rule.wallOffsetKey]
-        );
-        state.cfg[rule.noWallOffsetKey] = readNumberInput(
-          `stch-auto-${rule.id}-no-wall-offset`,
-          state.cfg[rule.noWallOffsetKey] ?? DEFAULT_CONFIG[rule.noWallOffsetKey]
-        );
-      });
-      state.cfg.earlyPredictionAutoBlacklist = !!document.getElementById("stch-settings-early-prediction-auto-blacklist")?.checked;
-      state.cfg.orderCacheDays = readNumberInput(
-        "stch-order-cache-days",
-        state.cfg.orderCacheDays ?? DEFAULT_CONFIG.orderCacheDays,
-        { integer: true, min: 0 }
-      );
-      state.cfg.skipCachedOrderResults = !!document.getElementById("stch-skip-cached-orders")?.checked;
-      state.cfg.surplusOnlyTradable = !!document.getElementById("stch-surplus-only-tradable")?.checked;
-      state.cfg.surplusOnlyRecommended = !!document.getElementById("stch-surplus-only-recommended")?.checked;
-      state.cfg.surplusItemMode = getSurplusItemMode();
-      state.cfg.surplusSellPriceSource = document.getElementById("stch-surplus-sell-price-source")?.value
-        || state.cfg.surplusSellPriceSource
-        || DEFAULT_CONFIG.surplusSellPriceSource;
-      state.cfg.surplusSellPriceAdjustment = readNumberInput(
-        "stch-surplus-sell-adjustment",
-        state.cfg.surplusSellPriceAdjustment ?? DEFAULT_CONFIG.surplusSellPriceAdjustment
-      );
-      state.cfg.grindReserveCopies = readNumberInput(
-        "stch-grind-reserve-copies",
-        state.cfg.grindReserveCopies ?? DEFAULT_CONFIG.grindReserveCopies,
-        { integer: true, min: 0 }
-      );
-      state.cfg.grindIncludePointsShopItems = !!document.getElementById("stch-grind-include-points-shop")?.checked;
-      state.cfg.craftInterval = readNumberInput(
-        "stch-craft-interval",
-        state.cfg.craftInterval ?? DEFAULT_CONFIG.craftInterval,
-        { integer: true, min: 200 }
-      );
-      state.cfg.craftMode = document.getElementById("stch-craft-mode")?.value || state.cfg.craftMode;
-      saveConfig(state.cfg);
-      const craftMaxPages = document.getElementById("stch-craft-max-pages");
-      if (craftMaxPages) craftMaxPages.value = String(state.cfg.maxBadgePages);
-      updateResultColumns();
-      updateOrderResultColumns();
-      applyScanModeTheme();
-      if (changedId === "stch-order-cache-days") {
-        pruneOrderCache(true);
-        renderOrderResults();
-      }
-      if (changedId === "stch-craft-mode") renderCraftResults();
-      if (changedId === "stch-sidebar-disabled") {
-        setSidebarEnabled(!state.cfg.sidebarDisabled);
-      }
-      if (changedId === "stch-show-advanced-settings") {
-        document.getElementById("stch-tab-settings")?.classList.toggle(
-          "stch-show-advanced",
-          state.cfg.showAdvancedSettings
-        );
-      }
-      if (["stch-surplus-only-tradable", "stch-surplus-only-recommended"].includes(changedId)) {
-        renderSurplusResults();
-        renderGrindResults();
-      }
-      if (changedId === "stch-surplus-item-mode") {
-        if (state.cfg.surplusItemMode !== previousSurplusItemMode) {
-          state.grindResults = [];
-          state.selectedGrindResults = new Set();
-          state.grindGemPrice = null;
-        }
-        applySurplusItemMode();
-      }
-      if (["stch-grind-reserve-copies", "stch-grind-include-points-shop"].includes(changedId)) {
-        state.grindResults = [];
-        state.selectedGrindResults = new Set();
-        state.grindGemPrice = null;
-      }
-      if (changedId?.startsWith("stch-grind-")) renderGrindResults();
-      if (changedId?.startsWith("stch-auto-") && changedId !== "stch-auto-pricing") {
-        updateSummary();
-        updateOrderSummary();
-      }
-    };
-    const cfgIds = ["stch-threshold", "stch-req-interval",
-      "stch-max-pages", "stch-include-drops",
-      "stch-foil-scan-mode",
-      "stch-parallel-order-pricing", "stch-parallel-order-pricing-concurrency",
-      "stch-parallel-other-requests", "stch-parallel-other-requests-concurrency",
-      "stch-show-scan-completion-column", "stch-show-scan-sell-set-column",
-      "stch-show-no-result-logs", "stch-show-advanced-settings", "stch-sidebar-disabled", "stch-buy-mode",
-      "stch-early-price-prediction", "stch-minimum-price-fallback", "stch-settings-early-prediction-auto-blacklist", "stch-order-cache-days",
-      "stch-skip-cached-orders", "stch-craft-interval",
-      "stch-craft-mode", "stch-surplus-item-mode",
-      "stch-surplus-only-tradable", "stch-surplus-only-recommended", "stch-surplus-sell-price-source",
-      "stch-surplus-sell-adjustment",
-      "stch-grind-reserve-copies",
-      "stch-grind-include-points-shop",
-      ...AUTOMATIC_STRATEGY_SETTING_ROWS.flatMap(rule => [
-        `stch-auto-${rule.id}-wall-anchor`,
-        `stch-auto-${rule.id}-wall-offset`,
-        `stch-auto-${rule.id}-no-wall-offset`,
-      ])];
-    cfgIds.forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.addEventListener("input", () => syncConfigFromInputs(id));
-      el.addEventListener("change", () => syncConfigFromInputs(id));
+    bindSettingsControls(modal, {
+      applySurplusItemMode,
+      rebuildModal() {
+        modal.remove();
+        document.getElementById("stch-backdrop")?.remove();
+        modalEl = null;
+        buildModal({ initialTab: "settings", suppressOnboarding: true });
+      },
     });
-
-    const orderPriceSourceIds = [
-      "stch-order-price-source",
-      "stch-order-page-price-source",
-    ];
-    const orderPriceAdjustmentIds = [
-      "stch-price-adjustment",
-      "stch-order-page-price-adjustment",
-    ];
-    const automaticWallAdjustmentIds = [
-      "stch-price-wall-adjustment",
-      "stch-order-page-price-wall-adjustment",
-    ];
-    const automaticPricingIds = [
-      "stch-auto-pricing",
-      "stch-order-page-auto-pricing",
-    ];
-    const refreshPricingSummaries = () => {
-      renderResults();
-      renderOrderResults();
-      updateSummary();
-      updateOrderSummary();
-    };
-    const renderOrderPricingControls = (exceptId = "") => {
-      const automatic = state.cfg.automaticPricingEnabled === true;
-      const source = automatic
-        ? state.cfg.automaticPriceStrategy || DEFAULT_CONFIG.automaticPriceStrategy
-        : state.cfg.orderPriceSource || DEFAULT_CONFIG.orderPriceSource;
-      const draft = automatic ? getAutomaticPricingDraft(source) : null;
-      const adjustment = automatic
-        ? draft.noWallOffsetMinor / 100
-        : state.cfg.priceAdjustment ?? DEFAULT_CONFIG.priceAdjustment;
-      const wallAdjustment = draft?.wallOffsetMinor / 100 || 0;
-      orderPriceSourceIds.forEach(id => {
-        const input = document.getElementById(id);
-        if (!input) return;
-        input.innerHTML = getOrderPriceOptionsHtml(automatic, source);
-        input.value = source;
-      });
-      orderPriceAdjustmentIds.forEach(id => {
-        if (id === exceptId) return;
-        const input = document.getElementById(id);
-        if (input) input.value = String(adjustment);
-      });
-      automaticWallAdjustmentIds.forEach(id => {
-        if (id !== exceptId) {
-          const input = document.getElementById(id);
-          if (input) input.value = String(wallAdjustment);
-        }
-        const label = document.getElementById(`${id}-label`);
-        if (label) label.style.display = automatic ? "" : "none";
-      });
-      [
-        "stch-price-adjustment-text",
-        "stch-order-page-price-adjustment-text",
-      ].forEach(id => {
-        const text = document.getElementById(id);
-        if (text) text.textContent = automatic ? "无墙调整" : "买价调整";
-      });
-      automaticPricingIds.forEach(id => {
-        const input = document.getElementById(id);
-        if (input) input.checked = automatic;
-      });
-      [
-        "stch-order-price-label",
-        "stch-price-wall-adjustment-label",
-        "stch-price-adjustment-label",
-        "stch-order-page-price-label",
-        "stch-order-page-price-wall-adjustment-label",
-        "stch-order-page-price-adjustment-label",
-      ].forEach(id => {
-        document.getElementById(id)?.classList.toggle("stch-auto-pricing-active", automatic);
-      });
-      modal.querySelectorAll(".stch-auto-pricing-toggle").forEach(label => {
-        label.classList.toggle("stch-auto-pricing-active", automatic);
-      });
-    };
-    orderPriceSourceIds.forEach(id => {
-      document.getElementById(id)?.addEventListener("change", event => {
-        if (state.cfg.automaticPricingEnabled) {
-          state.cfg.automaticPriceStrategy = event.currentTarget.value;
-          getAutomaticPricingDraft(state.cfg.automaticPriceStrategy, true);
-        } else {
-          state.cfg.orderPriceSource = event.currentTarget.value;
-        }
-        renderOrderPricingControls();
-        saveConfig(state.cfg);
-        refreshPricingSummaries();
-      });
-    });
-    const syncOrderPriceAdjustment = (event, normalizeSource = false) => {
-      const parsed = parseFloat(event.currentTarget.value);
-      const value = Number.isFinite(parsed) ? parsed : 0;
-      if (state.cfg.automaticPricingEnabled) {
-        const draft = getAutomaticPricingDraft(state.cfg.automaticPriceStrategy);
-        draft.noWallOffsetMinor = Math.round(value * 100);
-      } else {
-        state.cfg.priceAdjustment = value;
-      }
-      renderOrderPricingControls(normalizeSource ? "" : event.currentTarget.id);
-      if (!state.cfg.automaticPricingEnabled) saveConfig(state.cfg);
-      refreshPricingSummaries();
-    };
-    orderPriceAdjustmentIds.forEach(id => {
-      const input = document.getElementById(id);
-      input?.addEventListener("input", event => syncOrderPriceAdjustment(event, false));
-      input?.addEventListener("change", event => syncOrderPriceAdjustment(event, true));
-    });
-    const syncAutomaticWallAdjustment = (event, normalizeSource = false) => {
-      const parsed = parseFloat(event.currentTarget.value);
-      const value = Number.isFinite(parsed) ? parsed : 0;
-      const draft = getAutomaticPricingDraft(state.cfg.automaticPriceStrategy);
-      draft.wallOffsetMinor = Math.round(value * 100);
-      renderOrderPricingControls(normalizeSource ? "" : event.currentTarget.id);
-      refreshPricingSummaries();
-    };
-    automaticWallAdjustmentIds.forEach(id => {
-      const input = document.getElementById(id);
-      input?.addEventListener("input", event => syncAutomaticWallAdjustment(event, false));
-      input?.addEventListener("change", event => syncAutomaticWallAdjustment(event, true));
-    });
-    automaticPricingIds.forEach(id => {
-      document.getElementById(id)?.addEventListener("change", event => {
-        state.cfg.automaticPricingEnabled = event.currentTarget.checked;
-        if (state.cfg.automaticPricingEnabled) {
-          getAutomaticPricingDraft(state.cfg.automaticPriceStrategy, true);
-        }
-        renderOrderPricingControls();
-        saveConfig(state.cfg);
-        refreshPricingSummaries();
-      });
-    });
-    renderOrderPricingControls();
+    bindPricingControls(refreshPricingSummaries);
 
     const activateTab = tabName => {
       if (tabName !== "history") stopPriceHistoryRefresh({ silent: true });
@@ -1116,7 +625,12 @@ import {
         content.classList.toggle("active", content.id === `stch-tab-${tabName}`);
       });
       if (tabName === "blacklist") renderBlacklist();
-      if (tabName === "orders") renderOrderResults();
+      if (tabName === "orders") {
+        renderOrderResults();
+        if (!state.activeOrdersLoadedAt && !state.activeOrdersLoading) {
+          void refreshActiveBuyOrders().then(renderOrderResults);
+        }
+      }
       if (tabName === "active-orders") activateActiveBuyOrdersTab();
       if (tabName === "history") activatePriceHistoryTab();
       if (tabName === "surplus") applySurplusItemMode();
@@ -1132,170 +646,6 @@ import {
       const onboarding = document.getElementById("stch-onboarding");
       if (onboarding) onboarding.style.display = "none";
     };
-    let settingsStatusTimer = null;
-    const setSettingsActionStatus = text => {
-      const status = document.getElementById("stch-settings-action-status");
-      if (!status) return;
-      status.textContent = text;
-      if (settingsStatusTimer) clearTimeout(settingsStatusTimer);
-      settingsStatusTimer = text
-        ? setTimeout(() => { status.textContent = ""; }, 3500)
-        : null;
-    };
-    const createBackupText = () => serializeDataBackup(
-      createDataBackup((key, fallback) => GM_getValue(key, fallback))
-    );
-    const exportBackupFile = async event => {
-      if (event.currentTarget.classList.contains("disabled")) return;
-      try {
-        const text = createBackupText();
-        const fileName = getDataBackupFileName();
-        const picker = window.showSaveFilePicker;
-        if (typeof picker === "function") {
-          try {
-            const handle = await picker.call(window, {
-              suggestedName: fileName,
-              types: [{
-                description: "Steam 卡牌助手备份",
-                accept: { "application/json": [".json"] },
-              }],
-            });
-            const writable = await handle.createWritable();
-            await writable.write(text);
-            await writable.close();
-            setSettingsActionStatus("已导出");
-            return;
-          } catch (error) {
-            if (error?.name === "AbortError") throw error;
-            console.warn("[STCH] File picker unavailable; falling back to download:", error);
-          }
-        }
-
-        const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = fileName;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setSettingsActionStatus("已导出");
-      } catch (error) {
-        if (error?.name === "AbortError") {
-          setSettingsActionStatus("已取消导出");
-          return;
-        }
-        setSettingsActionStatus(`导出失败：${error?.message || error}`);
-      }
-    };
-    const importBackupData = async event => {
-      const input = event.currentTarget;
-      const file = input.files?.[0];
-      input.value = "";
-      if (!file) return;
-      if (isSharedActionBusy() || state.sidebarPriceRefreshing) {
-        setSettingsActionStatus("请先停止当前操作，再导入数据");
-        return;
-      }
-      try {
-        const backup = parseDataBackup(await file.text());
-        const count = Object.keys(backup.storage).length;
-        if (!confirm(`将覆盖本机 ${count} 项设置与缓存，确定导入？`)) return;
-        const result = restoreDataBackup(backup, {
-          getValue: (key, fallback) => GM_getValue(key, fallback),
-          setValue: (key, value) => GM_setValue(key, value),
-        });
-        setSettingsActionStatus(`已导入 ${result.restored} 项数据，请刷新页面`);
-      } catch (error) {
-        setSettingsActionStatus(`导入失败：${error?.message || error}`);
-      }
-    };
-    document.getElementById("stch-currency-fallback")?.addEventListener("change", event => {
-      const input = event.currentTarget;
-      const previousConfiguredId = Number(state.cfg.currencyId || DEFAULT_CONFIG.currencyId);
-      if (isSharedActionBusy()) {
-        input.value = String(previousConfiguredId);
-        setSettingsActionStatus("请先停止当前操作，再修改回退币种");
-        return;
-      }
-
-      const currencyId = Number(input.value);
-      if (![1, 23, 29].includes(currencyId)) {
-        input.value = String(previousConfiguredId);
-        setSettingsActionStatus("不支持的回退币种");
-        return;
-      }
-
-      state.cfg.currencyId = currencyId;
-      saveConfig(state.cfg);
-      const activeChanged = applyConfiguredCurrency(currencyId);
-      if (!activeChanged) {
-        setSettingsActionStatus(
-          `回退币种已保存；当前仍使用 ${getCurrencyDisplayStatus()}`
-        );
-        return;
-      }
-
-      modal.remove();
-      document.getElementById("stch-backdrop")?.remove();
-      modalEl = null;
-      buildModal({ initialTab: "settings", suppressOnboarding: true });
-      const status = document.getElementById("stch-settings-action-status");
-      if (status) status.textContent = `已切换到 ${getCurrencyDisplayStatus()}，请重新查价`;
-      if (document.getElementById("stch-sidebar")) {
-        void refreshSidebarData().catch(error => {
-          console.warn("[STCH] Sidebar refresh after currency change failed:", error);
-        });
-      }
-    });
-    const clearCachedOrders = event => {
-      if (event.currentTarget.classList.contains("disabled")) return;
-      const cachedCount = readRawOrderCache().length;
-      if (cachedCount === 0) {
-        clearOrderCache();
-        renderOrderResults();
-        updateAllActionStates();
-        setSettingsActionStatus("订购缓存为空");
-        return;
-      }
-      if (!confirm(`将移除 ${cachedCount} 项订购卡牌缓存，确定？`)) return;
-      clearOrderCache();
-      renderOrderResults();
-      updateAllActionStates();
-      setSettingsActionStatus(`已移除 ${cachedCount} 项缓存`);
-    };
-    const restoreDefaultSettings = event => {
-      if (
-        event.currentTarget.classList.contains("disabled")
-        || isSharedActionBusy()
-        || state.sidebarPriceRefreshing
-      ) {
-        setSettingsActionStatus("请先停止当前操作，再恢复默认设置");
-        updateAllActionStates();
-        return;
-      }
-      if (!confirm("将恢复所有设置项为默认值。游戏/AppID黑名单和订购缓存会保留，确定？")) return;
-      const preservedKeys = [
-        "blacklist",
-        "blacklistNames",
-        "blacklistSources",
-        "blacklistDates",
-        "blacklistFixed",
-        "blacklistPriceData",
-      ];
-      const preserved = Object.fromEntries(
-        preservedKeys.map(key => [key, state.cfg[key] ?? DEFAULT_CONFIG[key]])
-      );
-      state.cfg = { ...DEFAULT_CONFIG, ...preserved };
-      saveConfig(state.cfg);
-      applyConfiguredCurrency(state.cfg.currencyId);
-
-      modal.remove();
-      document.getElementById("stch-backdrop")?.remove();
-      modalEl = null;
-      buildModal({ initialTab: "settings", suppressOnboarding: true });
-      const status = document.getElementById("stch-settings-action-status");
-      if (status) status.textContent = "已恢复默认设定";
-    };
-
     // Tab switching
     modal.querySelectorAll(".stch-tab[data-tab]").forEach(tab => {
       tab.addEventListener("click", () => {
@@ -1305,13 +655,6 @@ import {
 
     document.getElementById("stch-onboarding-close").addEventListener("click", closeOnboarding);
     document.getElementById("stch-onboarding-open")?.addEventListener("click", showOnboarding);
-    document.getElementById("stch-settings-import-data")?.addEventListener("click", () => {
-      document.getElementById("stch-settings-import-file")?.click();
-    });
-    document.getElementById("stch-settings-export-data")?.addEventListener("click", exportBackupFile);
-    document.getElementById("stch-settings-import-file")?.addEventListener("change", importBackupData);
-    document.getElementById("stch-settings-clear-cache")?.addEventListener("click", clearCachedOrders);
-    document.getElementById("stch-settings-reset")?.addEventListener("click", restoreDefaultSettings);
     document.getElementById("stch-scan-btn").addEventListener("click", startScan);
     document.getElementById("stch-stop-btn").addEventListener("click", requestStop);
     document.getElementById("stch-skip-btn").addEventListener("click", skipCurrentBadge);
@@ -1319,32 +662,50 @@ import {
     document.getElementById("stch-submit-orders-btn").addEventListener("click", submitSelectedBuyOrders);
     document.getElementById("stch-order-add-btn").addEventListener("click", addManualOrderAppid);
     document.getElementById("stch-order-recalculate-btn").addEventListener("click", recalculateSelectedOrderResults);
-    document.getElementById("stch-order-submit-orders-btn").addEventListener("click", submitSelectedOrderBuyOrders);
+    document.getElementById("stch-order-submit-orders-btn").addEventListener("click", async () => {
+      await submitSelectedOrderBuyOrders();
+      renderOrderResults();
+    });
     initActiveBuyOrdersUi();
+    initPriceHistoryUi();
     document.getElementById("stch-craft-scan-btn").addEventListener("click", startCraftScan);
     document.getElementById("stch-craft-stop-btn").addEventListener("click", requestCraftStop);
     document.getElementById("stch-craft-one-btn").addEventListener("click", () => setAllCraftCounts("one"));
     document.getElementById("stch-craft-max-btn").addEventListener("click", () => setAllCraftCounts("max"));
     document.getElementById("stch-craft-clear-btn").addEventListener("click", () => setAllCraftCounts("clear"));
     document.getElementById("stch-craft-submit-btn").addEventListener("click", submitCraftPlan);
-    document.getElementById("stch-surplus-scan-btn").addEventListener("click", event => {
+    let processingBatchStopped = false;
+    document.getElementById("stch-surplus-scan-btn").addEventListener("click", async event => {
       if (event.currentTarget.classList.contains("disabled")) return;
-      if (getSurplusItemMode() === "card") startSurplusScan();
-      else startGrindScan();
+      const mode = getSurplusItemMode();
+      processingBatchStopped = false;
+      if (processingModeIncludesCards(mode) && processingModeIncludesDecorations(mode)) {
+        state.grindResults = [];
+        state.selectedGrindResults = new Set();
+        state.grindGemPrice = null;
+        renderGrindResults();
+      }
+      const inventorySnapshot = processingModeIncludesCards(mode) && processingModeIncludesDecorations(mode)
+        ? {} : undefined;
+      if (processingModeIncludesCards(mode)) await startSurplusScan({ inventorySnapshot });
+      if (!processingBatchStopped && processingModeIncludesDecorations(mode)) {
+        await startGrindScan({ inventorySnapshot, preserveLog: processingModeIncludesCards(mode) });
+      }
     });
     document.getElementById("stch-surplus-stop-btn").addEventListener("click", event => {
       if (event.currentTarget.classList.contains("disabled")) return;
+      processingBatchStopped = true;
       if (state.surplusScanning) requestSurplusStop();
       else if (state.grindScanning) requestGrindStop();
     });
     document.getElementById("stch-surplus-select-all-btn").addEventListener("click", event => {
       if (event.currentTarget.classList.contains("disabled")) return;
       const mode = getSurplusItemMode();
-      const list = document.getElementById(mode === "card" ? "stch-surplus-list" : "stch-grind-list");
+      const list = document.getElementById("stch-processing-list");
       const tiles = list ? [...list.querySelectorAll(".stch-inv-tile")] : [];
       const allSelected = tiles.length > 0 && tiles.every(tile => tile.classList.contains("selected"));
-      if (mode === "card") setAllVisibleSurplusSelection(!allSelected);
-      else setAllVisibleGrindSelection(!allSelected);
+      if (processingModeIncludesCards(mode)) setAllVisibleSurplusSelection(!allSelected);
+      if (processingModeIncludesDecorations(mode)) setAllVisibleGrindSelection(!allSelected);
       updateAllActionStates();
     });
     document.getElementById("stch-surplus-sell-btn").addEventListener("click", event => {
@@ -1371,88 +732,6 @@ import {
       if (event.currentTarget.classList.contains("disabled")) return;
       removeSelectedCollectionItems();
     });
-    const syncCraftMaxPages = event => {
-      state.cfg.maxBadgePages = Math.max(
-        1,
-        parseInt(event.target.value, 10) || DEFAULT_CONFIG.maxBadgePages
-      );
-      const scanMaxPages = document.getElementById("stch-max-pages");
-      if (scanMaxPages) scanMaxPages.value = String(state.cfg.maxBadgePages);
-      saveConfig(state.cfg);
-    };
-    const craftMaxPagesInput = document.getElementById("stch-craft-max-pages");
-    craftMaxPagesInput.addEventListener("input", syncCraftMaxPages);
-    craftMaxPagesInput.addEventListener("change", syncCraftMaxPages);
-
-    // Keep the blacklist tab and settings copy on the same persisted values.
-    const autoBlacklistEnabledIds = [
-      "stch-auto-bl-enabled",
-      "stch-settings-auto-bl-enabled",
-    ];
-    const autoBlacklistThresholdIds = [
-      "stch-auto-bl-threshold",
-      "stch-settings-auto-bl-threshold",
-    ];
-    const blacklistExpiryDaysIds = [
-      "stch-blacklist-expiry-days",
-      "stch-settings-blacklist-expiry-days",
-    ];
-    const renderAutoBlacklistControls = (exceptId = "") => {
-      autoBlacklistEnabledIds.forEach(id => {
-        if (id === exceptId) return;
-        const input = document.getElementById(id);
-        if (input) input.checked = !!state.cfg.autoBlackEnabled;
-      });
-      autoBlacklistThresholdIds.forEach(id => {
-        if (id === exceptId) return;
-        const input = document.getElementById(id);
-        if (input) input.value = String(state.cfg.autoBlackThreshold ?? 0);
-      });
-      blacklistExpiryDaysIds.forEach(id => {
-        if (id === exceptId) return;
-        const input = document.getElementById(id);
-        if (input) input.value = String(state.cfg.blacklistExpiryDays);
-      });
-      const cleanupButton = document.getElementById("stch-bl-cleanup");
-      if (cleanupButton) {
-        cleanupButton.title = `清理超过 ${state.cfg.blacklistExpiryDays} 天的普通黑名单；固定黑名单不会清理`;
-      }
-    };
-    autoBlacklistEnabledIds.forEach(id => {
-      document.getElementById(id)?.addEventListener("change", event => {
-        state.cfg.autoBlackEnabled = !!event.currentTarget.checked;
-        renderAutoBlacklistControls();
-        saveConfig(state.cfg);
-      });
-    });
-
-    initPriceHistoryUi();
-    const syncAutoBlacklistThreshold = (event, normalizeSource = false) => {
-      const parsed = parseFloat(event.currentTarget.value);
-      state.cfg.autoBlackThreshold = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-      renderAutoBlacklistControls(normalizeSource ? "" : event.currentTarget.id);
-      saveConfig(state.cfg);
-    };
-    autoBlacklistThresholdIds.forEach(id => {
-      const input = document.getElementById(id);
-      input?.addEventListener("input", event => syncAutoBlacklistThreshold(event, false));
-      input?.addEventListener("change", event => syncAutoBlacklistThreshold(event, true));
-    });
-    const syncBlacklistExpiryDays = (event, normalizeSource = false) => {
-      const parsed = parseInt(event.currentTarget.value, 10);
-      state.cfg.blacklistExpiryDays = Number.isFinite(parsed)
-        ? Math.max(1, parsed)
-        : DEFAULT_CONFIG.blacklistExpiryDays;
-      renderAutoBlacklistControls(normalizeSource ? "" : event.currentTarget.id);
-      saveConfig(state.cfg);
-    };
-    blacklistExpiryDaysIds.forEach(id => {
-      const input = document.getElementById(id);
-      input?.addEventListener("input", event => syncBlacklistExpiryDays(event, false));
-      input?.addEventListener("change", event => syncBlacklistExpiryDays(event, true));
-    });
-    renderAutoBlacklistControls();
-
     applyScanModeTheme();
 
     if (!options.suppressOnboarding && !GM_getValue(ONBOARDING_SEEN_KEY, false)) {
@@ -1566,8 +845,6 @@ import {
 
     renderBlacklist();
     applySurplusItemMode();
-    renderSurplusResults();
-    renderGrindResults();
     renderItemCollection();
     pruneOrderCache(true);
     renderOrderResults();

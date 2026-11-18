@@ -42,6 +42,7 @@ export class RequestQueue {
     this.cooling = false;
     this.stopped = false;
     this._consecutive429 = 0;
+    this._retryAfter = 0;
     this._429Warned = false;
     this._currentJob = null;
     this._currentController = null;
@@ -382,6 +383,18 @@ export class RequestQueue {
 
     try {
       if (this.stopped) throw CANCELLED;
+      if (job.policy.retry429 && this._retryAfter > this._now()) {
+        const ready = await this._sleepWithCountdown(this._retryAfter - this._now(),
+          seconds => `429 限流冷却中 (第${this._consecutive429}次, ${seconds}s)`);
+        if (!ready) {
+          if (this.state?.skipCurrent) {
+            this._rejectJob(job, { status: 429, error: "skipped by user" });
+          } else if (!this.stopped) {
+            this.stop();
+          }
+          throw CANCELLED;
+        }
+      }
       if (job.policy.name === "priceoverview") {
         let waitMs = reservePriceOverviewRequest(this._now());
         while (waitMs > 0) {
@@ -402,34 +415,13 @@ export class RequestQueue {
 
       if (response.status === 429 && job.policy.retry429) {
         this._consecutive429++;
+        this._retryAfter = this._now() + PRICE_OVERVIEW_WINDOW_MS;
         if (this._consecutive429 >= 3 && !this._429Warned && this.onLog) {
           this._429Warned = true;
           this.onLog(
             "Steam 可能已临时限制此 IP 访问价格 API；建议等待至少半小时或者更换 IP 后再继续",
             "warn-ip"
           );
-        }
-        const completed = await this._sleepWithCountdown(
-          PRICE_OVERVIEW_WINDOW_MS,
-          seconds => `429 限流冷却中 (第${this._consecutive429}次, ${seconds}s)`
-        );
-        if (!completed) {
-          if (this.state?.skipCurrent) {
-            this._rejectJob(job, { status: 429, error: "skipped by user" });
-          } else {
-            if (!this.stopped) this.stop();
-            this._rejectJob(job, stoppedError());
-          }
-          return { attempted: false, retry: false, requestStartedAt };
-        }
-        if (this.state?.skipCurrent) {
-          this._rejectJob(job, { status: 429, error: "skipped by user" });
-          return { attempted: false, retry: false, requestStartedAt };
-        }
-        if (this.stopped || this._externalStopRequested()) {
-          if (!this.stopped) this.stop();
-          this._rejectJob(job, stoppedError());
-          return { attempted: false, retry: false, requestStartedAt };
         }
         return { attempted: false, retry: true, requestStartedAt };
       }

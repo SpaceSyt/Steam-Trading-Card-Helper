@@ -1,4 +1,4 @@
-import { unsafeWindow } from "../globals.js";
+import { readInventoryPages } from "../services/inventory-pages.js";
 import { state } from "../state.js";
 
 import { SIDEBAR_GEM_SACK_HASH, GEM_SACK_SIZE } from "../constants.js";
@@ -15,33 +15,16 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
   export async function loadSidebarGemInfo(steamId) {
     if (!steamId) throw new Error("未找到 SteamID，无法读取库存");
 
-    const language = unsafeWindow.g_strLanguage || "schinese";
-    let startAssetId = "";
     let looseGems = 0;
     let sackCount = 0;
     let totalInventoryCount = 0;
 
-    do {
-      const params = new URLSearchParams({
-        l: language,
-        count: "2000",
-      });
-      if (startAssetId) params.set("start_assetid", startAssetId);
-      const data = await stchRequestJson(
-        `https://steamcommunity.com/inventory/${steamId}/753/6?${params.toString()}`
-      );
-      if (data?.success !== 1 && data?.success !== true) {
-        throw new Error(data?.Error || data?.error || "Steam 未返回库存数据");
-      }
-      totalInventoryCount = Number(data.total_inventory_count || totalInventoryCount) || totalInventoryCount;
-
-      const descriptions = new Map();
-      (Array.isArray(data.descriptions) ? data.descriptions : []).forEach(description => {
-        descriptions.set(getDescriptionKey(description), description);
-      });
-
-      for (const asset of Array.isArray(data.assets) ? data.assets : []) {
-        const description = descriptions.get(getDescriptionKey(asset));
+    for await (const inventoryPage of readInventoryPages(steamId, {
+      fetch: async url => ({ data: await stchRequestJson(url) }),
+    })) {
+      totalInventoryCount = inventoryPage.totalInventoryCount || totalInventoryCount;
+      for (const asset of inventoryPage.assets) {
+        const description = inventoryPage.descriptions.get(getDescriptionKey(asset));
         const amount = getAssetAmount(asset);
         if (isGemSackDescription(description)) {
           sackCount += amount;
@@ -50,10 +33,7 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
         }
       }
 
-      startAssetId = data.more_items && data.last_assetid
-        ? String(data.last_assetid)
-        : "";
-    } while (startAssetId);
+    }
 
     return {
       looseGems,
@@ -74,7 +54,6 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
     const requestQueue = queue || ownedQueue;
     try {
       const price = await priceCard(SIDEBAR_GEM_SACK_HASH, requestQueue, {
-        preferListing: true,
         requestPolicy: { base: "priceoverview", retry429: false },
       });
       const priced = isPriceCardPriced(price);

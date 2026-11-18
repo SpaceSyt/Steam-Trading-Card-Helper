@@ -2,11 +2,40 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createBadgePriceScheduler,
   createRequestQueuePool,
   getHtmlRequestConcurrency,
   getOtherRequestConcurrency,
   runWithConcurrency,
 } from "../../src/utils/concurrency.js";
+
+test("badge listings continue across sets while one fallback waits and another is skipped", async () => {
+  let resume;
+  const waiting = new Promise(resolve => { resume = resolve; });
+  const overviews = [];
+  const schedule = createBadgePriceScheduler({ fetch(card) { overviews.push(card); return waiting; } });
+  const htmlQueue = { async fetch(card) { return card.startsWith("priced"); } };
+  const results = [];
+  async function priceOne(card, queue) {
+    if (!await queue.fetch(card, { requestPolicy: "default" })) {
+      await queue.fetch(card, { requestPolicy: "priceoverview" });
+    }
+    results.push(card);
+  }
+  const first = await schedule(["missing", "priced A"], 1, htmlQueue, () => false, priceOne);
+  let skip = false;
+  const second = await schedule(["skipped"], 1, htmlQueue, () => skip, priceOne);
+  skip = true;
+  const third = await schedule(["priced C"], 1, htmlQueue, () => false, priceOne);
+  await third.complete;
+  assert.deepEqual(results, ["priced A", "priced C"]);
+  assert.deepEqual(overviews, ["missing"]);
+  resume();
+  await first.complete;
+  await assert.rejects(second.complete, error => error.error === "skipped");
+  assert.deepEqual(overviews, ["missing"]);
+  assert.deepEqual(results, ["priced A", "priced C", "missing"]);
+});
 
 test("HTML request concurrency uses the shared setting", () => {
   assert.equal(getHtmlRequestConcurrency({ parallelOrderPricingEnabled: false }), 1);

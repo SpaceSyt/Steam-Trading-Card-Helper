@@ -1,3 +1,7 @@
+import { fetchActiveBuyOrderSnapshot, fetchHighestBuyPrice, fetchMarketOrderDepth, getCurrencyMarketKey, getOrderCurrencyContext, getPendingOrderExpectedQuantity, isNoBuyOrdersError } from "../services/market-orders.js";
+import { getOrderPriceSourceLabel } from "../ui/pricing-controls.js";
+import { showConfirmation } from "../ui/confirmation.js";
+
 import { state } from "../state.js";
 
 import { RequestQueue } from "../request/queue.js";
@@ -10,11 +14,6 @@ import { getBadgeTargetLevel } from "../utils/badge.js";
 
 import { getMultibuyQuantity } from "./multibuy.js";
 
-import {
-  getMarketListingUrl,
-  parseMarketListingSnapshotFromHtml,
-  parseMarketListingWithDepthFromHtml,
-} from "../parsers/market-listing.js";
 import { getActiveOrderPricingProfile } from "../config.js";
 import { calculateAutomaticBuyPrice } from "../services/order-wall.js";
 
@@ -33,49 +32,17 @@ import { createTextSpan } from "../utils/dom.js";
 import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurrency.js";
 
 import { unsafeWindow } from "../globals.js";
-import {
-  getActiveCurrencyContext,
-  getCurrencyContextById,
-} from "../services/currency.js";
-import {
-  normalizeListingOrderbook,
-} from "../services/market-data.js";
 import { persistMarketObservations } from "../services/market-observations.js";
-import { parseActiveBuyOrdersResponse } from "../services/active-buy-orders.js";
 
 const { log, setStatus } = scanStatus;
 
-export const NO_BUY_ORDERS_ERROR_CODE = "STCH_NO_BUY_ORDERS";
-
-function createNoBuyOrdersError() {
-  const error = new Error("当前没有可用的最高求购价格");
-  error.code = NO_BUY_ORDERS_ERROR_CODE;
-  return error;
-}
-
-export function isNoBuyOrdersError(error) {
-  return error?.code === NO_BUY_ORDERS_ERROR_CODE;
-}
-
 const { setStatus: setOrderStatus } = orderStatus;
 
-  export function getOrderCurrencyContext() {
-    const activeContext = getActiveCurrencyContext();
-    if (Number.isInteger(activeContext?.currencyId) && activeContext.currencyId > 0) {
-      return activeContext;
-    }
-
-    const configuredCurrencyId = Number(state.cfg.currencyId);
-    if (Number.isInteger(configuredCurrencyId) && configuredCurrencyId > 0) {
-      return getCurrencyContextById(configuredCurrencyId);
-    }
-
-    throw new Error("无法确认 Steam 钱包币种");
-  }
-
-  export function getCurrencyMarketKey(marketHashName, currencyId = getOrderCurrencyContext().currencyId) {
-    return JSON.stringify([String(currencyId), String(marketHashName || "")]);
-  }
+function describeOrderError(error) {
+  if (Number(error?.status) > 0) return `HTTP ${error.status}`;
+  return error?.message || error?.error
+    || (typeof error === "string" ? error : "网络请求失败");
+}
 
   export async function addManualOrderAppid() {
     if (isPriceOverviewProbeBlocked(state.orderActionRunning)) return;
@@ -126,30 +93,6 @@ const { setStatus: setOrderStatus } = orderStatus;
     }
   }
 
-  export async function fetchActiveBuyOrderSnapshot(queue = null) {
-    const ownedQueue = queue ? null : new RequestQueue(
-      state.cfg.requestInterval,
-      state,
-      null,
-      null,
-      { stopPredicate: () => false }
-    );
-    const requestQueue = queue || ownedQueue;
-    let data;
-    try {
-      const response = await requestQueue.fetch(
-        "https://steamcommunity.com/market/mylistings?start=0&count=100&l=english",
-        { requestPolicy: "default" }
-      );
-      data = response?.data;
-    } finally {
-      ownedQueue?.stop();
-    }
-    return parseActiveBuyOrdersResponse(data, {
-      minorDigits: getOrderCurrencyContext().minorDigits,
-    });
-  }
-
   export async function loadActiveBuyOrders(queue = null) {
     const snapshot = await fetchActiveBuyOrderSnapshot(queue);
     if (snapshot.diagnostics.length > 0) {
@@ -163,204 +106,6 @@ const { setStatus: setOrderStatus } = orderStatus;
       orders.set(order.marketHashName, current);
     });
     return orders;
-  }
-
-  export function getPendingOrderExpectedQuantity(marketHashName) {
-    const cacheKey = getCurrencyMarketKey(marketHashName);
-    const pending = state.pendingOrderQuantities.get(cacheKey);
-    if (!pending) return 0;
-    if (Date.now() - pending.createdAt > 2 * 60 * 1000) {
-      state.pendingOrderQuantities.delete(cacheKey);
-      return 0;
-    }
-    return pending.expectedQuantity;
-  }
-
-  export function getOrderPriceSourceLabel(priceSource) {
-    if (priceSource === "conservative") return "保守";
-    if (priceSource === "balanced") return "平衡";
-    if (priceSource === "aggressive") return "抢单";
-    if (priceSource === "median") return "平均价格";
-    if (priceSource === "highest") return "求购最高";
-    return "在售最低";
-  }
-
-  function validateListingSnapshot(snapshot, currencyId) {
-    if (
-      Number.isInteger(snapshot?.currency)
-      && snapshot.currency > 0
-      && snapshot.currency !== currencyId
-    ) {
-      throw new Error(`商品页币种不一致 (${snapshot.currency}/${currencyId})`);
-    }
-    if (
-      Number.isInteger(snapshot?.currency)
-      && snapshot.currency > 0
-      && !(Number.isFinite(snapshot.highestBuyCents) && snapshot.highestBuyCents > 0)
-    ) {
-      throw createNoBuyOrdersError();
-    }
-  }
-
-  export async function fetchHighestBuyPrice(marketHashName, queue = null, options = {}) {
-    const currencyContext = getOrderCurrencyContext();
-    const cacheKey = getCurrencyMarketKey(marketHashName, currencyContext.currencyId);
-    const cached = state.highestBuyPrices.get(cacheKey);
-    if (
-      Number.isFinite(cached?.priceCents)
-      && cached.priceCents > 0
-      && Date.now() - cached.fetchedAt < 30000
-    ) {
-      if (typeof options.onCache === "function") options.onCache(cached);
-      if (typeof options.onMetadata === "function") {
-        options.onMetadata({
-          displayName: cached.displayName || "",
-          imageUrl: cached.imageUrl || "",
-          sellOrderCount: cached.sellOrderCount ?? null,
-          observedAt: cached.fetchedAt,
-        });
-      }
-      return cached.priceCents;
-    }
-
-    const ownedQueue = queue ? null : new RequestQueue(
-      state.cfg.requestInterval,
-      state,
-      null,
-      null,
-      { stopPredicate: () => false }
-    );
-    const requestQueue = queue || ownedQueue;
-    const observeRecord = record => {
-      if (!record) return;
-      if (typeof options.onRecord === "function") options.onRecord(record);
-      if (options.persistMarketCache !== false) {
-        const persistence = persistMarketObservations(record);
-        if (typeof options.onPersist === "function") options.onPersist(persistence);
-      }
-    };
-    try {
-      const listingUrl = getMarketListingUrl(marketHashName);
-      const listingResponse = await requestQueue.fetch(listingUrl, {
-        requestPolicy: "default",
-      });
-      const listingHtml = listingResponse?.text || "";
-      const listingSnapshot = parseMarketListingSnapshotFromHtml(
-        listingHtml,
-        marketHashName,
-        { includeHistory: false }
-      );
-      const metadataObservedAt = Date.now();
-      if (listingSnapshot && typeof options.onMetadata === "function") {
-        options.onMetadata({
-          displayName: listingSnapshot.displayName || "",
-          imageUrl: listingSnapshot.imageUrl || "",
-          sellOrderCount: listingSnapshot.sellOrderCount,
-          observedAt: metadataObservedAt,
-        });
-      }
-      validateListingSnapshot(listingSnapshot, currencyContext.currencyId);
-      const newOrderbook = listingSnapshot?.highestBuyCents !== null
-        ? listingSnapshot
-        : null;
-      if (newOrderbook) {
-        if (
-          newOrderbook.currency != null
-          && newOrderbook.currency !== currencyContext.currencyId
-        ) {
-          throw new Error(
-            `商品页币种不一致 (${newOrderbook.currency}/${currencyContext.currencyId})`
-          );
-        }
-        if (newOrderbook.highestBuyCents <= 0) {
-          throw createNoBuyOrdersError();
-        }
-        const observedAt = Date.now();
-        observeRecord(normalizeListingOrderbook(newOrderbook, {
-          appid: "753",
-          marketHashName,
-          currencyId: currencyContext.currencyId,
-          currencyCode: currencyContext.code,
-          observedAt,
-        }));
-        state.highestBuyPrices.set(cacheKey, {
-          currencyId: currencyContext.currencyId,
-          priceCents: newOrderbook.highestBuyCents,
-          fetchedAt: observedAt,
-          displayName: listingSnapshot?.displayName || "",
-          imageUrl: listingSnapshot?.imageUrl || "",
-          sellOrderCount: listingSnapshot?.sellOrderCount ?? null,
-        });
-        return newOrderbook.highestBuyCents;
-      }
-
-      throw new Error("商品页缺少可用的 SSR 订单簿数据");
-    } finally {
-      ownedQueue?.stop();
-    }
-  }
-
-  export async function fetchMarketOrderDepth(marketHashName, queue = null, options = {}) {
-    const currencyContext = getOrderCurrencyContext();
-    const cacheKey = getCurrencyMarketKey(marketHashName, currencyContext.currencyId);
-    const cached = state.marketOrderDepths.get(cacheKey);
-    if (cached?.depth && Date.now() - cached.fetchedAt < 30000) {
-      return cached.depth;
-    }
-
-    const ownedQueue = queue ? null : new RequestQueue(
-      state.cfg.requestInterval,
-      state,
-      null,
-      null,
-      { stopPredicate: () => false }
-    );
-    const requestQueue = queue || ownedQueue;
-    try {
-      const listingUrl = getMarketListingUrl(marketHashName);
-      const response = await requestQueue.fetch(listingUrl, { requestPolicy: "default" });
-      const listingHtml = response?.text || "";
-      const { snapshot, depth } = parseMarketListingWithDepthFromHtml(
-        listingHtml,
-        marketHashName,
-        { includeHistory: false }
-      );
-      if (!depth) {
-        validateListingSnapshot(snapshot, currencyContext.currencyId);
-        throw new Error("商品页缺少有效的完整买单深度");
-      }
-      if (depth.currencyId !== currencyContext.currencyId) {
-        throw new Error(
-          `商品页币种不一致 (${depth.currencyId}/${currencyContext.currencyId})`
-        );
-      }
-
-      const observedAt = Date.now();
-      const record = normalizeListingOrderbook({
-        eCurrency: depth.currencyId,
-        amtMaxBuyOrder: depth.highestBuyMinor,
-        amtMinSellOrder: depth.lowestSellMinor,
-      }, {
-        appid: "753",
-        marketHashName,
-        currencyId: currencyContext.currencyId,
-        currencyCode: currencyContext.code,
-        observedAt,
-      });
-      if (record && typeof options.onRecord === "function") options.onRecord(record);
-      state.highestBuyPrices.set(cacheKey, {
-        currencyId: currencyContext.currencyId,
-        priceCents: depth.highestBuyMinor,
-        fetchedAt: observedAt,
-        displayName: snapshot?.displayName || "",
-        imageUrl: snapshot?.imageUrl || "",
-        sellOrderCount: depth.sellOrderCount ?? snapshot?.sellOrderCount ?? null,
-      });
-      state.marketOrderDepths.set(cacheKey, { depth, fetchedAt: observedAt });
-      return depth;
-    } finally {
-      ownedQueue?.stop();
-    }
   }
 
   async function fetchParallelOrderPricing(candidates, pricingProfile, marketRecords) {
@@ -411,6 +156,7 @@ const { setStatus: setOrderStatus } = orderStatus;
     const plan = [];
     const skipped = {
       covered: 0,
+      notNeeded: 0,
       missingPrice: 0,
       missingHash: 0,
       clamped: 0,
@@ -420,6 +166,7 @@ const { setStatus: setOrderStatus } = orderStatus;
     };
     const candidates = [];
     const marketRecords = [];
+    let firstPricingError = "";
 
     for (const info of selected) {
       for (const card of info.cards) {
@@ -434,7 +181,10 @@ const { setStatus: setOrderStatus } = orderStatus;
           card.owned,
           getBadgeTargetLevel(info)
         );
-        if (targetQuantity <= 0) continue;
+        if (targetQuantity <= 0) {
+          skipped.notNeeded++;
+          continue;
+        }
 
         const activeQuantity = activeOrders.get(card.marketHashName)?.quantity || 0;
         const pendingQuantity = getPendingOrderExpectedQuantity(card.marketHashName);
@@ -542,8 +292,10 @@ const { setStatus: setOrderStatus } = orderStatus;
           );
         } else {
           if (pricingError) {
+            const message = describeOrderError(pricingError);
+            if (!firstPricingError) firstPricingError = message;
             logFn(
-              `  ${info.gameName} · ${card.name}: ${pricingError?.message || pricingError}，已跳过`,
+              `  ${info.gameName} · ${card.name}: ${message}，已跳过`,
               "warn"
             );
           }
@@ -599,6 +351,7 @@ const { setStatus: setOrderStatus } = orderStatus;
     return {
       plan,
       skipped,
+      firstPricingError,
       priceSource,
       adjustmentCents,
       minimumCents,
@@ -608,7 +361,6 @@ const { setStatus: setOrderStatus } = orderStatus;
   }
 
   export function showBuyOrderConfirmation(planData, selectedGameCount) {
-    return new Promise(resolve => {
       const {
         plan,
         skipped,
@@ -618,8 +370,6 @@ const { setStatus: setOrderStatus } = orderStatus;
         automaticPricing,
         strategyRule,
       } = planData;
-      const backdrop = document.createElement("div");
-      backdrop.id = "stch-order-dialog-backdrop";
       const totalQuantity = plan.reduce((sum, item) => sum + item.quantity, 0);
       const totalCents = plan.reduce((sum, item) => sum + item.totalPriceCents, 0);
       const plannedGameCount = new Set(plan.map(item => `${item.appid}:${item.gameName}`)).size;
@@ -636,24 +386,11 @@ const { setStatus: setOrderStatus } = orderStatus;
         : `价格基准 <b>${getOrderPriceSourceLabel(priceSource)}</b> · `
           + `买价调整 <b>${adjustmentText}</b>`;
 
-      backdrop.innerHTML = `
-        <div class="stch-order-dialog">
-          <h3>确认提交长期订购单</h3>
-          <div class="stch-order-summary">
-            游戏 <b>${plannedGameCount}</b>/${selectedGameCount} 个 · 卡牌种类 <b>${plan.length}</b> ·
-            数量 <b>${totalQuantity}</b> 张 · 新增最高占用 <b>${formatMoney(totalCents)}</b><br>
-            ${pricingSummary}
-          </div>
-          <div class="stch-order-list"></div>
-          <div class="stch-order-note"></div>
-          <div class="stch-order-dialog-actions">
-            <div class="stch-btn alt" data-action="cancel">取消</div>
-            <div class="stch-btn" data-action="confirm">提交订购单</div>
-          </div>
-        </div>
-      `;
-
-      const list = backdrop.querySelector(".stch-order-list");
+      return showConfirmation({
+        title: "确认提交长期订购单",
+        confirmLabel: "提交订购单",
+        summaryHtml: `游戏 <b>${plannedGameCount}</b>/${selectedGameCount} 个 · 卡牌种类 <b>${plan.length}</b> · 数量 <b>${totalQuantity}</b> 张 · 新增最高占用 <b>${formatMoney(totalCents)}</b><br>${pricingSummary}`,
+      }, (list, backdrop) => {
       plan.forEach(item => {
         const row = document.createElement("div");
         row.className = "stch-order-item";
@@ -699,34 +436,36 @@ const { setStatus: setOrderStatus } = orderStatus;
       backdrop.querySelector(".stch-order-note").textContent =
         [...notes, "订单长期有效"].join("；") + "。";
 
-      const finish = confirmed => {
-        backdrop.remove();
-        resolve(confirmed);
-      };
-      backdrop.querySelector('[data-action="cancel"]').addEventListener("click", () => finish(false));
-      backdrop.querySelector('[data-action="confirm"]').addEventListener("click", () => finish(true));
-      backdrop.addEventListener("click", event => {
-        if (event.target === backdrop) finish(false);
-      });
-      document.body.appendChild(backdrop);
     });
   }
 
-  export async function createLongTermBuyOrder(item, ui = {}) {
-    const statusFn = ui.setStatus || setStatus;
-    const logFn = ui.log || log;
+  export function getBuyOrderSession() {
     const sessionId = getSessionId();
     if (!sessionId) throw new Error("未找到 Steam sessionid");
     if (unsafeWindow.g_bRequiresBillingInfo === true) {
       throw new Error("Steam 要求补充账单信息，请先在市场页面手动提交一次订单");
     }
 
+    const walletCurrency = unsafeWindow.g_rgWalletInfo?.wallet_currency;
+    if (walletCurrency != null && Number(walletCurrency) !== getOrderCurrencyContext().currencyId) {
+      throw new Error("钱包币种已改变，请重新查价");
+    }
+    return sessionId;
+  }
+
+  export async function createLongTermBuyOrder(item, ui = {}) {
+    const statusFn = ui.setStatus || setStatus;
+    const logFn = ui.log || log;
+    const sessionId = getBuyOrderSession();
     let confirmation = 0;
     for (let attempt = 0; attempt < 41; attempt++) {
+      if (confirmation && getBuyOrderSession() !== sessionId) throw new Error("Steam 会话或币种已改变");
+      const currencyId = getOrderCurrencyContext().currencyId;
+      if (item.currencyId != null && item.currencyId !== currencyId) throw new Error("钱包币种已改变，请重新查价");
       const body = new URLSearchParams({
         sessionid: sessionId,
-        currency: String(getOrderCurrencyContext().currencyId),
-        appid: "753",
+        currency: String(currencyId),
+        appid: String(item.marketAppid ?? 753),
         market_hash_name: item.marketHashName,
         price_total: String(item.totalPriceCents),
         quantity: String(item.quantity),
@@ -754,9 +493,11 @@ const { setStatus: setOrderStatus } = orderStatus;
       let data = null;
       try { data = JSON.parse(text); } catch (_) {}
 
-      if (data?.success === 1) return data;
-      if (data?.need_confirmation && data?.confirmation?.confirmation_id) {
-        confirmation = data.confirmation.confirmation_id;
+      if (response.ok && data?.success === 1 && /^[1-9]\d*$/.test(data.buy_orderid)) return data;
+      const nextConfirmation = String(data?.confirmation?.confirmation_id ?? "");
+      if ((response.ok || response.status === 406) && data?.success !== 1 && [true, 1, "1"].includes(data?.need_confirmation)
+        && /^[1-9]\d*$/.test(nextConfirmation) && (!confirmation || confirmation === nextConfirmation)) {
+        confirmation = nextConfirmation;
         if (attempt === 0) {
           logFn(`  ${item.cardName}: 等待 Steam 移动确认`, "warn");
           statusFn(`请在 Steam 移动应用中确认: ${item.cardName}`);
@@ -799,7 +540,14 @@ const { setStatus: setOrderStatus } = orderStatus;
       const activeOrders = await loadActiveBuyOrders(queue);
       const planData = await buildBuyOrderPlan(selected, activeOrders, ui);
       if (planData.plan.length === 0) {
-        finalStatus = `无需提交订购单：已有订单已覆盖，或没有可用的${getOrderPriceSourceLabel(planData.priceSource)}`;
+        const { skipped, firstPricingError } = planData;
+        const reasons = [];
+        if (skipped.missingHash) reasons.push(`${skipped.missingHash} 种卡牌缺少市场标识`);
+        if (skipped.missingPrice) reasons.push(`${skipped.missingPrice} 种卡牌无法定价`);
+        if (skipped.covered) reasons.push(`${skipped.covered} 种卡牌已被订单或待同步记录覆盖`);
+        if (skipped.notNeeded) reasons.push(`${skipped.notNeeded} 种卡牌在当前模式下无需购买`);
+        finalStatus = `未生成订购单：${reasons.join("；") || "无可用卡牌数据"}`;
+        if (firstPricingError) finalStatus += `；${firstPricingError}`;
         logFn(finalStatus, "warn");
         return;
       }
@@ -828,7 +576,7 @@ const { setStatus: setOrderStatus } = orderStatus;
         } catch (error) {
           failed++;
           logFn(
-            `  ✗ ${item.gameName} · ${item.cardName}: ${error?.message || error}`,
+            `  ✗ ${item.gameName} · ${item.cardName}: ${describeOrderError(error)}`,
             "err"
           );
         }
@@ -837,7 +585,7 @@ const { setStatus: setOrderStatus } = orderStatus;
       finalStatus = `长期订购单提交结束: 成功 ${submitted}, 失败 ${failed}`;
       logFn(finalStatus, failed ? "warn" : "ok");
     } catch (error) {
-      finalStatus = `无法提交长期订购单: ${error?.message || error}`;
+      finalStatus = `无法提交长期订购单: ${describeOrderError(error)}`;
       logFn(finalStatus, "err");
     } finally {
       queue.stop();

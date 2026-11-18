@@ -1,3 +1,5 @@
+import { showConfirmation } from "../ui/confirmation.js";
+
 import { state } from "../state.js";
 
 import { RequestQueue } from "../request/queue.js";
@@ -311,7 +313,8 @@ const { log: craftLog, setStatus: setCraftStatus, setProgress: setCraftProgress,
         const response = await queue.fetch(
           `${profileUrl}/badges/?sort=p&p=${page}`
         );
-        const pageCandidates = parseCraftCandidatesHtml(response.text || "");
+        const doc = new DOMParser().parseFromString(response.text || "", "text/html");
+        const pageCandidates = parseCraftCandidatesHtml(response.text || "", doc);
 
         for (const candidate of pageCandidates) {
           const key = getResultKey(candidate);
@@ -330,10 +333,6 @@ const { log: craftLog, setStatus: setCraftStatus, setProgress: setCraftProgress,
         craftLog(
           `徽章页 ${page}: 找到 ${pageCandidates.length} 个可合成入口`,
           "info"
-        );
-        const doc = new DOMParser().parseFromString(
-          response.text || "",
-          "text/html"
         );
         const nextLink = doc.querySelector(
           `a.pagebtn[href*="p=${page + 1}"]`
@@ -428,33 +427,13 @@ const { log: craftLog, setStatus: setCraftStatus, setProgress: setCraftProgress,
   }
 
   export function showCraftConfirmation(plan, craftMode) {
-    return new Promise(resolve => {
-      const totalLevels = plan.reduce((sum, item) => sum + item.count, 0);
-      const craftModeLabel = craftMode === "max"
-        ? "一次升满"
-        : "逐级升级";
-      const backdrop = document.createElement("div");
-      backdrop.id = "stch-order-dialog-backdrop";
-      backdrop.innerHTML = `
-        <div class="stch-order-dialog">
-          <h3>确认批量合成徽章</h3>
-          <div class="stch-order-summary">
-            游戏 <b>${plan.length}</b> 个 · 合成 <b>${totalLevels}</b> 次 ·
-            预计增加 <b>${totalLevels * 100}</b> XP ·
-            模式 <b>${craftModeLabel}</b>
-          </div>
-          <div class="stch-order-list"></div>
-          <div class="stch-order-note">
-            ${craftMode === "max" ? "每个游戏一次请求" : "每级一次请求"}；结果不明时停止。
-          </div>
-          <div class="stch-order-dialog-actions">
-            <div class="stch-btn alt" data-action="cancel">取消</div>
-            <div class="stch-btn" data-action="confirm">开始合成</div>
-          </div>
-        </div>
-      `;
-
-      const list = backdrop.querySelector(".stch-order-list");
+    const totalLevels = plan.reduce((sum, item) => sum + item.count, 0);
+    return showConfirmation({
+      title: "确认批量合成徽章",
+      confirmLabel: "开始合成",
+      summaryHtml: `游戏 <b>${plan.length}</b> 个 · 合成 <b>${totalLevels}</b> 次 · 预计增加 <b>${totalLevels * 100}</b> XP · 模式 <b>${craftMode === "max" ? "一次升满" : "逐级升级"}</b>`,
+      note: `${craftMode === "max" ? "每个游戏一次请求" : "每级一次请求"}；结果不明时停止。`,
+    }, list => {
       plan.forEach(item => {
         const row = document.createElement("div");
         row.className = "stch-order-item stch-craft-dialog-item";
@@ -467,18 +446,6 @@ const { log: craftLog, setStatus: setCraftStatus, setProgress: setCraftProgress,
         list.appendChild(row);
       });
 
-      const finish = confirmed => {
-        backdrop.remove();
-        resolve(confirmed);
-      };
-      backdrop.querySelector('[data-action="cancel"]')
-        .addEventListener("click", () => finish(false));
-      backdrop.querySelector('[data-action="confirm"]')
-        .addEventListener("click", () => finish(true));
-      backdrop.addEventListener("click", event => {
-        if (event.target === backdrop) finish(false);
-      });
-      document.body.appendChild(backdrop);
     });
   }
 

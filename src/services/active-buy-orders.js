@@ -135,6 +135,7 @@ export function parseActiveBuyOrdersHtml(html, options = {}) {
     else diagnostics.push({
       code: parsed.error || "invalid-order-row",
       orderId: current.orderId,
+      appid: parsed.identity?.appid || "",
       marketHashName: parsed.identity?.marketHashName || "",
     });
   }

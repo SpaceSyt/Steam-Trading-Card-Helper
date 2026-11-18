@@ -13,7 +13,6 @@ import {
   initializeCurrencyContext,
   parseCurrencyAmount,
 } from "../../src/services/currency.js";
-import { formatCNY } from "../../src/utils/format.js";
 
 async function readFixture(name) {
   const url = new URL(`../fixtures-public/currency/${name}`, import.meta.url);
@@ -173,11 +172,10 @@ test("CNY and USD fixtures format integer minor amounts and parse 1,234.56", asy
   }
 });
 
-test("formatting includes signs and symbols while the CNY alias keeps its old shape", () => {
+test("formatting includes signs and symbols", () => {
   const usd = getCurrencyContextById(1);
   assert.equal(formatMoney(-123, usd), "-$1.23");
   assert.equal(parseCurrencyAmount("-$1.23", usd), -123);
-  assert.equal(formatCNY(123456), "1234.56");
   assert.equal(formatMinorAmount(12.5, usd), "?");
 });
 

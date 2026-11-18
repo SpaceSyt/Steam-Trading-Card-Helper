@@ -11,7 +11,7 @@ import {
   toLegacyPriceResult,
 } from "../services/market-data.js";
 import { persistMarketObservations } from "../services/market-observations.js";
-import { getMarketListingUrl, parseMarketListingSnapshotFromHtml } from "./market-listing.js";
+import { getMarketListingUrl, parseMarketListingSnapshotFromHtml, parseMarketListingWithDepthFromHtml } from "./market-listing.js";
 
 export const PRICE_CARD_OUTCOMES = Object.freeze({
   PRICED: "priced",
@@ -93,7 +93,7 @@ export function isPriceCardError(result) {
 }
 
 /**
- * Apply one structured priceoverview result to a parsed card. Missing values are
+ * Apply one structured market price result to a parsed card. Missing values are
  * deliberately stored as null so aggregate callers cannot accidentally add a
  * partial price to a complete-set total.
  */
@@ -169,6 +169,15 @@ function makePriceCardResult(record, currencyContext, options, observedAt, legac
   };
 }
 
+export async function priceBadgeCard(marketHashName, queue) {
+  const result = await priceCard(marketHashName, queue, {
+    includeHistory: true,
+    persistMarketCache: false,
+  });
+  if (isPriceCardPriced(result)) result.volume = result.record.volume;
+  return result;
+}
+
 export async function priceCard(marketHashName, queue, options = {}) {
   const normalizedMarketHashName = String(marketHashName || "").trim();
   if (!normalizedMarketHashName || typeof queue?.fetch !== "function") {
@@ -186,45 +195,49 @@ export async function priceCard(marketHashName, queue, options = {}) {
       });
     }
     const appid = String(options.appid || 753);
-    if (options.preferListing === true) {
-      try {
-        const listingUrl = getMarketListingUrl(normalizedMarketHashName, appid);
-        const listingResponse = await queue.fetch(listingUrl, { requestPolicy: "default" });
-        const snapshot = parseMarketListingSnapshotFromHtml(
-          listingResponse?.text || "",
-          normalizedMarketHashName,
-          { includeHistory: options.requireMedian === true || options.requireVolume === true }
-        );
-        const observedAt = Date.now();
-        if (snapshot && typeof options.onMetadata === "function") {
-          options.onMetadata({
-            displayName: snapshot.displayName || "",
-            imageUrl: snapshot.imageUrl || "",
-            sellOrderCount: snapshot.sellOrderCount,
-            observedAt,
-          });
-        }
-        const record = snapshot && (snapshot.currency || snapshot.historyCurrency)
-          ? normalizeListingPage(snapshot, {
-            appid,
-            marketHashName: normalizedMarketHashName,
-            currencyId: currencyContext.currencyId,
-            currencyCode: currencyContext.code,
-            decimalDigits: currencyContext.decimalDigits,
-            observedAt,
-          })
-          : null;
-        const currencyMatches = record?.currencyId === currencyContext.currencyId
-          && record?.currencyCode === currencyContext.code;
-        const hasRequiredFields = (!options.requireMedian || record?.medianMinor !== null)
-          && (!options.requireVolume || record?.volume !== null);
-        if (record && currencyMatches && hasRequiredFields) {
-          return makePriceCardResult(record, currencyContext, options, observedAt);
-        }
-      } catch (error) {
-        const classified = classifyRequestError(error, currencyContext.currencyId);
-        if (classified.errorKind === PRICE_CARD_ERROR_KINDS.STOPPED) return classified;
+    try {
+      const listingUrl = getMarketListingUrl(normalizedMarketHashName, appid);
+      const listingResponse = await queue.fetch(listingUrl, { requestPolicy: "default" });
+      if (listingResponse?.status >= 400) throw listingResponse;
+      const html = listingResponse?.text || "";
+      const parseOptions = { appid: options.appid, includeHistory: Boolean(options.includeHistory || options.requireMedian || options.requireVolume) };
+      const { snapshot, depth } = options.includeBuyDepth
+        ? parseMarketListingWithDepthFromHtml(html, normalizedMarketHashName, parseOptions)
+        : { snapshot: parseMarketListingSnapshotFromHtml(html, normalizedMarketHashName, parseOptions) };
+      const observedAt = Date.now();
+      if (snapshot && typeof options.onMetadata === "function") {
+        options.onMetadata({
+          displayName: snapshot.displayName || "",
+          imageUrl: snapshot.imageUrl || "",
+          sellOrderCount: snapshot.sellOrderCount,
+          observedAt,
+        });
       }
+      const record = snapshot && (snapshot.currency || snapshot.historyCurrency)
+        ? normalizeListingPage(snapshot, {
+          appid,
+          marketHashName: normalizedMarketHashName,
+          currencyId: currencyContext.currencyId,
+          currencyCode: currencyContext.code,
+          decimalDigits: currencyContext.decimalDigits,
+          observedAt,
+        })
+        : null;
+      const currencyMatches = record?.currencyId === currencyContext.currencyId
+        && record?.currencyCode === currencyContext.code;
+      const hasRequiredFields = (record?.lowestSellMinor || record?.medianMinor
+        || (!options.includeHistory && snapshot?.sellOrderCount === 0)
+        || depth?.currencyId === currencyContext.currencyId)
+        && (!options.requireMedian || record?.medianMinor != null)
+        && (!options.requireVolume || record?.volume != null);
+      if (record && currencyMatches && hasRequiredFields) {
+        const result = makePriceCardResult(record, currencyContext, options, observedAt);
+        if (depth?.currencyId === currencyContext.currencyId) result.buyDepth = depth;
+        return result;
+      }
+    } catch (error) {
+      const classified = classifyRequestError(error, currencyContext.currencyId);
+      if (classified.httpStatus === 429 || classified.errorKind === PRICE_CARD_ERROR_KINDS.STOPPED) return classified;
     }
     const params = new URLSearchParams({
       appid,

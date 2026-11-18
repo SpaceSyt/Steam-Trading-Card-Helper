@@ -1,6 +1,6 @@
 import { state } from "../state.js";
 
-import { createTextSpan, createCheckboxHit } from "../utils/dom.js";
+import { createTextSpan, createCheckboxHit, createFrameScheduler } from "../utils/dom.js";
 
 import { getProfileUrl, getMarketMinimumPriceCents } from "../utils/steam.js";
 
@@ -8,44 +8,41 @@ import { formatMoney } from "../utils/format.js";
 
 import { getBadgeTargetLevel, getBadgeUrlSuffix } from "../utils/badge.js";
 
-import { getResultKey, getSelectedOrderResults, getSelectedResults } from "../services/result-info.js";
+import { getMinCardVolume, getResultKey, getSelectedOrderResults, getSelectedResults } from "../services/result-info.js";
 
 import { pruneOrderCache, upsertOrderResult, getOrderCacheAgeDays } from "../services/order-cache.js";
 
-import { openMultibuy } from "../features/multibuy.js";
+import { getMultibuyQuantity, openMultibuy } from "../features/multibuy.js";
+import { getPendingOrderExpectedQuantity } from "../services/market-orders.js";
 
 import { updateBulkActionState, updateOrderActionState } from "./action-state.js";
 
-import { updateResultColumns } from "../features/scan.js";
 import { getActiveOrderPricingProfile } from "../config.js";
 import { calculateResultPricingTotals } from "../services/pricing-estimate.js";
 import { enableCheckboxDragSelection } from "./checkbox-drag.js";
 
   const pendingSelectionUpdates = new Set();
-  let selectionUpdateFrame = 0;
+  const flushSelectionUpdates = createFrameScheduler(() => {
+    if (pendingSelectionUpdates.has("order")) {
+      updateOrderSummary({ prune: false });
+      updateOrderActionState();
+    }
+    if (pendingSelectionUpdates.has("scan")) {
+      updateSummary();
+      updateBulkActionState();
+    }
+    pendingSelectionUpdates.clear();
+  });
 
   function scheduleSelectionUpdate(source) {
     pendingSelectionUpdates.add(source);
-    if (selectionUpdateFrame) return;
-    selectionUpdateFrame = requestAnimationFrame(() => {
-      selectionUpdateFrame = 0;
-      if (pendingSelectionUpdates.has("order")) {
-        updateOrderSummary({ prune: false });
-        updateOrderActionState();
-      }
-      if (pendingSelectionUpdates.has("scan")) {
-        updateSummary();
-        updateBulkActionState();
-      }
-      pendingSelectionUpdates.clear();
-    });
+    flushSelectionUpdates();
   }
 
   function enableResultDragSelection(list) {
     enableCheckboxDragSelection(list, {
       checkboxSelector: ".stch-result-cb",
       activationSelector: ".stch-result-cb, .stch-check-hit, .stch-check",
-      rowSelector: ".stch-game-row",
       excludeSelector: "[id$='select-all']",
     });
   }
@@ -215,8 +212,15 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
       return;
     }
     renderHeader(fragment, { source: "order", showCacheAge: true });
+    const activeOrderQuantities = new Map(state.activeBuyOrderGroups
+      .filter(group => group.appid === "753")
+      .map(group => [group.marketHashName, group.remainingQuantity]));
     getSortedOrderResults().forEach(info => {
-      renderDataRow(fragment, info, { source: "order", showCacheAge: true });
+      renderDataRow(fragment, info, {
+        source: "order",
+        showCacheAge: true,
+        activeOrderQuantities,
+      });
     });
     list.appendChild(fragment);
     updateOrderSummary({ prune: false });
@@ -253,11 +257,37 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     row.dataset.appid = info.appid;
     row.dataset.foil = info.isFoil ? 1 : 0;
     const targetLevel = getBadgeTargetLevel(info);
+    if (options.activeOrderQuantities) {
+      let requiresOrder = false;
+      const fullyCovered = info.cards.every(card => {
+        const targetQuantity = getMultibuyQuantity(
+          state.cfg.buyMode || "complete1",
+          info.level,
+          card.owned,
+          targetLevel
+        );
+        if (targetQuantity <= 0) return true;
+        requiresOrder = true;
+        if (!card.marketHashName) return false;
+        const pendingQuantity = state.pendingOrderQuantities.size
+          ? getPendingOrderExpectedQuantity(card.marketHashName)
+          : 0;
+        return Math.max(
+          options.activeOrderQuantities.get(card.marketHashName) || 0,
+          pendingQuantity
+        ) >= targetQuantity;
+      });
+      if (requiresOrder && fullyCovered) row.classList.add("stch-order-covered");
+    }
     const ownedCards = info.cards.reduce((sum, c) => sum + Math.min(c.owned, 1), 0);
-    const minVol = info.minVolume || 0;
-    const lv5Color = info.hasIncompletePricing || info.hasEstimated ? "color:#888" : minVol > 1 ? "color:#4caf50" : minVol === 1 ? "color:#c9a02c" : "";
+    const minVol = info.minVolume === undefined
+      ? getMinCardVolume(info.cardPrices || [], info.cards.length)
+      : info.minVolume;
+    const lv5Color = info.hasIncompletePricing || info.hasEstimated || minVol === null ? "color:#888" : minVol > 1 ? "color:#4caf50" : minVol === 1 ? "color:#c9a02c" : "";
     const lv5Title = info.hasIncompletePricing
       ? "价格请求不完整"
+      : minVol === null
+      ? "近期成交量未知"
       : info.hasEstimated
       ? "信息不全，采用估计"
       : minVol > 1
@@ -428,4 +458,19 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
     list?.classList.toggle("stch-show-drops", showDrops);
     list?.classList.toggle("stch-show-completion", state.cfg.showScanCompletionColumn !== false);
     list?.classList.toggle("stch-show-sell-set", state.cfg.showScanSellSetColumn !== false);
+  }
+
+  export function updateResultColumns() {
+    const showDrops = state.cfg.includeDrops
+      && state.results.some(info => Number(info.dropsRemaining) > 0);
+    const list = document.getElementById("stch-list");
+    list?.classList.toggle("stch-show-drops", showDrops);
+    list?.classList.toggle("stch-show-completion", state.cfg.showScanCompletionColumn !== false);
+    list?.classList.toggle("stch-show-sell-set", state.cfg.showScanSellSetColumn !== false);
+  }
+
+  export function refreshPricingSummaries() {
+    updateSummary();
+    if (pruneOrderCache(true)) renderOrderResults();
+    else updateOrderSummary({ prune: false });
   }
