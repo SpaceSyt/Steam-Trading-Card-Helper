@@ -2,6 +2,7 @@ import { state } from "../state.js";
 
 import { RequestQueue } from "../request/queue.js";
 
+import { fetchItemTypeGemValue } from "../services/inventory.js";
 import { readInventoryPages } from "../services/inventory-pages.js";
 
 import { formatInt, formatMoney } from "../utils/format.js";
@@ -64,32 +65,6 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
 
   export function isBlacklistedAppid(appid) {
     return !!appid && readBlacklistAppids().has(String(appid));
-  }
-
-  const grindGemValueCache = new Map();
-
-  export async function getGrindGemValue(description, queue) {
-    const parsedValue = parseGemValueFromDescription(description);
-    if (parsedValue > 0) return parsedValue;
-
-    const params = parseGooValueParams(description);
-    if (!params) return 0;
-    const key = `${params.appid}_${params.itemType}_${params.borderColor}`;
-    if (grindGemValueCache.has(key)) return grindGemValueCache.get(key);
-
-    const request = (async () => {
-      try {
-        const url = `https://steamcommunity.com/auction/ajaxgetgoovalueforitemtype/?appid=${encodeURIComponent(params.appid)}&item_type=${encodeURIComponent(params.itemType)}&border_color=${encodeURIComponent(params.borderColor)}`;
-        const response = await queue.fetch(url);
-        return Math.max(0, parseInt(response?.data?.goo_value, 10) || 0);
-      } catch (_) {
-        return 0;
-      }
-    })();
-    grindGemValueCache.set(key, request);
-    const value = await request;
-    grindGemValueCache.set(key, value);
-    return value;
   }
 
   export function addGrindItem(groupMap, asset, description, amount, source, gemValue, pointsShop = false, category = "") {
@@ -225,6 +200,7 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
 
   export async function loadGrindInventoryItems(steamId, queue, snapshot) {
     const groupMap = new Map();
+    const gemValues = new Map();
     const reserveCopies = Math.max(0, Math.floor(Number(state.cfg.grindReserveCopies) || 0));
     const preferPointsShopItems = !!state.cfg.grindIncludePointsShopItems;
     const itemCategories = getProcessingDecorationCategories(state.cfg.surplusItemMode);
@@ -278,7 +254,8 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
         getOtherRequestConcurrency(state.cfg),
         async ({ asset, description, assetAmount, pointsShop, category }) => {
           if (state.grindStopRequested) return;
-          const gemValue = pointsShop ? 0 : await getGrindGemValue(description, queue);
+          const gemValue = pointsShop ? 0 : parseGemValueFromDescription(description)
+            || await fetchItemTypeGemValue(parseGooValueParams(description), queue, gemValues);
           const result = addGrindItem(
             groupMap,
             asset,
@@ -483,7 +460,6 @@ const { log: grindLog, setStatus: setGrindStatus, setProgress: setGrindProgress,
     state.grindResults = [];
     state.selectedGrindResults = new Set();
     state.grindGemPrice = null;
-    grindGemValueCache.clear();
     const logBox = document.getElementById("stch-surplus-log");
     if (logBox && !options.preserveLog) logBox.innerHTML = "";
     renderGrindResults();

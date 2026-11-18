@@ -8,7 +8,7 @@ import { getGameCardsUrl } from "../utils/badge.js";
 
 import { getProfileUrl, getSteamId } from "../utils/steam.js";
 
-import { loadCommunityInventoryCards } from "../services/inventory.js";
+import { fetchItemTypeGemValue, loadCommunityInventoryCards } from "../services/inventory.js";
 
 import { loadSidebarGemPrice } from "../sidebar/gems.js";
 
@@ -81,6 +81,7 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
       nameColor: inventoryCard.nameColor || "",
       backgroundColor: inventoryCard.backgroundColor || "",
       gemValue: inventoryCard.gemValue || 0,
+      gooParams: inventoryCard.gooParams,
       totalGems: assets.reduce(
         (sum, asset) => sum + (asset.selectedAmount || 0) * (asset.gemValue || inventoryCard.gemValue || 0),
         0
@@ -265,8 +266,8 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
         result.priceCents
           ? `市场参考 ${formatMoney(result.priceCents)}，出售税后约 ${formatMoney(result.marketNetCents)}`
           : "",
-        result.gemValueNetCents
-          ? `${result.gemValue} 宝石/张，税后折算约 ${formatMoney(result.gemValueNetCents)}`
+        result.unitGemValueNetCents
+          ? `${result.gemValue} 宝石/张，税后折算约 ${result.unitGemValueText}`
           : "",
         result.recommendationReason
           ? `建议：${result.recommendationLabel || "—"}，${result.recommendationReason}`
@@ -442,6 +443,7 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
         }
 
         const priceCache = new Map();
+        const gemValues = new Map();
         let priceCompleted = 0;
         await runWithConcurrency(
           state.surplusResults,
@@ -455,6 +457,10 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
             );
             setSurplusStatus(`查询市场: ${result.cardName || result.marketHashName}`);
 
+            if (!result.gemValue && result.gooParams) {
+              result.gemValue = await fetchItemTypeGemValue(result.gooParams, queue, gemValues);
+              result.totalGems = result.gemValue * result.surplusCount;
+            }
             let price = null;
             if (result.marketHashName) {
               let pricePromise = priceCache.get(result.marketHashName);

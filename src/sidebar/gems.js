@@ -9,8 +9,10 @@ import { stchRequestJson } from "../request/http.js";
 import { RequestQueue } from "../request/queue.js";
 
 import { isPriceCardPriced, priceCard } from "../parsers/price.js";
+import { getActiveCurrencyContext } from "../services/currency.js";
 
   let sessionGemPricePromise = null;
+  let sessionGemCurrencyId;
 
   export async function loadSidebarGemInfo(steamId) {
     if (!steamId) throw new Error("未找到 SteamID，无法读取库存");
@@ -77,7 +79,11 @@ import { isPriceCardPriced, priceCard } from "../parsers/price.js";
   }
 
   export function loadSidebarGemPrice(queue = null) {
-    if (!sessionGemPricePromise) sessionGemPricePromise = loadSessionGemPrice(queue);
+    const currencyId = getActiveCurrencyContext()?.currencyId;
+    if (!sessionGemPricePromise || sessionGemCurrencyId !== currencyId) {
+      sessionGemCurrencyId = currencyId;
+      sessionGemPricePromise = loadSessionGemPrice(queue);
+    }
     return sessionGemPricePromise;
   }
 

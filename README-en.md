@@ -5,7 +5,7 @@
 Steam Trading Card Helper is a Tampermonkey userscript for scanning Steam trading card prices, estimating badge costs, assisting or automating purchases, managing buy orders, and processing Community items in bulk.
 
 > [!IMPORTANT]
-> **v2.7.2** reduces idle time during badge scans by checking the next cards and badges while fallback prices are pending. When preparing a buy order, the helper distinguishes an empty buy order book from temporarily unavailable quotes, reducing false reports of missing buy orders.
+> **v2.7.3** fixes sale and gem conversion recommendations for surplus cards. The helper looks up missing gem yields on Steam and compares each card’s net sale proceeds with its gem value, including fractions of a cent.
 
 ## Features
 

@@ -100,7 +100,7 @@ import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action
       ? getGemBreakEvenBuyerPrice(10, gemPrice.priceCents)
       : 0;
     const breakEvenTitle = breakEven10
-      ? `按宝石袋税后到手 ${formatMoney(gemSackNetCents)} 计算；物品卖出税后低于该值时，分解成宝石更值`
+      ? `按宝石袋税后到手 ${formatMoney(gemSackNetCents)} 折算，为达到 10 宝石价值所需的理论买家支付价`
       : "暂无宝石袋市场价格";
     setSidebarText(
       "stch-sidebar-grind-threshold",

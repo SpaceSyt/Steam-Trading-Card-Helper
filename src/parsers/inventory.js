@@ -164,6 +164,8 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
       card.gemValue = gemValue;
     }
 
+    if (!card.gemValue && !card.gooParams) card.gooParams = parseGooValueParams(description);
+
     const amount = getAssetAmount(asset);
     card.totalCount += amount;
     group.totalCount += amount;
@@ -279,6 +281,14 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
       const borderColor = args[args.length - 1];
       if (/^\d+$/.test(appid) && /^\d+$/.test(itemType) && /^\d+$/.test(borderColor)) {
         return { appid, itemType, borderColor };
+      }
+    }
+    if (isTradingCardDescription(description)) {
+      const bucket = /^B(\d+)-(\d+)(-1)?$/.exec(description.market_bucket_id || "");
+      const borderColor = bucket?.[3] ? "1" : "0";
+      if (bucket && bucket[1] === getCardGameAppid(description)
+        && findDescriptionTag(description, "cardborder", `cardborder_${borderColor}`)) {
+        return { appid: bucket[1], itemType: bucket[2], borderColor };
       }
     }
     return null;

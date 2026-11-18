@@ -23,14 +23,14 @@ const {
   resetSessionGemPrice,
 } = await import("../../src/sidebar/gems.js");
 
-function makeListingHtml(price = 450) {
+function makeListingHtml(price = 450, currencyId = 23) {
   const renderContext = {
     queryData: JSON.stringify({ queries: [{
       queryKey: ["market", "orderbook", 753, "753-Sack of Gems"],
       state: { data: {
         amtMinSellOrder: price,
         amtMaxBuyOrder: price - 1,
-        eCurrency: 23,
+        eCurrency: currencyId,
       } },
     }] }),
   };
@@ -100,6 +100,24 @@ test("gem price is requested once per page session without 429 retries", async (
   resetSessionGemPrice();
   await loadSidebarGemPrice(firstQueue);
   assert.equal(calls.length, 2);
+});
+
+test("changing the active currency replaces a pending session gem quote", async () => {
+  let finishUsd;
+  setActiveCurrencyContext(getCurrencyContextById(1));
+  const usd = loadSidebarGemPrice({
+    fetch: () => new Promise(resolve => { finishUsd = resolve; }),
+  });
+  setActiveCurrencyContext(getCurrencyContextById(23));
+  const cny = loadSidebarGemPrice({
+    fetch: async () => ({ status: 200, text: makeListingHtml(435, 23) }),
+  });
+  finishUsd({ status: 200, text: makeListingHtml(60, 1) });
+
+  assert.equal((await usd).currencyId, 1);
+  assert.equal((await cny).currencyId, 23);
+  assert.equal((await cny).priceCents, 435);
+  assert.strictEqual(loadSidebarGemPrice(), cny);
 });
 
 test("gem price falls back to one-shot priceoverview when listing parsing fails", async () => {

@@ -501,7 +501,8 @@ function formatArguments(contextOrOptions, maybeOptions) {
   const looksLikeOptions = contextOrOptions
     && typeof contextOrOptions === "object"
     && (
-      Object.hasOwn(contextOrOptions, "useGrouping")
+      Object.hasOwn(contextOrOptions, "fractionalMinor")
+      || Object.hasOwn(contextOrOptions, "useGrouping")
       || Object.hasOwn(contextOrOptions, "invalidPlaceholder")
     )
     && currencyIdFromObject(contextOrOptions) == null
@@ -521,12 +522,14 @@ function minorAmountToBigInt(value) {
 }
 
 function formatMinorAmountWithContext(amount, context, options) {
-  const minorAmount = minorAmountToBigInt(amount);
+  // A gem yield can be worth a fraction of one minor unit (one sack is 1000 gems).
+  const showFraction = options.fractionalMinor && Number.isFinite(amount) && !Number.isInteger(amount);
+  const minorAmount = minorAmountToBigInt(showFraction ? Math.round(amount * 1000) : amount);
   if (minorAmount == null) return options.invalidPlaceholder || "?";
 
   const negative = minorAmount < 0n;
   const absolute = negative ? -minorAmount : minorAmount;
-  const digits = context.decimalDigits;
+  const digits = context.decimalDigits + (showFraction ? 3 : 0);
   const factor = 10n ** BigInt(digits);
   const major = digits > 0 ? absolute / factor : absolute;
   const fraction = digits > 0 ? absolute % factor : 0n;
@@ -534,9 +537,9 @@ function formatMinorAmountWithContext(amount, context, options) {
   if (options.useGrouping !== false && context.groupSeparator) {
     majorText = majorText.replace(/\B(?=(\d{3})+(?!\d))/g, context.groupSeparator);
   }
-  const fractionText = digits > 0
-    ? `${context.decimalSeparator}${fraction.toString().padStart(digits, "0")}`
-    : "";
+  let decimals = digits ? fraction.toString().padStart(digits, "0") : "";
+  if (showFraction) decimals = decimals.slice(0, -3) + decimals.slice(-3).replace(/0+$/, "");
+  const fractionText = decimals ? context.decimalSeparator + decimals : "";
   return `${negative ? "-" : ""}${majorText}${fractionText}`;
 }
 

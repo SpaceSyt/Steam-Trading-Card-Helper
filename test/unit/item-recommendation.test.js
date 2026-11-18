@@ -44,3 +44,25 @@ test("a failed market request never becomes a destructive grind recommendation",
   assert.equal(item.recommendationKey, "unknown");
   assert.equal(item.recommendationLabel, "缺市场价");
 });
+
+test("the same 10-gem threshold can yield a sale, a tie or a grind for 40 gems", async () => {
+  const { getCurrencyContextById, setActiveCurrencyContext, clearActiveCurrencyContext } = await import("../../src/services/currency.js");
+  const { getGemBreakEvenBuyerPrice } = await import("../../src/utils/market-fees.js");
+  setActiveCurrencyContext(getCurrencyContextById(23));
+  try {
+    for (const [sack, value, key, formatted] of [
+      [429, 14.96, "sell", "¥0.1496"],
+      [430, 15, "grind", "¥0.15"],
+      [431, 15.04, "grind", "¥0.1504"],
+    ]) {
+      const item = applyItemRecommendation(createItem({ gemValue: 40, totalGems: 80, priceCents: 29 }), sack);
+      assert.equal(getGemBreakEvenBuyerPrice(10, sack), 18);
+      assert.equal(item.marketNetCents, 15);
+      assert.equal(item.unitGemValueNetCents, value);
+      assert.equal(item.recommendationKey, key);
+      assert.equal(item.unitGemValueText, formatted);
+    }
+  } finally {
+    clearActiveCurrencyContext();
+  }
+});

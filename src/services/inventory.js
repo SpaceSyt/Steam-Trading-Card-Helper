@@ -8,6 +8,25 @@ import { surplusStatus } from "../status-controllers.js";
 
 const { setStatus: setSurplusStatus, log: surplusLog } = surplusStatus;
 
+  export async function fetchItemTypeGemValue(params, queue, cache) {
+    if (!params) return 0;
+    const { appid, itemType, borderColor } = params;
+    const url = `https://steamcommunity.com/auction/ajaxgetgoovalueforitemtype/?appid=${appid}&item_type=${itemType}&border_color=${borderColor}`;
+    if (!cache.has(url)) {
+      cache.set(url, (async () => {
+        try {
+          const response = await queue.fetch(url);
+          const data = response?.data;
+          const value = Number(data?.success) === 1 ? Number(data.goo_value) : 0;
+          return Number.isSafeInteger(value) && value > 0 ? value : 0;
+        } catch {
+          return 0;
+        }
+      })());
+    }
+    return cache.get(url);
+  }
+
   export async function loadCommunityInventoryCards(steamId, queue, snapshot) {
     const groupMap = new Map();
     let page = 0;

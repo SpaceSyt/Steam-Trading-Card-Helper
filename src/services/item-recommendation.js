@@ -11,6 +11,7 @@ export function applyItemRecommendation(item, gemSackPriceCents) {
   item.gemSackPriceCents = gemSackPriceCents || 0;
   item.gemValueNetCents = getGemValueSellerNetCents(item.totalGems, gemSackPriceCents);
   item.unitGemValueNetCents = getGemValueSellerNetCents(item.gemValue, gemSackPriceCents);
+  item.unitGemValueText = formatMoney(item.unitGemValueNetCents, { fractionalMinor: true });
   item.breakEvenPriceCents = getGemBreakEvenBuyerPrice(item.gemValue, gemSackPriceCents);
   item.marketNetCents = item.priceCents ? getSellerReceiveForBuyerPrice(item.priceCents) : 0;
 
@@ -19,6 +20,11 @@ export function applyItemRecommendation(item, gemSackPriceCents) {
     item.recommendationLabel = "缺宝石价";
     item.recommendationClass = "warn";
     item.recommendationReason = "宝石袋价格不可用";
+  } else if (!item.gemValue) {
+    item.recommendationKey = "unknown";
+    item.recommendationLabel = "缺宝石数";
+    item.recommendationClass = "warn";
+    item.recommendationReason = "物品分解所得宝石数未知";
   } else if (!item.marketHashName || item.marketableCount <= 0) {
     item.recommendationKey = "grind";
     item.recommendationLabel = "分解";
@@ -39,13 +45,13 @@ export function applyItemRecommendation(item, gemSackPriceCents) {
     item.recommendationLabel = "分解";
     item.recommendationClass = "ok";
     item.recommendationReason =
-      `卖出税后约 ${formatMoney(item.marketNetCents)}，低于分解宝石税后约 ${formatMoney(item.unitGemValueNetCents)}`;
+      `卖出税后约 ${formatMoney(item.marketNetCents)}，不高于分解宝石税后约 ${item.unitGemValueText}`;
   } else {
     item.recommendationKey = "sell";
     item.recommendationLabel = "出售";
     item.recommendationClass = "info";
     item.recommendationReason =
-      `卖出税后约 ${formatMoney(item.marketNetCents)}，高于分解宝石税后约 ${formatMoney(item.unitGemValueNetCents)}`;
+      `卖出税后约 ${formatMoney(item.marketNetCents)}，高于分解宝石税后约 ${item.unitGemValueText}`;
   }
   return item;
 }
