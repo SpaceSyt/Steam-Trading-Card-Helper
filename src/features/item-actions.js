@@ -1,6 +1,8 @@
 import { showConfirmation } from "../ui/confirmation.js";
 
 import { state } from "../state.js";
+import { roundMarketAmount } from "../services/currency.js";
+import { unsafeWindow } from "../globals.js";
 import { getActiveOrderPricingProfile } from "../config.js";
 import { calculateAutomaticSellPrice } from "../services/order-wall.js";
 
@@ -13,7 +15,7 @@ import { getBuyerPriceForSellerReceive, getSellerReceiveForBuyerPrice } from "..
 
 import { formatInt, formatMoney } from "../utils/format.js";
 
-import { getMarketMinimumPriceCents, getProfileUrl, getSessionId, getSteamId } from "../utils/steam.js";
+import { getProfileUrl, getSessionId, getSteamId } from "../utils/steam.js";
 
 import { createTextSpan } from "../utils/dom.js";
 
@@ -25,7 +27,7 @@ import {
 
 import { surplusStatus, grindStatus } from "../status-controllers.js";
 
-import { fetchHighestBuyPrice, fetchMarketOrderDepth } from "../services/market-orders.js";
+import { fetchHighestBuyPrice, fetchMarketOrderDepth, getOrderCurrencyContext, getOrderWalletRules } from "../services/market-orders.js";
 import { getOrderPriceSourceLabel } from "../ui/pricing-controls.js";
 
 import { getSelectedSurplusResults, renderSurplusResults } from "./surplus.js";
@@ -133,6 +135,7 @@ import {
         gameName: item.gameName || "",
         itemName: item.cardName || item.itemName || item.marketHashName || "未知物品",
         marketHashName: item.marketHashName || "",
+        publisherFeeRate: item.publisherFeeRate,
         quantity: assets.reduce((sum, asset) => sum + asset.amount, 0),
         assets,
       };
@@ -168,7 +171,8 @@ import {
   }
 
   async function getSellBasePrice(group, profile, queue, ui, index, total, cache, marketRecords) {
-    if (cache.has(group.marketHashName)) return cache.get(group.marketHashName);
+    const key = JSON.stringify([group.marketHashName, group.publisherFeeRate]);
+    if (cache.has(key)) return cache.get(key);
 
     const request = (async () => {
       const { priceSource } = profile;
@@ -181,7 +185,8 @@ import {
         return calculateAutomaticSellPrice(depth, {
           strategy: priceSource,
           strategyRule: profile.strategyRule,
-          minimumPriceMinor: getMarketMinimumPriceCents(),
+          minimumPriceMinor: profile.minimumBuyerMinor,
+          incrementMinor: profile.incrementMinor,
         });
       }
       let basePriceCents = null;
@@ -210,19 +215,16 @@ import {
         ? basePriceCents
         : null;
     })();
-    cache.set(group.marketHashName, request);
+    cache.set(key, request);
     const value = await request;
-    cache.set(group.marketHashName, value);
+    cache.set(key, value);
     return value;
   }
 
   export async function buildSellPlan(mode, ui, queue) {
+    const currency = await getOrderWalletRules(queue);
     const profile = getSellPriceControls();
     const { priceSource, adjustmentCents } = profile;
-    const minimumBuyerCents = getMarketMinimumPriceCents();
-    if (!Number.isSafeInteger(minimumBuyerCents) || minimumBuyerCents <= 0) {
-      throw new Error("无法确认 Steam 钱包币种，已停止生成出售计划");
-    }
     const priceCache = new Map();
     const marketRecords = [];
     const skipped = {
@@ -251,12 +253,15 @@ import {
       candidates,
       getHtmlRequestConcurrency(state.cfg),
       async (group, index) => {
+        const feeContext = group.publisherFeeRate == null ? currency : { ...currency, publisherFeeRate: group.publisherFeeRate };
+        const minimumBuyerCents = getBuyerPriceForSellerReceive(currency.marketMinimumMinor, feeContext);
+        if (!(minimumBuyerCents > 0)) { skipped.missingPrice++; return; }
         let basePriceCents = null;
         let quote = null;
         try {
           quote = await getSellBasePrice(
             group,
-            profile,
+            { ...profile, minimumBuyerMinor: minimumBuyerCents, incrementMinor: currency.incrementMinor },
             queue,
             ui,
             index,
@@ -275,20 +280,22 @@ import {
         }
 
         const targetBuyerCents = basePriceCents + adjustmentCents;
-        const clampedBuyerCents = Math.max(minimumBuyerCents, targetBuyerCents);
-        if (clampedBuyerCents !== targetBuyerCents || quote?.wasMinimumClamped) skipped.clamped++;
-        let sellerReceiveCents = getSellerReceiveForBuyerPrice(clampedBuyerCents);
+        const clampedBuyerCents = Math.max(minimumBuyerCents, roundMarketAmount(targetBuyerCents, currency));
+        if (targetBuyerCents < minimumBuyerCents || quote?.wasMinimumClamped) skipped.clamped++;
+        let sellerReceiveCents = getSellerReceiveForBuyerPrice(clampedBuyerCents, feeContext);
         if (sellerReceiveCents <= 0) {
           skipped.missingPrice++;
           return;
         }
-        let unitBuyerCents = getBuyerPriceForSellerReceive(sellerReceiveCents);
+        let unitBuyerCents = getBuyerPriceForSellerReceive(sellerReceiveCents, feeContext);
         // Fee rounding must not move an automatic listing back across the buy guard.
         if (profile.automatic && unitBuyerCents < (quote.buyGuardMinor || minimumBuyerCents)) {
-          unitBuyerCents = getBuyerPriceForSellerReceive(++sellerReceiveCents);
+          sellerReceiveCents += currency.incrementMinor;
+          unitBuyerCents = getBuyerPriceForSellerReceive(sellerReceiveCents, feeContext);
         }
         plan[index] = {
           ...group,
+          currencyId: currency.currencyId,
           priceSource,
           basePriceCents,
           targetBuyerCents,
@@ -301,7 +308,7 @@ import {
     );
 
     persistMarketObservations(marketRecords);
-    return { plan: plan.filter(Boolean), skipped, priceSource, adjustmentCents, minimumBuyerCents, automatic: profile.automatic };
+    return { plan: plan.filter(Boolean), skipped, priceSource, adjustmentCents, automatic: profile.automatic };
   }
 
   function getProfileActionBaseUrl() {
@@ -392,6 +399,10 @@ import {
   async function sellAsset(asset, sellerReceiveCents) {
     const sessionId = getSessionId();
     if (!sessionId) throw new Error("未找到 Steam sessionid");
+    const walletId = unsafeWindow.g_rgWalletInfo?.wallet_currency;
+    if (asset.item.currencyId !== getOrderCurrencyContext().currencyId || (walletId != null && Number(walletId) !== asset.item.currencyId)) {
+      throw new Error("钱包币种已改变，请重新查价");
+    }
     const body = new URLSearchParams({
       sessionid: sessionId,
       appid: "753",
@@ -452,7 +463,7 @@ import {
   }
 
   function showSellConfirmation(planData) {
-    const { plan, skipped, priceSource, adjustmentCents, minimumBuyerCents } = planData;
+    const { plan, skipped, priceSource, adjustmentCents } = planData;
     const totalQuantity = plan.reduce((sum, item) => sum + item.quantity, 0);
     const totalBuyerCents = plan.reduce((sum, item) => sum + item.totalBuyerCents, 0);
     const totalReceiveCents = plan.reduce((sum, item) => sum + item.totalReceiveCents, 0);
@@ -466,7 +477,7 @@ import {
     if (skipped.failedPrice) notes.push(`${skipped.failedPrice} 项查价失败`);
     if (skipped.invalidQuantity) notes.push(`${skipped.invalidQuantity} 个资产数量无效，已跳过`);
     if (skipped.clamped) {
-      notes.push(`${skipped.clamped} 项低于 Steam 最低售价，已调整到 ${formatMoney(minimumBuyerCents)}`);
+      notes.push(`${skipped.clamped} 项已调整到物品最低售价`);
     }
 
     return showProcessingConfirmation({

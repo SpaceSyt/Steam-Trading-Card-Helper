@@ -32,6 +32,8 @@ export function calculateResultPricingTotals(info, options = {}) {
       levelCents: null,
     };
   }
+  const increment = positiveMinor(options.incrementMinor) ?? 1;
+  const adjust = base => Math.max(minimumPriceMinor, Math.round((base + adjustmentMinor) / increment) * increment);
   const source = String(options.priceSource || "lowest");
   const automatic = options.automatic === true;
   const setsToTarget = Math.max(
@@ -51,7 +53,7 @@ export function calculateResultPricingTotals(info, options = {}) {
     const resolvedFinal = positiveMinor(options.resolveFinalPriceMinor?.(card));
     const resolvedBase = positiveMinor(options.resolveBasePriceMinor?.(card)) ?? lowest;
     const selectedUnit = resolvedFinal
-      ?? Math.max(minimumPriceMinor, resolvedBase + adjustmentMinor);
+      ?? adjust(resolvedBase);
 
     knownOriginal.completion += lowest * completionQuantity;
     knownOriginal.full += lowest;
@@ -62,11 +64,8 @@ export function calculateResultPricingTotals(info, options = {}) {
     replacement.full += selectedUnit;
 
     if (!automatic && source === "lowest" && resolvedFinal === null) {
-      const firstUnit = Math.max(minimumPriceMinor, lowest + adjustmentMinor);
-      const repeatedUnit = Math.max(
-        minimumPriceMinor,
-        Math.max(lowest, median) + adjustmentMinor
-      );
+      const firstUnit = adjust(lowest);
+      const repeatedUnit = adjust(Math.max(lowest, median));
       replacement.level += levelQuantity > 0
         ? firstUnit + (levelQuantity - 1) * repeatedUnit
         : 0;

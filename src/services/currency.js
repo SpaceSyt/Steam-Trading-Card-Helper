@@ -2,77 +2,52 @@ const DEFAULT_DECIMAL_DIGITS = 2;
 const DEFAULT_STEAM_FEE_RATE = 0.05;
 const DEFAULT_PUBLISHER_FEE_RATE = 0.10;
 
-export const CURRENCY_IDS = Object.freeze({
-  USD: 1,
-  CNY: 23,
-  HKD: 29,
-});
-
-const CURRENCY_DEFINITION_MAP = Object.freeze({
-  [CURRENCY_IDS.USD]: Object.freeze({
-    currencyId: CURRENCY_IDS.USD,
-    code: "USD",
-    name: "US Dollar",
-    symbol: "$",
-    symbolPosition: "before",
-    symbolSpacing: false,
-    locale: "en-US",
-    decimalDigits: 2,
-    decimalSeparator: ".",
-    groupSeparator: ",",
-    marketMinimumMinor: 1,
-    minimumBuyerMinor: 3,
-    steamFeeRate: DEFAULT_STEAM_FEE_RATE,
-    publisherFeeRate: DEFAULT_PUBLISHER_FEE_RATE,
-    steamFeeMinimumMinor: 1,
-    publisherFeeMinimumMinor: 1,
-    steamFeeBaseMinor: 0,
-    verified: true,
-  }),
-  [CURRENCY_IDS.CNY]: Object.freeze({
-    currencyId: CURRENCY_IDS.CNY,
-    code: "CNY",
-    name: "Chinese Yuan",
-    symbol: "¥",
-    symbolPosition: "before",
-    symbolSpacing: false,
-    locale: "zh-CN",
-    decimalDigits: 2,
-    decimalSeparator: ".",
-    groupSeparator: ",",
-    marketMinimumMinor: 7,
-    minimumBuyerMinor: 21,
-    steamFeeRate: DEFAULT_STEAM_FEE_RATE,
-    publisherFeeRate: DEFAULT_PUBLISHER_FEE_RATE,
-    steamFeeMinimumMinor: 7,
-    publisherFeeMinimumMinor: 7,
-    steamFeeBaseMinor: 0,
-    verified: true,
-  }),
-  [CURRENCY_IDS.HKD]: Object.freeze({
-    currencyId: CURRENCY_IDS.HKD,
-    code: "HKD",
-    name: "Hong Kong Dollar",
-    symbol: "HK$",
-    symbolPosition: "before",
-    symbolSpacing: true,
-    locale: "zh-HK",
-    decimalDigits: 2,
-    decimalSeparator: ".",
-    groupSeparator: ",",
-    // HK market samples confirm ID, formatting, and percentage fee behavior.
-    // The page does not expose wallet minimum fields, so retain Steam's
-    // conservative one-minor-unit defaults for those values.
-    marketMinimumMinor: 1,
-    minimumBuyerMinor: 3,
-    steamFeeRate: DEFAULT_STEAM_FEE_RATE,
-    publisherFeeRate: DEFAULT_PUBLISHER_FEE_RATE,
-    steamFeeMinimumMinor: 1,
-    publisherFeeMinimumMinor: 1,
-    steamFeeBaseMinor: 0,
-    verified: true,
-  }),
-});
+// Steam Community global.js currency formats, limited to live Steam wallet currencies.
+const definitions = [
+  [1, "USD", "$", false, false, false, ".", ","],
+  [2, "GBP", "£", false, false, false, ".", ","],
+  [3, "EUR", "€", true, false, false, ",", " "],
+  [4, "CHF", "CHF", false, true, false, ".", " "],
+  [5, "RUB", "руб.", true, true, false, ",", ""],
+  [6, "PLN", "zł", true, true, false, ",", " "],
+  [7, "BRL", "R$", false, true, false, ",", "."],
+  [8, "JPY", "¥", false, true, true, ".", ","],
+  [9, "NOK", "kr", true, true, false, ",", "."],
+  [10, "IDR", "Rp", false, true, true, ".", " "],
+  [11, "MYR", "RM", false, false, false, ".", ","],
+  [12, "PHP", "P", false, false, false, ".", ","],
+  [13, "SGD", "S$", false, false, false, ".", ","],
+  [14, "THB", "฿", false, false, false, ".", ","],
+  [15, "VND", "₫", true, false, true, ",", "."],
+  [16, "KRW", "₩", false, true, true, ".", ","],
+  [18, "UAH", "₴", true, false, true, ",", " "],
+  [19, "MXN", "Mex$", false, true, false, ".", ","],
+  [20, "CAD", "CDN$", false, true, false, ".", ","],
+  [21, "AUD", "A$", false, true, false, ".", ","],
+  [22, "NZD", "NZ$", false, true, false, ".", ","],
+  [23, "CNY", "¥", false, false, false, ".", ","],
+  [24, "INR", "₹", false, true, true, ".", ","],
+  [25, "CLP", "CLP$", false, true, true, ",", "."],
+  [26, "PEN", "S/.", false, false, false, ".", ","],
+  [27, "COP", "COL$", false, true, true, ",", "."],
+  [28, "ZAR", "R", false, true, false, ".", " "],
+  [29, "HKD", "HK$", false, true, false, ".", ","],
+  [30, "TWD", "NT$", false, true, true, ".", ","],
+  [31, "SAR", "SR", true, true, false, ".", ","],
+  [32, "AED", "AED", true, true, false, ".", ","],
+  [35, "ILS", "₪", false, false, false, ".", ","],
+  [37, "KZT", "₸", true, false, true, ",", " "],
+  [38, "KWD", "KD", true, true, false, ".", ","],
+  [39, "QAR", "QR", true, true, false, ".", ","],
+  [40, "CRC", "₡", false, false, true, ",", "."],
+  [41, "UYU", "$U", false, false, true, ",", "."],
+];
+export const CURRENCY_IDS = Object.freeze(Object.fromEntries(definitions.map(([id, code]) => [code, id])));
+const CURRENCY_DEFINITION_MAP = new Map(definitions.map(
+  ([currencyId, code, symbol, suffix, symbolSpacing, wholeUnits, decimalSeparator, groupSeparator]) => [
+    currencyId, { code, symbol, symbolPosition: suffix ? "after" : "before", symbolSpacing, wholeUnits, decimalSeparator, groupSeparator },
+  ],
+));
 
 let activeCurrencyContext = null;
 const normalizedCurrencyContexts = new WeakSet();
@@ -84,11 +59,6 @@ function firstDefined(...values) {
 function toFiniteNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
-}
-
-function toNonNegativeInteger(value, fallback) {
-  const number = toFiniteNumber(value);
-  return number != null && number >= 0 ? Math.floor(number) : fallback;
 }
 
 function toPositiveInteger(value, fallback) {
@@ -105,9 +75,8 @@ function toRate(value, fallback) {
 function normalizeCurrencyId(value) {
   if (typeof value === "string") {
     const normalized = value.trim().toUpperCase();
-    if (normalized === "USD") return CURRENCY_IDS.USD;
-    if (normalized === "CNY" || normalized === "RMB") return CURRENCY_IDS.CNY;
-    if (normalized === "HKD") return CURRENCY_IDS.HKD;
+    if (normalized === "RMB") return CURRENCY_IDS.CNY;
+    if (Object.hasOwn(CURRENCY_IDS, normalized)) return CURRENCY_IDS[normalized];
   }
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : null;
@@ -134,6 +103,7 @@ function isWalletInfoLike(value) {
     && typeof value === "object"
     && (
       Object.hasOwn(value, "wallet_currency")
+      || Object.hasOwn(value, "wallet_currency_code")
       || Object.hasOwn(value, "wallet_market_minimum")
       || Object.hasOwn(value, "wallet_fee_percent")
       || Object.hasOwn(value, "wallet_fee_minimum")
@@ -141,7 +111,7 @@ function isWalletInfoLike(value) {
   );
 }
 
-function genericCurrencyDefinition(currencyId) {
+function currencyDefaults(currencyId) {
   const idLabel = currencyId == null ? "unknown" : String(currencyId);
   return {
     currencyId,
@@ -154,13 +124,8 @@ function genericCurrencyDefinition(currencyId) {
     decimalDigits: DEFAULT_DECIMAL_DIGITS,
     decimalSeparator: ".",
     groupSeparator: ",",
-    marketMinimumMinor: 1,
-    minimumBuyerMinor: 3,
     steamFeeRate: DEFAULT_STEAM_FEE_RATE,
     publisherFeeRate: DEFAULT_PUBLISHER_FEE_RATE,
-    steamFeeMinimumMinor: 1,
-    publisherFeeMinimumMinor: 1,
-    steamFeeBaseMinor: 0,
   };
 }
 
@@ -174,8 +139,7 @@ function normalizedSourceObject(value) {
 
 /**
  * Build a normalized currency context. Definitions can provide known formatting
- * while remaining unverified for fee calculations. A numeric but unknown Steam
- * wallet currency uses conservative, generic two-decimal formatting rules.
+ * and the wallet supplies the account-specific fees and price increment.
  */
 export function createCurrencyContext(currencyOrOptions, metadata = {}) {
   const supplied = normalizedSourceObject(
@@ -187,10 +151,8 @@ export function createCurrencyContext(currencyOrOptions, metadata = {}) {
     ? supplied.walletInfo
     : (isWalletInfoLike(supplied) ? supplied : {});
   const currencyId = currencyIdFromObject(supplied) ?? currencyIdFromObject(walletInfo);
-  const knownDefinition = currencyId == null
-    ? null
-    : CURRENCY_DEFINITION_MAP[currencyId];
-  const base = knownDefinition || genericCurrencyDefinition(currencyId);
+  const knownDefinition = CURRENCY_DEFINITION_MAP.get(currencyId);
+  const base = { ...currencyDefaults(currencyId), ...knownDefinition };
   const override = { ...walletInfo, ...supplied };
 
   // Unknown numeric IDs stay generic even if unrelated page text is misleading.
@@ -199,30 +161,15 @@ export function createCurrencyContext(currencyOrOptions, metadata = {}) {
     override.marketMinimumMinor,
     override.walletMarketMinimumMinor,
     override.wallet_market_minimum,
-  ), base.marketMinimumMinor);
-  const minimumBuyerMinor = toPositiveInteger(firstDefined(
-    override.minimumBuyerMinor,
-    override.marketMinimumBuyerMinor,
-    override.minimumBuyerAmount,
-  ), marketMinimumMinor * 3);
-  const feeMinimumFromWallet = firstDefined(
-    override.wallet_fee_minimum,
-    override.feeMinimumMinor,
+  ), null);
+  const steamFeeRate = toRate(firstDefined(override.steamFeeRate, override.wallet_fee_percent), base.steamFeeRate);
+  const publisherFeeRate = toRate(firstDefined(override.publisherFeeRate, override.wallet_publisher_fee_percent_default), base.publisherFeeRate);
+  const feesEnabled = firstDefined(override.wallet_fee, override.feesEnabled, 1) != 0;
+  const incrementMinor = toPositiveInteger(firstDefined(override.incrementMinor, override.wallet_currency_increment), 1);
+  const floor = marketMinimumMinor == null ? null : marketMinimumMinor * (
+    1 + Number(feesEnabled && steamFeeRate > 0) + Number(feesEnabled && publisherFeeRate > 0)
   );
-  const steamFeeMinimumMinor = toNonNegativeInteger(firstDefined(
-    override.steamFeeMinimumMinor,
-    override.steam_fee_minimum,
-    feeMinimumFromWallet,
-    override.wallet_market_minimum,
-  ), base.steamFeeMinimumMinor);
-  const publisherFeeMinimumMinor = toNonNegativeInteger(firstDefined(
-    override.publisherFeeMinimumMinor,
-    override.publisher_fee_minimum,
-    override.wallet_publisher_fee_minimum,
-    feeMinimumFromWallet,
-    override.wallet_market_minimum,
-  ), base.publisherFeeMinimumMinor);
-  const verified = Boolean(knownDefinition?.verified);
+  const verified = Boolean(knownDefinition);
   const source = String(firstDefined(metadata.source, override.source, "manual"));
   const isFallback = Boolean(firstDefined(metadata.isFallback, override.isFallback, false));
   const status = verified ? (isFallback ? "fallback" : "verified") : "unverified";
@@ -234,7 +181,9 @@ export function createCurrencyContext(currencyOrOptions, metadata = {}) {
     currency: currencyId,
     code,
     currencyCode: code,
-    name: base.name,
+    name: knownDefinition?.code || base.name,
+    wholeUnits: Boolean(base.wholeUnits),
+    incrementMinor,
     symbol: base.symbol,
     symbolPosition: base.symbolPosition,
     symbolSpacing: base.symbolSpacing,
@@ -247,22 +196,14 @@ export function createCurrencyContext(currencyOrOptions, metadata = {}) {
     decimalSeparator: base.decimalSeparator,
     groupSeparator: base.groupSeparator,
     marketMinimumMinor,
-    minimumBuyerMinor,
-    marketMinimumBuyerMinor: minimumBuyerMinor,
-    steamFeeRate: toRate(firstDefined(
-      override.steamFeeRate,
-      override.wallet_fee_percent,
-    ), base.steamFeeRate),
-    publisherFeeRate: toRate(firstDefined(
-      override.publisherFeeRate,
-      override.wallet_publisher_fee_percent_default,
-    ), base.publisherFeeRate),
-    steamFeeMinimumMinor,
-    publisherFeeMinimumMinor,
-    steamFeeBaseMinor: toNonNegativeInteger(firstDefined(
-      override.steamFeeBaseMinor,
-      override.wallet_fee_base,
-    ), base.steamFeeBaseMinor),
+    minimumBuyerMinor: floor,
+    marketMinimumBuyerMinor: floor,
+    steamFeeRate,
+    publisherFeeRate,
+    feesEnabled,
+    steamFeeMinimumMinor: marketMinimumMinor,
+    publisherFeeMinimumMinor: marketMinimumMinor,
+    steamFeeBaseMinor: 0,
     verified,
     isVerified: verified,
     unverified: !verified,
@@ -310,7 +251,7 @@ function globalObject() {
 
 function readApplicationConfigWalletInfo(options) {
   const direct = parseWalletInfo(options.applicationConfigWalletInfo);
-  if (currencyIdFromObject(direct) != null) return direct;
+  if (isWalletInfoLike(direct) || currencyIdFromObject(direct) != null) return direct;
 
   const applicationConfig = options.applicationConfig;
   if (applicationConfig) {
@@ -322,7 +263,7 @@ function readApplicationConfigWalletInfo(options) {
         applicationConfig.getAttribute?.("data-walletinfo"),
       );
     const parsed = parseWalletInfo(configValue || applicationConfig);
-    if (currencyIdFromObject(parsed) != null) return parsed;
+    if (isWalletInfoLike(parsed) || currencyIdFromObject(parsed) != null) return parsed;
   }
 
   const documentRef = options.document
@@ -335,59 +276,43 @@ function readApplicationConfigWalletInfo(options) {
     element?.getAttribute?.("data-walletinfo"),
   );
   const parsed = parseWalletInfo(raw);
-  return currencyIdFromObject(parsed) != null ? parsed : null;
+  return isWalletInfoLike(parsed) || currencyIdFromObject(parsed) != null ? parsed : null;
 }
 
 function pageCurrencyId(options) {
-  const documentRef = options.document
-    || (typeof document !== "undefined" ? document : null);
+  const doc = options.document || globalObject().document;
   const root = globalObject();
-  const locationRef = options.location || root.location;
-  const directCountry = firstDefined(
-    root.g_strCountryCode,
-    root.UserConfig?.country_code,
-    root.UserConfig?.COUNTRY,
-  );
-  const pageParts = [
-    options.pageText,
-    options.pageHtml,
-    documentRef?.documentElement?.innerHTML,
-    documentRef?.body?.textContent,
-    locationRef?.href,
-  ].filter(Boolean);
-  const text = decodeHtmlAttribute(pageParts.join("\n"))
-    // Steam's SSR payload is commonly embedded as JSON with escaped quotes.
-    .replace(/\\(["'])/g, "$1");
-  const isHongKongAccount = String(directCountry || "").trim().toUpperCase() === "HK";
-  if (!text) return isHongKongAccount ? CURRENCY_IDS.HKD : null;
+  const marketCurrency = normalizeCurrencyId(root.g_nWalletCurrency);
+  if (marketCurrency) return marketCurrency;
+  const walletBalance = options.pageText ?? doc?.querySelector?.("#header_wallet_balance")?.textContent ?? "";
+  const balance = String(walletBalance).trim().toUpperCase();
+  let balanceCurrency = null;
+  if (/\d/.test(balance)) {
+    for (const [id, code, symbol] of definitions) {
+      const marker = symbol.toUpperCase();
+      const hasCode = balance.startsWith(code) || balance.endsWith(code);
+      // The dollar and yen signs each occur in multiple wallet currencies.
+      if (!hasCode && (marker === "$" || marker === "¥" || !(balance.startsWith(marker) || balance.endsWith(marker)))) continue;
+      if (parseCurrencyAmount(balance, id) != null) {
+        balanceCurrency = id;
+        break;
+      }
+    }
+  }
+  if (balanceCurrency) return balanceCurrency;
 
-  const idPatterns = [
-    /wallet_currency["']?\s*[:=]\s*["']?(\d+)/i,
-    /(?:data-)?currency(?:-id)?["']?\s*[:=]\s*["']?(\d+)/i,
-    /[?&]currency=(\d+)(?:&|$)/i,
-    /eCurrency["']?\s*[:=]\s*["']?(\d+)/i,
-  ];
-  for (const pattern of idPatterns) {
-    const match = text.match(pattern);
-    const currencyId = normalizeCurrencyId(match?.[1]);
-    if (currencyId != null) return currencyId;
+  const location = options.location || root.location;
+  const ssr = /^\/market(?:\/|$)/.test(location?.pathname || "") && doc?.getElementById?.("valve-ssr-data")?.textContent;
+  if (ssr) {
+    try {
+      for (const raw of JSON.parse(ssr).loaderData || []) {
+        if (typeof raw !== "string" || !raw.includes('"filterConfig"')) continue;
+        const id = normalizeCurrencyId(JSON.parse(raw)?.filterConfig?.currency?.eCurrency);
+        if (id) return id;
+      }
+    } catch (_) {}
   }
-
-  if (/\b(?:CNY|RMB)\b/i.test(text) || /[¥￥]\s*[+-]?\d/.test(text)) {
-    return CURRENCY_IDS.CNY;
-  }
-  if (/\bHKD\b/i.test(text) || /HK\$\s*[+-]?\d/i.test(text)) {
-    return CURRENCY_IDS.HKD;
-  }
-  if (/(?:country_code|COUNTRY|country)[\\"']?\s*[:=]\s*[\\"']?HK\b/i.test(text)) {
-    return CURRENCY_IDS.HKD;
-  }
-  if (isHongKongAccount) {
-    return CURRENCY_IDS.HKD;
-  }
-  if (/\bUSD\b/i.test(text) || /\$\s*[+-]?\d/.test(text)) {
-    return CURRENCY_IDS.USD;
-  }
+  if (/\d/.test(balance) && parseCurrencyAmount(balance, options.configuredCurrencyId || 0) == null) return 0;
   return null;
 }
 
@@ -402,10 +327,9 @@ function normalizeDetectionOptions(value) {
     "applicationConfig",
     "document",
     "pageText",
-    "pageHtml",
     "location",
   ];
-  return detectionKeys.some(key => Object.hasOwn(value, key))
+  return (!Object.keys(value).length || detectionKeys.some(key => Object.hasOwn(value, key)))
     ? value
     : { walletInfo: value };
 }
@@ -420,12 +344,12 @@ export function detectCurrencyContext(input = {}) {
   const walletInfo = parseWalletInfo(
     Object.hasOwn(options, "walletInfo") ? options.walletInfo : root.g_rgWalletInfo,
   );
-  if (currencyIdFromObject(walletInfo) != null) {
+  if (walletInfo && (isWalletInfoLike(walletInfo) || currencyIdFromObject(walletInfo) != null)) {
     return createCurrencyContext(walletInfo, { source: "walletInfo", isFallback: false });
   }
 
   const configWalletInfo = readApplicationConfigWalletInfo(options);
-  if (currencyIdFromObject(configWalletInfo) != null) {
+  if (configWalletInfo) {
     return createCurrencyContext(configWalletInfo, {
       source: "application_config",
       isFallback: false,
@@ -473,8 +397,13 @@ export function getActiveCurrencyContext() {
   return activeCurrencyContext;
 }
 
+const knownContexts = new Map();
 export function getCurrencyContextById(currencyId) {
-  return createCurrencyContext(currencyId, { source: "definition", isFallback: false });
+  const id = normalizeCurrencyId(currencyId);
+  if (knownContexts.has(id)) return knownContexts.get(id);
+  const context = createCurrencyContext(id, { source: "definition", isFallback: false });
+  if (context.verified) knownContexts.set(id, context);
+  return context;
 }
 
 export function resolveCurrencyContext(context) {
@@ -483,7 +412,7 @@ export function resolveCurrencyContext(context) {
       || createCurrencyContext(null, { source: "unresolved", isFallback: true });
   }
   if (typeof context === "number" || typeof context === "string") {
-    return createCurrencyContext(context, { source: "manual", isFallback: false });
+    return getCurrencyContextById(context);
   }
   if (normalizedCurrencyContexts.has(context)) return context;
   if (context.currencyContext) return resolveCurrencyContext(context.currencyContext);
@@ -493,8 +422,7 @@ export function resolveCurrencyContext(context) {
       isFallback: context.isFallback || false,
     });
   }
-  return activeCurrencyContext
-    || createCurrencyContext(null, { source: "unresolved", isFallback: true });
+  return createCurrencyContext(null, { source: "unresolved", isFallback: true });
 }
 
 function formatArguments(contextOrOptions, maybeOptions) {
@@ -524,6 +452,7 @@ function minorAmountToBigInt(value) {
 function formatMinorAmountWithContext(amount, context, options) {
   // A gem yield can be worth a fraction of one minor unit (one sack is 1000 gems).
   const showFraction = options.fractionalMinor && Number.isFinite(amount) && !Number.isInteger(amount);
+  if (!context.verified) return options.invalidPlaceholder || "?";
   const minorAmount = minorAmountToBigInt(showFraction ? Math.round(amount * 1000) : amount);
   if (minorAmount == null) return options.invalidPlaceholder || "?";
 
@@ -539,6 +468,7 @@ function formatMinorAmountWithContext(amount, context, options) {
   }
   let decimals = digits ? fraction.toString().padStart(digits, "0") : "";
   if (showFraction) decimals = decimals.slice(0, -3) + decimals.slice(-3).replace(/0+$/, "");
+  if (context.wholeUnits && /^0+$/.test(decimals)) decimals = "";
   const fractionText = decimals ? context.decimalSeparator + decimals : "";
   return `${negative ? "-" : ""}${majorText}${fractionText}`;
 }
@@ -555,7 +485,8 @@ export function formatMoney(amount, contextOrOptions, maybeOptions) {
   if (formatted === invalidPlaceholder) return invalidPlaceholder;
 
   const negative = formatted.startsWith("-");
-  const unsigned = negative ? formatted.slice(1) : formatted;
+  let unsigned = negative ? formatted.slice(1) : formatted;
+  if (context.code === "EUR") unsigned = unsigned.replace(/,00$/, ",--");
   const spacing = context.symbolSpacing ? "\u00a0" : "";
   const signedPrefix = negative ? "-" : "";
   return context.symbolPosition === "after"
@@ -563,68 +494,51 @@ export function formatMoney(amount, contextOrOptions, maybeOptions) {
     : `${signedPrefix}${context.symbol}${spacing}${unsigned}`;
 }
 
-function numberToken(value) {
-  const normalized = String(value)
-    .replace(/[−–—]/g, "-")
-    .replace(/，/g, ",")
-    .replace(/。/g, ".");
-  return normalized.match(/[+-]?(?:\d[\d\s\u00a0\u202f.,']*|[.,]\d+)/)?.[0] || "";
+/** Round Steam's hundredths to the wallet's permitted market price. */
+export function roundMarketAmount(amount, contextInput) {
+  const context = resolveCurrencyContext(contextInput);
+  if (!context.verified || !context.marketMinimumMinor || !Number.isFinite(amount)) return null;
+  if (amount <= context.marketMinimumMinor) return context.marketMinimumMinor;
+  return Math.max(1, Math.round(amount / context.incrementMinor)) * context.incrementMinor;
 }
 
-/** Parse a displayed major-unit amount and return an integer minor-unit amount. */
+/** Parse a major-unit market price only when any accompanying currency markers agree. */
 export function parseCurrencyAmount(value, contextInput) {
   const context = resolveCurrencyContext(contextInput);
+  if (!context.verified) return null;
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) return null;
     const minor = Math.round(value * context.minorUnitFactor);
     return Number.isSafeInteger(minor) ? minor : null;
   }
-  if (typeof value === "bigint") {
-    const minor = value * BigInt(context.minorUnitFactor);
-    return minor <= BigInt(Number.MAX_SAFE_INTEGER)
-      && minor >= BigInt(Number.MIN_SAFE_INTEGER)
-      ? Number(minor)
-      : null;
+  let text = String(value ?? "").trim().replace(/[−–—]/g, "-").replace(/￥/g, "¥");
+  if (context.code === "EUR") text = text.replace(/([.,])--(?=\s*(?:€|EUR)?$)/i, "$100");
+  const negative = text.startsWith("-") || (text.startsWith("(") && text.endsWith(")"));
+  if (negative) text = (text.startsWith("-") ? text.slice(1) : text.slice(1, -1)).trim();
+
+  const stripMarker = marker => {
+    if (text.toUpperCase().startsWith(marker.toUpperCase())) text = text.slice(marker.length).trim();
+    else if (text.toUpperCase().endsWith(marker.toUpperCase())) text = text.slice(0, -marker.length).trim();
+  };
+  stripMarker(context.code);
+  stripMarker(context.symbol);
+  if (context.symbol.includes("$")) stripMarker("$");
+  if (/[\s'’]/.test(text) && !/^\d{1,3}(?:[\s'’]\d{3})+(?:[.,]\d{1,2})?$/.test(text)) return null;
+  const token = text.replace(/[\s'’]/g, "");
+  if (!/^(?:\d+|\d*[.,]\d+)(?:[.,]\d+)*$/.test(token)) return null;
+  const parts = token.split(/[.,]/);
+  const hasFraction = parts.length > 1 && parts.at(-1).length <= context.decimalDigits;
+  const fraction = hasFraction ? parts.pop() : "";
+  if (parts.length > 1) {
+    const decimalAt = token.length - fraction.length - 1;
+    const integerPart = hasFraction ? token.slice(0, decimalAt) : token;
+    const grouping = integerPart.match(/[.,]/)?.[0];
+    if (parts[0].length < 1 || parts[0].length > 3 || parts.slice(1).some(part => part.length !== 3)
+      || (integerPart.includes(",") && integerPart.includes("."))
+      || (hasFraction ? grouping === token[decimalAt] : grouping !== context.groupSeparator)) return null;
   }
-
-  const original = String(value ?? "").trim();
-  if (!original) return null;
-  const normalizedOriginal = original.replace(/[−–—]/g, "-");
-  const parenthesizedNegative = /^\s*\(.*\)\s*$/.test(normalizedOriginal);
-  let token = numberToken(original);
-  if (!token) return null;
-  const negative = parenthesizedNegative
-    || token.trim().startsWith("-")
-    || /^\s*-\s*[^\d]*\d/.test(normalizedOriginal);
-  token = token.replace(/[+-]/g, "").replace(/[\s\u00a0\u202f']/g, "");
-
-  const decimalSeparator = context.decimalSeparator;
-  const groupSeparator = context.groupSeparator;
-  const decimalParts = decimalSeparator ? token.split(decimalSeparator) : [token];
-  if (decimalParts.length > 2) return null;
-  let integerText = decimalParts[0] || "0";
-  const fractionText = decimalParts[1] || "";
-  if (fractionText && !/^\d+$/.test(fractionText)) return null;
-  if (fractionText.length > context.decimalDigits) return null;
-
-  if (groupSeparator && groupSeparator !== decimalSeparator && integerText.includes(groupSeparator)) {
-    const groups = integerText.split(groupSeparator);
-    if (!/^\d{1,3}$/.test(groups[0]) || groups.slice(1).some(group => !/^\d{3}$/.test(group))) {
-      return null;
-    }
-    integerText = groups.join("");
-  }
-  if (!/^\d+$/.test(integerText)) return null;
-
-  const paddedFraction = fractionText.padEnd(context.decimalDigits, "0");
-  const major = BigInt(integerText);
-  const fraction = paddedFraction ? BigInt(paddedFraction) : 0n;
-  let minor = major * BigInt(context.minorUnitFactor) + fraction;
-  if (negative) minor = -minor;
-  if (minor > BigInt(Number.MAX_SAFE_INTEGER) || minor < BigInt(Number.MIN_SAFE_INTEGER)) {
-    return null;
-  }
-  return Number(minor);
+  const minor = Number(parts.join("") || "0") * context.minorUnitFactor
+    + Number(fraction.padEnd(context.decimalDigits, "0"));
+  return Number.isSafeInteger(minor) ? (negative ? -minor : minor) : null;
 }
 
 export function getCurrencyStatus(contextInput) {

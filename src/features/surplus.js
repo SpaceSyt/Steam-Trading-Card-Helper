@@ -77,6 +77,7 @@ const { log: surplusLog, setStatus: setSurplusStatus, setProgress: setSurplusPro
       keepMaxLevelCards: !!options.keepMaxLevelCards,
       cardName: options.cardName || inventoryCard.name,
       marketHashName: options.marketHashName || inventoryCard.marketHashName,
+      publisherFeeRate: inventoryCard.publisherFeeRate,
       imageUrl: inventoryCard.imageUrl || "",
       nameColor: inventoryCard.nameColor || "",
       backgroundColor: inventoryCard.backgroundColor || "",

@@ -11,7 +11,7 @@ import { calculateAutomaticBuyPrice } from "../services/order-wall.js";
 import { getActiveOrderPricingProfile } from "../config.js";
 import {
   fetchActiveBuyOrderSnapshot,
-  getOrderCurrencyContext,
+  getOrderCurrencyContext, getOrderWalletRules,
 } from "../services/market-orders.js";
 import { formatMoney } from "../utils/format.js";
 import { getMarketMinimumPriceCents, getSessionId } from "../utils/steam.js";
@@ -75,6 +75,7 @@ function getSmartPricingContext() {
     return {
       currencyId: currencyContext.currencyId,
       minimumPriceMinor,
+      incrementMinor: currencyContext.incrementMinor,
       strategy: profile.priceSource,
       strategyRule: profile.strategyRule,
       adjustmentMinor: Math.round((Number.isFinite(adjustment) ? adjustment : 0) * 100),
@@ -456,7 +457,7 @@ export async function querySelectedOrderPrices() {
   setStatus("正在查价");
   const observations = [];
   try {
-    const currencyId = getOrderCurrencyContext().currencyId;
+    const { currencyId } = await getOrderWalletRules(queue);
     const pricing = getSmartPricingContext();
     let completed = 0;
     await runWithConcurrency(groups, getHtmlRequestConcurrency(state.cfg), async group => {

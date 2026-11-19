@@ -67,10 +67,10 @@ test("walletInfo can be passed directly without first creating a context", async
 
 test("context-free minimum lookup fails closed until currency initialization", async () => {
   assert.deepEqual(getMarketFeesForSellerReceive(100), {
-    steamFee: 5,
-    publisherFee: 10,
-    totalFees: 15,
-    buyerCents: 115,
+    steamFee: null,
+    publisherFee: null,
+    totalFees: null,
+    buyerCents: null,
   });
   assert.equal(getMarketMinimumPriceCents(), null);
 
@@ -89,7 +89,7 @@ test("buyer/seller conversion remains monotonic with a supplied context", async 
   assert.ok(getBuyerPriceForSellerReceive(101, cny) > 117);
 });
 
-test("wallet fee overrides are applied without treating an unknown ID as CNY", () => {
+test("a wallet with an unsupported currency cannot price fees or orders", () => {
   const walletInfo = {
     wallet_currency: 77,
     wallet_market_minimum: 2,
@@ -101,12 +101,12 @@ test("wallet fee overrides are applied without treating an unknown ID as CNY", (
   const context = detectCurrencyContext({ walletInfo });
   assert.equal(context.verified, false);
   assert.deepEqual(getMarketFeesForSellerReceive(10, walletInfo), {
-    steamFee: 3,
-    publisherFee: 2,
-    totalFees: 5,
-    buyerCents: 15,
+    steamFee: null,
+    publisherFee: null,
+    totalFees: null,
+    buyerCents: null,
   });
-  assert.equal(getMarketMinimumPriceMinor(context), 6);
+  assert.equal(getMarketMinimumPriceMinor(context), null);
 });
 
 test("inverse fee conversion returns the greatest affordable seller amount", async () => {
@@ -122,4 +122,17 @@ test("inverse fee conversion returns the greatest affordable seller amount", asy
       assert.ok(getBuyerPriceForSellerReceive(seller + 1, context) > buyer);
     }
   }
+});
+
+test("market floor and wallet increment drive seller amounts and both fees", () => {
+  const wallet = { wallet_currency: 8, wallet_market_minimum: 100, wallet_currency_increment: 100, wallet_fee_minimum: 1 };
+  assert.equal(getMarketMinimumPriceMinor(wallet), 300);
+  assert.deepEqual(getMarketFeesForSellerReceive(2530, wallet), {
+    steamFee: 100, publisherFee: 300, totalFees: 400, buyerCents: 2900,
+  });
+  assert.equal(getSellerReceiveForBuyerPrice(2900, wallet), 2500);
+  assert.equal(getSellerReceiveForBuyerPrice(2899, wallet), 2400);
+  assert.equal(getBuyerPriceForSellerReceive(100, { ...wallet, wallet_publisher_fee_percent_default: 0 }), 200);
+  assert.equal(getBuyerPriceForSellerReceive(100, { ...wallet, wallet_fee: 0 }), 100);
+  assert.equal(getBuyerPriceForSellerReceive(100, { wallet_currency: 21 }), null);
 });

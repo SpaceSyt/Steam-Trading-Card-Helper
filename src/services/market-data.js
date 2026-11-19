@@ -1,3 +1,5 @@
+import { getCurrencyContextById, parseCurrencyAmount } from "./currency.js";
+
 export const MARKET_DATA_SCHEMA_VERSION = 1;
 
 export const MARKET_DATA_SOURCES = Object.freeze({
@@ -229,11 +231,16 @@ export function normalizeMarketRecord(input, defaults = {}) {
 export function normalizePriceOverview(payload, context = {}) {
   const data = unwrapResponseData(payload);
   if (isExplicitFailure(data.success)) return null;
-  const minorDigits = getMinorDigits(context);
+  const currency = getCurrencyContextById(context.currencyId ?? context.currency ?? context.currencyCode);
+  if (!currency.verified) return null;
+  const lowestSellMinor = parseCurrencyAmount(data.lowest_price, currency);
+  const medianMinor = parseCurrencyAmount(data.median_price, currency);
+  if ((String(data.lowest_price ?? "").trim() && !(lowestSellMinor > 0))
+    || (String(data.median_price ?? "").trim() && !(medianMinor > 0))) return null;
   return normalizeMarketRecord({
     ...adapterIdentity(data, context, MARKET_DATA_SOURCES.PRICE_OVERVIEW),
-    lowestSellMinor: parseMajorAmountToMinor(data.lowest_price, minorDigits),
-    medianMinor: parseMajorAmountToMinor(data.median_price, minorDigits),
+    lowestSellMinor,
+    medianMinor,
     highestBuyMinor: null,
     volume: normalizeMarketVolume(data.volume),
   });

@@ -16,21 +16,18 @@ import { getResultKey } from "./result-info.js";
 const LEGACY_ORDER_CACHE_CURRENCY_ID = 23;
 const normalizedOrderResults = new WeakSet();
 
-function normalizeCurrencyId(value, fallback = LEGACY_ORDER_CACHE_CURRENCY_ID) {
+function normalizeCurrencyId(value, fallback = null) {
   const currencyId = Number(value);
   if (Number.isInteger(currencyId) && currencyId > 0) return currencyId;
   const fallbackId = Number(fallback);
   return Number.isInteger(fallbackId) && fallbackId > 0
     ? fallbackId
-    : LEGACY_ORDER_CACHE_CURRENCY_ID;
+    : null;
 }
 
 export function getActiveOrderCurrencyId() {
   return normalizeCurrencyId(
-    state?.currencyContext?.id
-      ?? state?.currencyContext?.currencyId
-      ?? state?.cfg?.currencyId,
-    DEFAULT_CONFIG.currencyId
+    state.currencyContext ? state.currencyContext.currencyId : state.cfg.currencyId
   );
 }
 
@@ -53,6 +50,7 @@ export function normalizeOrderResult(info, cachedAt = Date.now(), currencyId = n
     copy.currencyId,
     currencyId ?? getActiveOrderCurrencyId()
   );
+  if (!copy.currencyId || (currencyId && copy.currencyId !== currencyId)) return null;
   copy.cards = Array.isArray(copy.cards) ? copy.cards : [];
   copy.cardPrices = Array.isArray(copy.cardPrices) ? copy.cardPrices : [];
   copy.hasIncompletePricing = copy.hasIncompletePricing === true;
@@ -66,7 +64,9 @@ export function normalizeOrderResult(info, cachedAt = Date.now(), currencyId = n
     ? null
     : Number(copy.level5CostCents) || 0;
   const currencyContext = getCurrencyContextById(copy.currencyId);
-  copy.currencyCode = copy.currencyCode || currencyContext.code;
+  if (copy.currencyCode && copy.currencyCode !== currencyContext.code && copy.currencyCode !== `STEAM-${copy.currencyId}`) return null;
+  if ([copy.cards, copy.cardPrices].some(list => list.some(card => card?.currencyId != null && Number(card.currencyId) !== copy.currencyId))) return null;
+  copy.currencyCode = currencyContext.code;
   normalizedOrderResults.add(copy);
   return copy.appid ? copy : null;
 }
@@ -99,6 +99,7 @@ function replaceDecodedOrderCachePartition(
   reuseNormalized = false
 ) {
   const normalizedCurrencyId = normalizeCurrencyId(currencyId);
+  if (!normalizedCurrencyId) return envelope;
   return {
     schemaVersion: ORDER_CACHE_SCHEMA_VERSION,
     updatedAt: now,
@@ -226,6 +227,7 @@ export function loadOrderCache(currencyId = getActiveOrderCurrencyId()) {
 }
 
 export function saveOrderCache(currencyId = getActiveOrderCurrencyId()) {
+  if (!currencyId) return;
   const now = Date.now();
   let decoded;
   try {
@@ -284,11 +286,12 @@ export function createOrderCacheIndex() {
 
 export function getCachedOrderResult(info, index = createOrderCacheIndex()) {
   const item = index.get(getResultKey(info));
-  return item && isOrderCacheFresh(item) ? item : null;
+  return item && item.currencyId === getActiveOrderCurrencyId() && isOrderCacheFresh(item) ? item : null;
 }
 
 export function upsertOrderResult(info, options = {}) {
   const currencyId = getActiveOrderCurrencyId();
+  if (!currencyId) return null;
   const item = normalizeOrderResult(info, options.cachedAt || Date.now(), currencyId);
   if (!item) return null;
   item.cachedAt = options.cachedAt || Date.now();

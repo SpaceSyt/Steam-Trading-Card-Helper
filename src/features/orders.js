@@ -1,4 +1,5 @@
-import { fetchActiveBuyOrderSnapshot, fetchHighestBuyPrice, fetchMarketOrderDepth, getCurrencyMarketKey, getOrderCurrencyContext, getPendingOrderExpectedQuantity, isNoBuyOrdersError } from "../services/market-orders.js";
+import { fetchActiveBuyOrderSnapshot, fetchHighestBuyPrice, fetchMarketOrderDepth, getCurrencyMarketKey, getOrderCurrencyContext, getOrderWalletRules, getPendingOrderExpectedQuantity, isNoBuyOrdersError } from "../services/market-orders.js";
+import { roundMarketAmount } from "../services/currency.js";
 import { getOrderPriceSourceLabel } from "../ui/pricing-controls.js";
 import { showConfirmation } from "../ui/confirmation.js";
 
@@ -148,7 +149,7 @@ function describeOrderError(error) {
     const adjustmentCents = Math.round(
       (Number.isFinite(adjustmentValue) ? adjustmentValue : 0) * 100
     );
-    const currencyContext = getOrderCurrencyContext();
+    const currencyContext = await getOrderWalletRules(ui.queue);
     const minimumCents = getMarketMinimumPriceCents(currencyContext);
     if (!Number.isSafeInteger(minimumCents) || minimumCents <= 0) {
       throw new Error("无法确认当前币种的 Steam 市场最低价");
@@ -169,7 +170,9 @@ function describeOrderError(error) {
     let firstPricingError = "";
 
     for (const info of selected) {
+      if (info.currencyId != null && info.currencyId !== currencyContext.currencyId) throw new Error("钱包币种已改变，请重新查价");
       for (const card of info.cards) {
+        if (card.currencyId != null && card.currencyId !== currencyContext.currencyId) throw new Error("钱包币种已改变，请重新查价");
         if (!card.marketHashName) {
           skipped.missingHash++;
           continue;
@@ -233,6 +236,7 @@ function describeOrderError(error) {
             strategyRule: pricingProfile.strategyRule,
             adjustmentMinor: adjustmentCents,
             minimumPriceMinor: minimumCents,
+            incrementMinor: currencyContext.incrementMinor,
           });
           basePriceCents = automaticQuote
             ? automaticQuote.wallReferencePriceMinor
@@ -306,8 +310,8 @@ function describeOrderError(error) {
 
       if (unitPriceCents == null) {
         const adjustedPrice = basePriceCents + adjustmentCents;
-        unitPriceCents = Math.max(minimumCents, adjustedPrice);
-        if (unitPriceCents !== adjustedPrice) {
+        unitPriceCents = Math.max(minimumCents, roundMarketAmount(adjustedPrice, currencyContext));
+        if (adjustedPrice < minimumCents) {
           skipped.clamped++;
           skipped.minimumClamped++;
         }
@@ -322,6 +326,7 @@ function describeOrderError(error) {
         }
       }
       plan.push({
+        currencyId: currencyContext.currencyId,
         appid: info.appid,
         gameName: info.gameName,
         cardName: card.name,

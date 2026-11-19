@@ -147,6 +147,7 @@ import { SIDEBAR_GEM_SACK_HASH } from "../constants.js";
         isFoil,
         gameName: group.gameName,
         name: String(description.name || marketHashName).trim(),
+        publisherFeeRate: description.market_fee,
         marketHashName,
         imageUrl: getDescriptionImageUrl(description),
         nameColor: getDescriptionColor(description, "name_color"),

@@ -579,7 +579,7 @@ test("an HKD page context sends currency 29 instead of the configured CNY fallba
   });
   initializeCurrencyContext({
     walletInfo: null,
-    pageHtml: "filterConfig={\\\"currency\\\":{\\\"eCurrency\\\":29}}",
+    pageText: "HK$ 0.26",
     configuredCurrencyId: 23,
   });
 
@@ -590,4 +590,21 @@ test("an HKD page context sends currency 29 instead of the configured CNY fallba
   assert.equal(result.lowestSellCents, 26);
   assert.equal(result.medianCents, 27);
   assert.equal(result.volume, 9261);
+});
+
+test("AUD priceoverview keeps Steam ID 21 and rejects a different wallet's price", async () => {
+  initializeActiveCurrency(21);
+  const queue = new FakeRequestQueue({ 21: { success: true, lowest_price: "A$ 1.00", median_price: "A$ 0.99" } });
+  const price = await priceCard(MARKET_HASH_NAME, queue);
+  assert.equal(price.record.lowestSellMinor, 100);
+  assert.equal(price.record.currencyCode, "AUD");
+  assert.equal(queue.calls[1].url.searchParams.get("currency"), "21");
+  const mixed = new FakeRequestQueue({ 21: { success: true, lowest_price: "A$ 1.00", median_price: "$1.00 USD" } });
+  assert.ok(isPriceCardError(await priceCard(MARKET_HASH_NAME, mixed)));
+  for (const id of [77, null]) {
+    initializeCurrencyContext({ walletInfo: { wallet_currency: id } });
+    const unknown = new FakeRequestQueue({});
+    assert.equal((await priceCard(MARKET_HASH_NAME, unknown)).errorKind, PRICE_CARD_ERROR_KINDS.CURRENCY);
+    assert.equal(unknown.calls.some(({ url }) => url.pathname !== "/market/"), false);
+  }
 });

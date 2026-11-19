@@ -15,6 +15,7 @@ state.currencyContext = initializeCurrencyContext({
   configuredCurrencyId: state.cfg.currencyId,
 });
 state.orderResults = loadOrderCache();
+if (!state.currencyContext.currencyId) state.loadOrderCache = loadOrderCache;
 pruneOrderCache(true);
 loadItemCollection();
 

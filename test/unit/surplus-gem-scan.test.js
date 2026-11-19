@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { RequestQueue } from "../../src/request/queue.js";
-import { getCurrencyContextById, setActiveCurrencyContext } from "../../src/services/currency.js";
+import { setActiveCurrencyContext } from "../../src/services/currency.js";
 
 globalThis.window = { g_steamID: "76561198000000000", g_strLanguage: "schinese" };
 globalThis.location = new URL("https://steamcommunity.com/my/inventory/");
@@ -57,7 +57,7 @@ test("surplus scan compares per-card gem proceeds and leaves unavailable yields 
     throw new Error("Unexpected request");
   });
   state.cfg.surplusKeepMaxLevelCards = false;
-  setActiveCurrencyContext(getCurrencyContextById(23));
+  setActiveCurrencyContext({ wallet_currency: 23, wallet_market_minimum: 7, wallet_fee_minimum: 7 });
 
   await startSurplusScan();
 

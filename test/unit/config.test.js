@@ -28,7 +28,7 @@ test("v2.0 config migration preserves every blacklist field", () => {
   const migrated = normalizeConfig(legacy);
 
   assert.equal(migrated.configVersion, CONFIG_SCHEMA_VERSION);
-  assert.equal(migrated.currencyId, 23);
+  assert.equal(migrated.currencyId, null);
   assert.equal(migrated.threshold, 7.5);
   assert.equal(migrated.blacklist, legacy.blacklist);
   assert.equal(migrated.blacklistNames, legacy.blacklistNames);
@@ -36,6 +36,13 @@ test("v2.0 config migration preserves every blacklist field", () => {
   assert.equal(migrated.blacklistDates, legacy.blacklistDates);
   assert.equal(migrated.blacklistFixed, legacy.blacklistFixed);
   assert.equal(migrated.blacklistPriceData, "{}");
+});
+
+test("only an explicitly configured currency may replace a missing wallet", () => {
+  assert.equal(DEFAULT_CONFIG.currencyId, null);
+  assert.equal(normalizeConfig({ configVersion: 35, currencyId: 23 }).currencyId, null);
+  assert.equal(normalizeConfig({ configVersion: 35, currencyId: 29 }).currencyId, 29);
+  assert.equal(normalizeConfig({ configVersion: CONFIG_SCHEMA_VERSION, currencyId: 23 }).currencyId, 23);
 });
 
 test("automatic pricing uses strategy offsets without a second persisted adjustment", () => {

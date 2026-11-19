@@ -1,6 +1,6 @@
 import { state } from "../state.js";
 import { AUTOMATIC_PRICE_STRATEGY_CONFIG, SELL_AUTOMATIC_PRICE_STRATEGY_CONFIG, DEFAULT_CONFIG, saveConfig } from "../config.js";
-import { createCurrencyContext, getActiveCurrencyContext, setActiveCurrencyContext } from "../services/currency.js";
+import { CURRENCY_IDS, createCurrencyContext, getActiveCurrencyContext, setActiveCurrencyContext } from "../services/currency.js";
 import { clearOrderCache, loadOrderCache, pruneOrderCache, readRawOrderCache } from "../services/order-cache.js";
 import { createDataBackup, getDataBackupFileName, parseDataBackup, restoreDataBackup, serializeDataBackup } from "../services/data-backup.js";
 import { normalizeHexColor, normalizeTabColors } from "../services/tab-preferences.js";
@@ -316,15 +316,15 @@ export function bindSettingsControls(modal, { applySurplusItemMode, rebuildModal
   };
   document.getElementById("stch-currency-fallback")?.addEventListener("change", event => {
     const input = event.currentTarget;
-    const previousConfiguredId = Number(state.cfg.currencyId || DEFAULT_CONFIG.currencyId);
+    const previousConfiguredId = state.cfg.currencyId ?? "";
     if (isSharedActionBusy()) {
       input.value = String(previousConfiguredId);
       setSettingsActionStatus("请先停止当前操作，再修改回退币种");
       return;
     }
 
-    const currencyId = Number(input.value);
-    if (![1, 23, 29].includes(currencyId)) {
+    const currencyId = input.value === "" ? null : Number(input.value);
+    if (currencyId !== null && !Object.values(CURRENCY_IDS).includes(currencyId)) {
       input.value = String(previousConfiguredId);
       setSettingsActionStatus("不支持的回退币种");
       return;

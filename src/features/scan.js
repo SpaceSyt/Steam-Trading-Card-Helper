@@ -1,3 +1,4 @@
+import { getWalletForPricing } from "../services/market-wallet.js";
 import { state } from "../state.js";
 
 import { applyScanModeTheme, setScanPhase } from "../ui/scan-controls.js";
@@ -177,6 +178,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
       setScanPhase("phase2");
       setStatus("扫描卡牌价格中");
 
+      await getWalletForPricing(queue);
       const getThresholdCents = () => Math.round((Number(state.cfg.threshold) || 0) * 100);
       let blacklistSource = null;
       let blacklistedAppids = new Set();
@@ -192,7 +194,8 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
       };
 
       const cachedOrders = cfg.skipCachedOrderResults ? createOrderCacheIndex() : null;
-      for (const [index, b] of badges.entries()) {
+      for (let index = 0; index < badges.length; index++) {
+        const b = badges[index];
         skipPricingBadge = null;
         if (state.stopRequested) { log("已手动停止", "warn"); break; }
         if (state.skipCurrent) {
@@ -257,7 +260,7 @@ const { log, setStatus, setProgress, hideProgress } = scanStatus;
           info.targetLevel = getBadgeTargetLevel(info);
           info.gameName = b.gameName || info.gameName || "";
           info.cardPrices = [];
-          info.currencyId = state.currencyContext?.currencyId || state.cfg.currencyId || 23;
+          info.currencyId = state.currencyContext?.currencyId ?? null;
           info.cheapestSetCostCents = 0;
           info.fullSetCostCents = 0;
           info.level5CostCents = 0;

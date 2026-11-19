@@ -1,3 +1,4 @@
+import { getWalletForPricing } from "../services/market-wallet.js";
 import { state } from "../state.js";
 
 import { priceCard } from "../parsers/price.js";
@@ -39,11 +40,7 @@ let refreshGeneration = 0;
 let currentRefreshQueue = null;
 
 function getCurrencyId() {
-  return Number(
-    state.currencyContext?.currencyId
-      ?? state.currencyContext?.id
-      ?? state.cfg.currencyId
-  ) || 23;
+  return state.currencyContext?.verified ? state.currencyContext.currencyId : null;
 }
 
 function setHistoryStatus(text, kind = "") {
@@ -448,6 +445,7 @@ function addSelectedItem() {
     setHistoryStatus("请先停止刷新，再添加已保存物品", "warn");
     return;
   }
+  if (!getCurrencyId()) return setHistoryStatus("无法确认 Steam 钱包币种", "err");
   const candidate = getSelectedCandidate();
   if (!candidate) {
     setHistoryStatus(
@@ -539,7 +537,7 @@ async function refreshAllPrices() {
   };
 
   try {
-    const currencyId = getCurrencyId();
+    const { currencyId } = await getWalletForPricing(queue);
     const refreshed = new Array(items.length);
     let completed = 0;
     await runWithConcurrency(items, concurrency, async (item, index) => {

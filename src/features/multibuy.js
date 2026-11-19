@@ -12,7 +12,7 @@ import { MULTIBUY_DATA_KEY, MULTIBUY_DATA_TTL, MULTIBUY_FILL_TIMEOUT } from "../
 
 import { scanStatus } from "../status-controllers.js";
 
-import { getActiveCurrencyContext } from "../services/currency.js";
+import { getActiveCurrencyContext, roundMarketAmount } from "../services/currency.js";
 
 const { log } = scanStatus;
 
@@ -169,12 +169,7 @@ const { log } = scanStatus;
       (Number.isFinite(adjustmentValue) ? adjustmentValue : 0) * 100
     );
     const currencyContext = getActiveCurrencyContext();
-    const minimumPriceMinor = getMarketMinimumPriceCents(currencyContext);
-    if (
-      !Number.isInteger(currencyContext?.currencyId)
-      || !Number.isSafeInteger(minimumPriceMinor)
-      || minimumPriceMinor <= 0
-    ) {
+    if (!currencyContext?.verified || (info.currencyId != null && info.currencyId !== currencyContext.currencyId)) {
       log(`${info.gameName}: 无法确认 Steam 钱包币种，已停止打开批量购买`, "warn");
       return;
     }
@@ -188,7 +183,7 @@ const { log } = scanStatus;
       items: toBuy.map(q => q.card.marketHashName),
       cards: toBuy.map(q => ({
         marketHashName: q.card.marketHashName,
-        lowestCents: q.card.priceSource === "lowest"
+        lowestCents: (q.card.currencyId == null || q.card.currencyId === currencyContext.currencyId) && q.card.priceSource === "lowest"
           && Number.isFinite(q.card.lowestCents)
           && q.card.lowestCents > 0
           ? q.card.lowestCents
@@ -223,7 +218,7 @@ const { log } = scanStatus;
     const isFresh = Number.isFinite(data?.createdAt)
       && Date.now() - data.createdAt <= MULTIBUY_DATA_TTL;
     const currencyContext = getActiveCurrencyContext();
-    const sameCurrency = Number.isInteger(currencyContext?.currencyId)
+    const sameCurrency = currencyContext?.verified
       && Number(data?.currencyId) === currencyContext.currencyId;
 
     if (
@@ -309,7 +304,7 @@ const { log } = scanStatus;
           changed = setMultibuyFieldValue(
             price,
             (
-              Math.max(minimumPriceMinor, card.lowestCents + bufferCents)
+              Math.max(minimumPriceMinor, roundMarketAmount(card.lowestCents + bufferCents, currencyContext))
               / currencyContext.minorUnitFactor
             ).toFixed(currencyContext.decimalDigits)
           ) || changed;

@@ -15,7 +15,6 @@ globalThis.unsafeWindow = { jQuery: null, $: null };
 const { state } = await import("../../src/state.js");
 const {
   clearActiveCurrencyContext,
-  getCurrencyContextById,
   setActiveCurrencyContext,
 } = await import("../../src/services/currency.js");
 const {
@@ -41,7 +40,7 @@ beforeEach(() => {
   resetSessionGemPrice();
   resetPriceOverviewRateState();
   state.cfg.currencyId = 23;
-  setActiveCurrencyContext(getCurrencyContextById(23));
+  setActiveCurrencyContext({ wallet_currency: 23, wallet_market_minimum: 7 });
 });
 
 afterEach(() => {
@@ -104,14 +103,15 @@ test("gem price is requested once per page session without 429 retries", async (
 
 test("changing the active currency replaces a pending session gem quote", async () => {
   let finishUsd;
-  setActiveCurrencyContext(getCurrencyContextById(1));
+  setActiveCurrencyContext({ wallet_currency: 1, wallet_market_minimum: 1 });
   const usd = loadSidebarGemPrice({
     fetch: () => new Promise(resolve => { finishUsd = resolve; }),
   });
-  setActiveCurrencyContext(getCurrencyContextById(23));
+  setActiveCurrencyContext({ wallet_currency: 23, wallet_market_minimum: 7 });
   const cny = loadSidebarGemPrice({
     fetch: async () => ({ status: 200, text: makeListingHtml(435, 23) }),
   });
+  await Promise.resolve();
   finishUsd({ status: 200, text: makeListingHtml(60, 1) });
 
   assert.equal((await usd).currencyId, 1);

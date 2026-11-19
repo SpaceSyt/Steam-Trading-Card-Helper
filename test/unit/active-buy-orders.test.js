@@ -34,6 +34,14 @@ test("parses localized active buy order rows without DOM globals", async () => {
   assert.equal(snapshot.sellListingCount, 2);
 });
 
+test("mylistings prices use the wallet for ambiguous dollar and localized amounts", async () => {
+  const source = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  const data = { ...source, results_html: source.results_html.replace("¥ 0.26", "A$ 1,234.56").replace("¥ 0.27", "$ 1,27").replace("¥ 1.05", "CDN$ 1.05") };
+  const result = parseActiveBuyOrdersResponse(data, { currencyId: 21 });
+  assert.deepEqual(result.orders.map(order => order.unitPriceMinor), [123456, 127]);
+  assert.equal(result.diagnostics[0].code, "invalid-unit-price");
+});
+
 test("aggregates duplicate item orders and preserves exact order ids", async () => {
   const data = JSON.parse(await readFile(fixtureUrl, "utf8"));
   const groups = aggregateActiveBuyOrders(parseActiveBuyOrdersResponse(data).orders);

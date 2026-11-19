@@ -4,7 +4,7 @@
 
   export const CONFIG_STORAGE_KEY = "stch_config";
 
-  export const CONFIG_SCHEMA_VERSION = 35;
+  export const CONFIG_SCHEMA_VERSION = 36;
 
   export const AUTOMATIC_PRICE_STRATEGY_CONFIG = Object.freeze({
     conservative: Object.freeze({
@@ -41,7 +41,7 @@
 
   export const DEFAULT_CONFIG = {
     configVersion: CONFIG_SCHEMA_VERSION,
-    currencyId: 23,
+    currencyId: null,
     threshold: 5,
     requestInterval: 330,
     showNoResultLogs: false,
@@ -129,7 +129,9 @@
     }
 
     const currencyId = Number(merged.currencyId);
-    merged.currencyId = Number.isInteger(currencyId) && currencyId > 0
+    // Older configurations persisted 23 even when the user had never chosen a fallback.
+    const oldDefault = currencyId === 23 && !(Number(saved.configVersion) >= 36);
+    merged.currencyId = !oldDefault && Number.isInteger(currencyId) && currencyId > 0
       ? currencyId
       : defaults.currencyId;
     merged.automaticPricingEnabled = merged.automaticPricingEnabled === true;

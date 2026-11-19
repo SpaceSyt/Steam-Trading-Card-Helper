@@ -1,3 +1,4 @@
+import { getWalletForPricing } from "./market-wallet.js";
 import { state } from "../state.js";
 
 import { getProfileUrl } from "../utils/steam.js";
@@ -55,7 +56,7 @@ import { getHtmlRequestConcurrency, runWithConcurrency } from "../utils/concurre
     info.targetLevel = getBadgeTargetLevel(info);
     info.gameName = existing.gameName || info.gameName || "";
     info.cardPrices = [];
-    info.currencyId = state.currencyContext?.currencyId || state.cfg.currencyId || 23;
+    info.currencyId = (await getWalletForPricing(queue)).currencyId;
     info.cheapestSetCostCents = 0;
     info.fullSetCostCents = 0;
     info.level5CostCents = 0;

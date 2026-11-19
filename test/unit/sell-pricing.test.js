@@ -30,6 +30,7 @@ function queue(data, calls = []) {
 }
 
 beforeEach(() => {
+  unsafeWindow.g_rgWalletInfo = { wallet_currency: 23, wallet_market_minimum: 7, wallet_fee_minimum: 7 };
   state.cfg = normalizeConfig({ sellAutomaticPricingEnabled: true });
   state.sellAutomaticPricingDraft = null;
   state.marketOrderDepths.clear();
@@ -127,12 +128,26 @@ test("buy and sell depth caches stay separate for the same item", async () => {
 
 test("fee rounding cannot cross the automatic sell buy-order guard", async () => {
   // 22 is not representable: seller 19 costs 21 and seller 20 costs 23.
+  unsafeWindow.g_rgWalletInfo = { wallet_currency: 1, wallet_market_minimum: 1, wallet_fee_minimum: 1 };
   setActiveCurrencyContext(getCurrencyContextById(1));
   state.cfg.sellFollowOffset = -1;
   const result = await buildSellPlan("card", ui, queue(book({ eCurrency: 1, amtMinSellOrder: 23, amtMaxBuyOrder: 21, rgCompactSellOrders: [23, 1], cSellOrders: 1 })));
   assert.equal(result.plan[0].targetBuyerCents, 22);
   assert.equal(result.plan[0].unitBuyerCents, 23);
   assert.equal(result.plan[0].sellerReceiveCents, 20);
+});
+
+test("a fee-free publisher can list at the item's wallet minimum", async () => {
+  unsafeWindow.g_rgWalletInfo = { wallet_currency: 21, wallet_market_minimum: 1, wallet_fee_minimum: 1 };
+  setActiveCurrencyContext(unsafeWindow.g_rgWalletInfo);
+  state.cfg.sellAutomaticPriceStrategy = "instant";
+  state.surplusResults[0].publisherFeeRate = "0";
+  const data = book({ eCurrency: 21, amtMaxBuyOrder: 2, rgCompactBuyOrders: [2, 5] });
+  const { plan } = await buildSellPlan("card", ui, queue(data));
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].currencyId, 21);
+  assert.equal(plan[0].unitBuyerCents, 2);
+  assert.equal(plan[0].sellerReceiveCents, 1);
 });
 
 test("manual sell pricing remains available after automatic pricing is disabled", async () => {

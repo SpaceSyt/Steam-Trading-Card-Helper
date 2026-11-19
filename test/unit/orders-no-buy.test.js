@@ -33,11 +33,14 @@ const {
 const {
   buildBuyOrderPlan,
   loadActiveBuyOrders,
+  createLongTermBuyOrder,
   submitBuyOrdersForSelection,
 } = await import("../../src/features/orders.js");
+const { getOrderWalletRules } = await import("../../src/services/market-orders.js");
 const { RequestQueue } = await import("../../src/request/queue.js");
 
 beforeEach(() => {
+  unsafeWindow.g_rgWalletInfo = { wallet_currency: 23, wallet_market_minimum: 7 };
   state.cfg.currencyId = 23;
   setActiveCurrencyContext(getCurrencyContextById(23));
 });
@@ -290,12 +293,135 @@ test("legacy order-spread markup is not used when SSR orderbook data is missing"
 
 test("ordering is blocked when neither the wallet nor settings identify a currency", async () => {
   clearActiveCurrencyContext();
+  delete unsafeWindow.g_rgWalletInfo;
   state.cfg.currencyId = null;
 
   await assert.rejects(
     () => buildBuyOrderPlan(selected, new Map(), makeUi()),
     /无法确认 Steam 钱包币种/,
   );
+});
+
+test("preview fetches matching market wallet rules only when missing", async () => {
+  const id = "76561198000000000";
+  unsafeWindow.g_steamID = id;
+  unsafeWindow.g_rgWalletInfo = { wallet_currency: 21 };
+  setActiveCurrencyContext(getCurrencyContextById(21));
+  const requests = [];
+  const wallet = { wallet_currency: 21, wallet_market_minimum: 2, wallet_fee_minimum: 2, wallet_currency_increment: 1 };
+  let marketAccount = "76561198000000001";
+  const queue = { fetch: async url => {
+    requests.push(url);
+    return { text: `<script>var g_steamID='${marketAccount}';var g_rgWalletInfo=${JSON.stringify(wallet)};</script>` };
+  } };
+  try {
+    await assert.rejects(getOrderWalletRules(queue), /无法确认 Steam 钱包币种/);
+    marketAccount = id;
+    wallet.wallet_currency = 1;
+    await assert.rejects(getOrderWalletRules(queue), /钱包币种已改变/);
+    wallet.wallet_currency = 21;
+    const rules = await getOrderWalletRules(queue);
+    assert.equal(rules.currencyId, 21);
+    assert.equal(rules.minimumBuyerMinor, 6);
+    assert.equal((await getOrderWalletRules(queue)).currencyId, 21);
+    assert.deepEqual(requests, Array(3).fill("https://steamcommunity.com/market/"));
+    setActiveCurrencyContext({ wallet_currency: 999 });
+    state.cfg.currencyId = 23;
+    await assert.rejects(getOrderWalletRules(queue), /无法确认 Steam 钱包币种/);
+    assert.equal(requests.length, 3);
+  } finally { delete unsafeWindow.g_steamID; }
+});
+
+test("a fresh ambiguous wallet shares the first authenticated read across pricing and order previews", async () => {
+  const { initializeCurrencyContext } = await import("../../src/services/currency.js");
+  const { getWalletForPricing } = await import("../../src/services/market-wallet.js");
+  delete unsafeWindow.g_rgWalletInfo;
+  state.cfg.currencyId = null;
+  unsafeWindow.g_steamID = "76561198000000000";
+  const current = initializeCurrencyContext({ pageText: "$10.00", pageHtml: "", document: {}, configuredCurrencyId: null });
+  assert.equal(current.currencyId, null);
+  let cacheLoads = 0;
+  state.loadOrderCache = currencyId => { cacheLoads++; return [{ appid: "123", currencyId }]; };
+  let reads = 0;
+  const queue = { fetch: async url => {
+    reads++;
+    assert.equal(url, "https://steamcommunity.com/market/");
+    return { text: `<div>var g_rgWalletInfo={"wallet_currency":1};</div><script>g_steamID='${unsafeWindow.g_steamID}'; g_rgWalletInfo={"wallet_currency":21,"wallet_market_minimum":1};</script>` };
+  } };
+  try {
+    const [pricing, order] = await Promise.all([getWalletForPricing(queue), getOrderWalletRules(queue)]);
+    assert.equal(pricing.code, "AUD");
+    assert.equal(order.minimumBuyerMinor, 3);
+    assert.equal(state.currencyContext.currencyId, 21);
+    assert.equal((await getWalletForPricing(queue)).currencyId, 21);
+    assert.equal(reads, 1);
+    assert.equal(cacheLoads, 1);
+    assert.deepEqual(state.orderResults, [{ appid: "123", currencyId: 21 }]);
+  } finally { delete unsafeWindow.g_steamID; state.orderResults = []; delete state.loadOrderCache; }
+});
+
+test("an independent wallet preview can take over a cancelled read only on the same account", async t => {
+  const owner = "76561198000000000";
+  t.after(() => { delete unsafeWindow.g_steamID; });
+  for (const sameAccount of [true, false]) {
+    unsafeWindow.g_steamID = owner;
+    unsafeWindow.g_rgWalletInfo = { wallet_currency: 21 };
+    setActiveCurrencyContext(getCurrencyContextById(21));
+    let cancel, reads = 0;
+    const first = { fetch: () => new Promise((_resolve, reject) => { cancel = reject; }) };
+    const second = { fetch: async () => {
+      reads++;
+      return { text: `<script>var g_steamID='${owner}';var g_rgWalletInfo={"wallet_currency":21,"wallet_market_minimum":1};</script>` };
+    } };
+    const result = Promise.allSettled([getOrderWalletRules(first), getOrderWalletRules(second), getOrderWalletRules(second)]);
+    if (!sameAccount) unsafeWindow.g_steamID = "76561198000000001";
+    cancel({ status: 0, error: "stopped" });
+    const [leader, ...others] = await result;
+    assert.equal(leader.status, "rejected");
+    for (const other of others) {
+      assert.equal(other.status, sameAccount ? "fulfilled" : "rejected");
+      if (sameAccount) assert.equal(other.value.minimumBuyerMinor, 3);
+    }
+    assert.equal(reads, Number(sameAccount));
+  }
+});
+
+test("AUD preview and mock submission keep the wallet and amount", async () => {
+  unsafeWindow.g_rgWalletInfo = { wallet_currency: 21, wallet_market_minimum: 1 };
+  setActiveCurrencyContext(unsafeWindow.g_rgWalletInfo);
+  Object.assign(state.cfg, { buyMode: "buy1", automaticPricingEnabled: false, orderPriceSource: "lowest", priceAdjustment: 0.02 });
+  const data = [{ ...selected[0], currencyId: 21, cards: [{ ...selected[0].cards[0], priceSource: "lowest", lowestCents: 123 }] }];
+  const { plan } = await buildBuyOrderPlan(data, new Map(), makeUi());
+  assert.equal(plan[0].unitPriceCents, 125);
+  assert.equal(plan[0].currencyId, 21);
+  const requests = [];
+  unsafeWindow.g_sessionID = "fixture";
+  window.fetch = async (url, { body }) => {
+    requests.push([new URL(url).pathname, new URLSearchParams(body)]);
+    return { ok: true, text: async () => JSON.stringify({ success: 1, buy_orderid: "123" }) };
+  };
+  try {
+    await createLongTermBuyOrder(plan[0]);
+    assert.equal(requests[0][0], "/market/createbuyorder/");
+    assert.equal(requests[0][1].get("currency"), "21");
+    assert.equal(requests[0][1].get("price_total"), "125");
+    unsafeWindow.g_rgWalletInfo.wallet_currency = 1;
+    await assert.rejects(createLongTermBuyOrder(plan[0]), /钱包币种已改变/);
+    assert.equal(requests.length, 1);
+  } finally { delete unsafeWindow.g_sessionID; }
+});
+
+test("a whole-unit wallet applies its increment before quantity and guards the lowest ask", async () => {
+  unsafeWindow.g_rgWalletInfo = { wallet_currency: 8, wallet_market_minimum: 100, wallet_currency_increment: 100 };
+  setActiveCurrencyContext(unsafeWindow.g_rgWalletInfo);
+  Object.assign(state.cfg, { buyMode: "buy1", automaticPricingEnabled: true, automaticPriceStrategy: "aggressive" });
+  state.automaticPricingDraft = { strategy: "aggressive", noWallOffsetMinor: 120, wallOffsetMinor: 120 };
+  const ui = makeUi();
+  ui.queue.fetch = async () => ({ text: makeOrderbookHtml({ eCurrency: 8, amtMaxBuyOrder: 900, cBuyOrders: 1,
+    rgCompactBuyOrders: [900, 1], amtMinSellOrder: 1000 }) });
+  const { plan } = await buildBuyOrderPlan(selected, new Map(), ui);
+  assert.equal(plan[0].unitPriceCents, 900);
+  assert.equal(plan[0].currencyId, 8);
 });
 
 test("existing-order parse diagnostics block order planning", async () => {

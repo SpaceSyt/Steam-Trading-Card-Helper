@@ -1,3 +1,4 @@
+import { getActiveCurrencyContext } from "./currency.js";
 import { formatMoney } from "../utils/format.js";
 import { invalidateInventoryTile } from "../utils/dom.js";
 import {
@@ -13,7 +14,8 @@ export function applyItemRecommendation(item, gemSackPriceCents) {
   item.unitGemValueNetCents = getGemValueSellerNetCents(item.gemValue, gemSackPriceCents);
   item.unitGemValueText = formatMoney(item.unitGemValueNetCents, { fractionalMinor: true });
   item.breakEvenPriceCents = getGemBreakEvenBuyerPrice(item.gemValue, gemSackPriceCents);
-  item.marketNetCents = item.priceCents ? getSellerReceiveForBuyerPrice(item.priceCents) : 0;
+  const feeContext = item.publisherFeeRate == null ? undefined : { ...getActiveCurrencyContext(), publisherFeeRate: item.publisherFeeRate };
+  item.marketNetCents = item.priceCents ? getSellerReceiveForBuyerPrice(item.priceCents, feeContext) : 0;
 
   if (!gemSackPriceCents) {
     item.recommendationKey = "unknown";
@@ -25,6 +27,11 @@ export function applyItemRecommendation(item, gemSackPriceCents) {
     item.recommendationLabel = "缺宝石数";
     item.recommendationClass = "warn";
     item.recommendationReason = "物品分解所得宝石数未知";
+  } else if (item.marketNetCents == null || item.unitGemValueNetCents == null) {
+    item.recommendationKey = "unknown";
+    item.recommendationLabel = "缺手续费";
+    item.recommendationClass = "warn";
+    item.recommendationReason = "无法确认 Steam 钱包的手续费规则";
   } else if (!item.marketHashName || item.marketableCount <= 0) {
     item.recommendationKey = "grind";
     item.recommendationLabel = "分解";

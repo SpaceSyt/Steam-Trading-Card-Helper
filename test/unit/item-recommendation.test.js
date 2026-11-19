@@ -1,7 +1,19 @@
-import test from "node:test";
+import test, { beforeEach } from "node:test";
+import { getCurrencyContextById, setActiveCurrencyContext } from "../../src/services/currency.js";
 import assert from "node:assert/strict";
 
 import { applyItemRecommendation } from "../../src/services/item-recommendation.js";
+
+beforeEach(() => setActiveCurrencyContext({ wallet_currency: 1, wallet_market_minimum: 1 }));
+
+test("missing wallet fee rules cannot recommend a sale or grinding", () => {
+  setActiveCurrencyContext(getCurrencyContextById(21));
+  for (const priceCents of [0, 2, 100]) {
+    const item = applyItemRecommendation(createItem({ priceCents }), 400);
+    assert.equal(item.recommendationKey, "unknown");
+    assert.equal(item.unitGemValueNetCents, null);
+  }
+});
 
 function createItem(overrides = {}) {
   return {
@@ -46,9 +58,9 @@ test("a failed market request never becomes a destructive grind recommendation",
 });
 
 test("the same 10-gem threshold can yield a sale, a tie or a grind for 40 gems", async () => {
-  const { getCurrencyContextById, setActiveCurrencyContext, clearActiveCurrencyContext } = await import("../../src/services/currency.js");
+  const { clearActiveCurrencyContext } = await import("../../src/services/currency.js");
   const { getGemBreakEvenBuyerPrice } = await import("../../src/utils/market-fees.js");
-  setActiveCurrencyContext(getCurrencyContextById(23));
+  setActiveCurrencyContext({ wallet_currency: 23, wallet_market_minimum: 7, wallet_fee_minimum: 7 });
   try {
     for (const [sack, value, key, formatted] of [
       [429, 14.96, "sell", "¥0.1496"],
@@ -56,7 +68,7 @@ test("the same 10-gem threshold can yield a sale, a tie or a grind for 40 gems",
       [431, 15.04, "grind", "¥0.1504"],
     ]) {
       const item = applyItemRecommendation(createItem({ gemValue: 40, totalGems: 80, priceCents: 29 }), sack);
-      assert.equal(getGemBreakEvenBuyerPrice(10, sack), 18);
+      assert.equal(getGemBreakEvenBuyerPrice(10, sack), 21);
       assert.equal(item.marketNetCents, 15);
       assert.equal(item.unitGemValueNetCents, value);
       assert.equal(item.recommendationKey, key);

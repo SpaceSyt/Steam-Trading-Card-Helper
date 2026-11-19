@@ -1,3 +1,4 @@
+import { getWalletForPricing } from "../services/market-wallet.js";
 import { priceCard } from "../parsers/price.js";
 import { loadMarketCache } from "../services/market-cache.js";
 import { persistMarketObservations } from "../services/market-observations.js";
@@ -15,19 +16,35 @@ export function createTradePrices({ currencyContext, cfg = {}, onChange = () => 
   let active = 0;
   let stopped = false;
   let storageError = !cache.ok;
-  for (const record of cache.envelope?.records || []) {
-    if (record.currencyId !== currencyContext?.currencyId || record.currencyCode !== currencyContext?.code
-      || !Number.isSafeInteger(record.lowestSellMinor) || record.lowestSellMinor <= 0
-      || record.observedAt > now() || now() - record.observedAt >= TRADE_PRICE_TTL) continue;
-    const key = tradePriceKey(record, currencyContext.currencyId);
-    if ((prices.get(key)?.observedAt ?? -1) < record.observedAt) {
-      prices.set(key, { state: "priced", priceMinor: record.lowestSellMinor, observedAt: record.observedAt });
+  let walletState = "idle";
+  function readCachedPrices() {
+    for (const record of cache.envelope?.records || []) {
+      if (record.currencyId !== currencyContext?.currencyId || record.currencyCode !== currencyContext?.code
+        || !Number.isSafeInteger(record.lowestSellMinor) || record.lowestSellMinor <= 0
+        || record.observedAt > now() || now() - record.observedAt >= TRADE_PRICE_TTL) continue;
+      const key = tradePriceKey(record, currencyContext.currencyId);
+      if ((prices.get(key)?.observedAt ?? -1) < record.observedAt) {
+        prices.set(key, { state: "priced", priceMinor: record.lowestSellMinor, observedAt: record.observedAt });
+      }
     }
   }
+  if (currencyContext?.verified) readCachedPrices();
   return {
+    get currencyContext() { return currencyContext; },
     get storageError() { return storageError; },
     get(item) {
-      if (stopped || !currencyContext?.currencyId) return { state: "missing" };
+      if (stopped) return { state: "missing" };
+      if (!currencyContext?.verified) {
+        if (currencyContext?.currencyId) return { state: "missing" };
+        if (walletState === "idle") {
+          walletState = "pending";
+          void getWalletForPricing(queue).then(context => {
+            currencyContext = context;
+            readCachedPrices();
+          }).catch(() => { walletState = "missing"; }).finally(() => { if (!stopped) onChange(); });
+        }
+        return { state: walletState };
+      }
       const key = tradePriceKey(item, currencyContext.currencyId);
       const existing = prices.get(key);
       if (existing && (existing.state !== "priced" || now() - existing.observedAt < TRADE_PRICE_TTL)) return existing;
@@ -57,6 +74,7 @@ export function createTradePrices({ currencyContext, cfg = {}, onChange = () => 
       return entry;
     },
     retry() {
+      if (walletState === "missing") walletState = "idle";
       for (const [key, entry] of prices) if (entry.state === "missing") prices.delete(key);
       onChange();
     },

@@ -1,3 +1,4 @@
+import { getCurrencyContextById, parseCurrencyAmount } from "./currency.js";
 import { parseMajorAmountToMinor } from "./market-data.js";
 
 const ENTITY_MAP = Object.freeze({
@@ -84,7 +85,9 @@ function parseOrderRow(rowHtml, orderId, options) {
   const inlineQuantity = classFragment(rowHtml, "market_listing_inline_buyorder_qty");
   const priceCell = classFragment(rowHtml, "market_listing_my_price");
   const priceText = textContent(priceCell.replace(inlineQuantity, ""));
-  const unitPriceMinor = parseMajorAmountToMinor(priceText, options.minorDigits);
+  const unitPriceMinor = options.currencyContext
+    ? parseCurrencyAmount(priceText, options.currencyContext)
+    : parseMajorAmountToMinor(priceText, options.minorDigits);
   if (!Number.isSafeInteger(unitPriceMinor) || unitPriceMinor <= 0) {
     return { error: "invalid-unit-price", identity };
   }
@@ -117,6 +120,7 @@ export function parseActiveBuyOrdersHtml(html, options = {}) {
     starts.push({ index: match.index, orderId: match[1] });
   }
 
+  const currencyContext = options.currencyContext || (options.currencyId && getCurrencyContextById(options.currencyId));
   const orders = [];
   const diagnostics = [];
   const seenOrderIds = new Set();
@@ -128,9 +132,7 @@ export function parseActiveBuyOrdersHtml(html, options = {}) {
     }
     seenOrderIds.add(current.orderId);
     const end = starts[index + 1]?.index ?? source.length;
-    const parsed = parseOrderRow(source.slice(current.index, end), current.orderId, {
-      minorDigits: Number.isInteger(options.minorDigits) ? options.minorDigits : 2,
-    });
+    const parsed = parseOrderRow(source.slice(current.index, end), current.orderId, { ...options, currencyContext });
     if (parsed.order) orders.push(parsed.order);
     else diagnostics.push({
       code: parsed.error || "invalid-order-row",

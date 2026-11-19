@@ -1,6 +1,6 @@
+import { getWalletForPricing } from "../services/market-wallet.js";
 import { EARLY_PREDICTION_STAGES } from "../constants.js";
 import {
-  CURRENCY_IDS,
   getActiveCurrencyContext,
   getCurrencyContextById,
   resolveCurrencyContext,
@@ -136,7 +136,7 @@ export function applyPriceCardResult(card, result, fallbackCurrencyId = null) {
 function getPriceCurrencyContext(options = {}) {
   if (options.currencyContext) return resolveCurrencyContext(options.currencyContext);
   if (options.currencyId != null) return getCurrencyContextById(options.currencyId);
-  return getActiveCurrencyContext() || getCurrencyContextById(CURRENCY_IDS.CNY);
+  return getActiveCurrencyContext();
 }
 
 function makePriceCardResult(record, currencyContext, options, observedAt, legacy = toLegacyPriceResult(record)) {
@@ -189,7 +189,14 @@ export async function priceCard(marketHashName, queue, options = {}) {
   let currencyContext = null;
   try {
     currencyContext = getPriceCurrencyContext(options);
-    if (!currencyContext?.currencyId) {
+    if (!currencyContext?.currencyId && !options.currencyContext && options.currencyId == null) {
+      try {
+        currencyContext = await getWalletForPricing(queue);
+      } catch (error) {
+        return makePriceCardError(PRICE_CARD_ERROR_KINDS.CURRENCY, { errorMessage: error.message });
+      }
+    }
+    if (!currencyContext?.verified) {
       return makePriceCardError(PRICE_CARD_ERROR_KINDS.CURRENCY, {
         errorMessage: "无法确认市场币种",
       });

@@ -97,6 +97,21 @@ test("replacing a USD partition preserves the CNY order results", () => {
   assert.deepEqual(cnyEnvelope, cnySnapshot);
 });
 
+test("order caches reject conflicting currencies and keep legacy AUD values in the AUD partition", () => {
+  const now = Date.now();
+  const item = { appid: "10", currencyId: 21, currencyCode: "STEAM-21", cachedAt: now, cards: [{ currencyId: 21 }] };
+  const saved = normalizeOrderResult(item, now, 21);
+  assert.equal(saved.currencyCode, "AUD");
+  assert.equal(normalizeOrderResult(item, now, 1), null);
+  assert.equal(normalizeOrderResult({ ...item, cards: [{ currencyId: 23 }] }, now, 21), null);
+  assert.equal(normalizeOrderResult({ ...item, currencyCode: "USD" }, now, 21), null);
+  const index = new Map([["10_0", saved]]);
+  state.currencyContext = { currencyId: 1 };
+  assert.equal(getCachedOrderResult(item, index), null);
+  state.currencyContext = { currencyId: null };
+  assert.equal(upsertOrderResult(item), null);
+});
+
 test("incomplete prices remain unavailable after order-cache normalization", () => {
   const normalized = makeOrderResult("456", {
     hasIncompletePricing: true,

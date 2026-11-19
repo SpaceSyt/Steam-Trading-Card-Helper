@@ -53,35 +53,11 @@ const unsafeWindow = typeof globalThis !== "undefined"
   }
 
   export function getMarketMinimumPriceMinor(currencyContextOrWalletInfo) {
-    const suppliedWalletInfo = currencyContextOrWalletInfo?.walletInfo
-      || (
-        currencyContextOrWalletInfo
-        && typeof currencyContextOrWalletInfo === "object"
-        && Object.hasOwn(currencyContextOrWalletInfo, "wallet_market_minimum")
-          ? currencyContextOrWalletInfo
-          : null
-      );
-    const walletInfo = suppliedWalletInfo
-      || (currencyContextOrWalletInfo == null ? unsafeWindow.g_rgWalletInfo : null);
-    const walletMinimum = Number(walletInfo?.wallet_market_minimum);
-    if (Number.isFinite(walletMinimum) && walletMinimum > 0) {
-      return Math.floor(walletMinimum) * 3;
-    }
-
-    const activeContext = currencyContextOrWalletInfo == null
-      ? getActiveCurrencyContext()
-      : currencyContextOrWalletInfo;
-    if (activeContext || walletInfo) {
-      const context = resolveCurrencyContext(activeContext || walletInfo);
-      const minimum = Number(
-        context.minimumBuyerMinor
-        ?? context.marketMinimumBuyerMinor
-        ?? (Number(context.marketMinimumMinor) * 3),
-      );
-      if (Number.isFinite(minimum) && minimum > 0) return Math.floor(minimum);
-    }
-
-    return null;
+    const context = resolveCurrencyContext(currencyContextOrWalletInfo ?? getActiveCurrencyContext() ?? unsafeWindow.g_rgWalletInfo);
+    if (!context.verified) return null;
+    if (context.minimumBuyerMinor != null || currencyContextOrWalletInfo != null) return context.minimumBuyerMinor;
+    const wallet = unsafeWindow.g_rgWalletInfo;
+    return Number(wallet?.wallet_currency) === context.currencyId ? resolveCurrencyContext(wallet).minimumBuyerMinor : null;
   }
 
   export function getMarketMinimumPriceCents(currencyContextOrWalletInfo) {

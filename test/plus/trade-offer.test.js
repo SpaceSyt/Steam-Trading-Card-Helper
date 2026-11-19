@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { tradeAssetKey, readTradeSide, summarizeTradeSide, compareTradeSides } from "../../src/plus/trade-model.js";
 import { createTradePrices, TRADE_PRICE_TTL } from "../../src/plus/trade-prices.js";
-import { getCurrencyContextById } from "../../src/services/currency.js";
+import { clearActiveCurrencyContext, getCurrencyContextById, initializeCurrencyContext } from "../../src/services/currency.js";
 
 const asset = (id, amount = 1, appid = "753") => ({ assetid: String(id), appid, contextid: "6", amount });
 const description = (name, other = {}) => ({ market_hash_name: name, marketable: 1, ...other });
@@ -176,4 +176,36 @@ test("stopping prevents late response callbacks and writes", async () => {
   await settle();
   assert.equal(h.changes(), 0);
   assert.equal(h.writes.length, 0);
+});
+
+test("a trade with only a dollar sign loads its owner's wallet once before reusing cached prices", async () => {
+  const account = "76561198000000000";
+  const previousAccount = globalThis.g_steamID;
+  globalThis.g_steamID = account;
+  const requests = [];
+  const item = { appid: "753", marketHashName: "Test Card" };
+  const record = { ...item, currencyId: 21, currencyCode: "AUD", lowestSellMinor: 133, observedAt: Date.now() };
+  let prices;
+  try {
+    prices = createTradePrices({
+      currencyContext: initializeCurrencyContext({ pageText: "$1.23" }),
+      cache: { ok: true, envelope: { records: [record, { ...record, currencyId: 1, currencyCode: "USD", lowestSellMinor: 99 }] } },
+      queue: { stop() {}, async fetch(url) {
+        requests.push(url);
+        return { text: `<script>var g_steamID='${account}';var g_rgWalletInfo={"wallet_currency":21,"wallet_market_minimum":1};</script>` };
+      } },
+    });
+    assert.deepEqual(requests, []);
+    assert.equal(prices.get(item).state, "pending");
+    assert.equal(prices.get(item).state, "pending");
+    await settle();
+    assert.equal(prices.currencyContext.code, "AUD");
+    assert.equal(prices.get(item).priceMinor, 133);
+    assert.deepEqual(requests, ["https://steamcommunity.com/market/"]);
+  } finally {
+    prices?.stop();
+    if (previousAccount == null) delete globalThis.g_steamID;
+    else globalThis.g_steamID = previousAccount;
+    clearActiveCurrencyContext();
+  }
 });

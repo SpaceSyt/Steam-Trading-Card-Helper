@@ -1,4 +1,5 @@
 import { state } from "../state.js";
+import { getWalletForPricing } from "./market-wallet.js";
 import { RequestQueue } from "../request/queue.js";
 import { getActiveCurrencyContext, getCurrencyContextById } from "./currency.js";
 import { getMarketListingUrl, parseMarketListingSnapshotFromHtml, parseMarketListingWithDepthFromHtml } from "../parsers/market-listing.js";
@@ -19,17 +20,14 @@ export function isNoBuyOrdersError(error) {
 }
 
 export function getOrderCurrencyContext() {
-  const activeContext = getActiveCurrencyContext();
-  if (Number.isInteger(activeContext?.currencyId) && activeContext.currencyId > 0) {
-    return activeContext;
-  }
-
-  const configuredCurrencyId = Number(state.cfg.currencyId);
-  if (Number.isInteger(configuredCurrencyId) && configuredCurrencyId > 0) {
-    return getCurrencyContextById(configuredCurrencyId);
-  }
+  const context = getActiveCurrencyContext() || getCurrencyContextById(state.cfg.currencyId);
+  if (context?.verified) return context;
 
   throw new Error("无法确认 Steam 钱包币种");
+}
+
+export function getOrderWalletRules(queue) {
+  return getWalletForPricing(queue, true);
 }
 
 export function getCurrencyMarketKey(marketHashName, currencyId = getOrderCurrencyContext().currencyId) {
@@ -45,8 +43,9 @@ export async function fetchActiveBuyOrderSnapshot(queue = null) {
     { stopPredicate: () => false }
   );
   const requestQueue = queue || ownedQueue;
-  let data;
+  let data, currencyContext;
   try {
+    currencyContext = await getWalletForPricing(requestQueue);
     const response = await requestQueue.fetch(
       "https://steamcommunity.com/market/mylistings?start=0&count=100&l=english",
       { requestPolicy: "default", cache: "no-store" }
@@ -55,9 +54,7 @@ export async function fetchActiveBuyOrderSnapshot(queue = null) {
   } finally {
     ownedQueue?.stop();
   }
-  return parseActiveBuyOrdersResponse(data, {
-    minorDigits: getOrderCurrencyContext().minorDigits,
-  });
+  return parseActiveBuyOrdersResponse(data, { currencyContext });
 }
 
 export function getPendingOrderExpectedQuantity(marketHashName) {

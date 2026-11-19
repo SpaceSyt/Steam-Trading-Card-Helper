@@ -146,8 +146,7 @@ import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action
         const currencyId = Number(
           priceResult.value?.currencyId
           || state?.currencyContext?.currencyId
-          || state?.cfg?.currencyId
-          || 23
+          || 0
         );
         const savedGemPrice = GM_getValue(SIDEBAR_GEM_PRICE_KEY, null);
         const savedCurrencyId = typeof savedGemPrice === "object"
@@ -164,7 +163,7 @@ import { isPriceOverviewProbeBlocked, updateAllActionStates } from "../ui/action
           ...priceResult.value,
           previousPriceCents,
         };
-        if (currentPriceCents > 0) {
+        if (currencyId && currentPriceCents > 0) {
           GM_setValue(SIDEBAR_GEM_PRICE_KEY, {
             schemaVersion: 2,
             currencyId,

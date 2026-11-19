@@ -1,4 +1,5 @@
 import { readInventoryPages } from "../services/inventory-pages.js";
+import { getWalletForPricing } from "../services/market-wallet.js";
 import { state } from "../state.js";
 
 import { SIDEBAR_GEM_SACK_HASH, GEM_SACK_SIZE } from "../constants.js";
@@ -55,7 +56,9 @@ import { getActiveCurrencyContext } from "../services/currency.js";
     );
     const requestQueue = queue || ownedQueue;
     try {
+      const currencyContext = await getWalletForPricing(requestQueue, true);
       const price = await priceCard(SIDEBAR_GEM_SACK_HASH, requestQueue, {
+        currencyContext,
         requestPolicy: { base: "priceoverview", retry429: false },
       });
       const priced = isPriceCardPriced(price);
@@ -69,7 +72,7 @@ import { getActiveCurrencyContext } from "../services/currency.js";
             ? "平均价格"
             : "暂无价格",
         volume: priced ? price.volume || 0 : 0,
-        currencyId: price?.currencyId || state.currencyContext?.currencyId || state.cfg.currencyId,
+        currencyId: currencyContext.currencyId,
         observedAt: price?.observedAt || Date.now(),
         record: price?.record || null,
       };
@@ -82,7 +85,11 @@ import { getActiveCurrencyContext } from "../services/currency.js";
     const currencyId = getActiveCurrencyContext()?.currencyId;
     if (!sessionGemPricePromise || sessionGemCurrencyId !== currencyId) {
       sessionGemCurrencyId = currencyId;
-      sessionGemPricePromise = loadSessionGemPrice(queue);
+      const pending = loadSessionGemPrice(queue);
+      sessionGemPricePromise = pending;
+      pending.then(value => {
+        if (sessionGemPricePromise === pending) sessionGemCurrencyId = value.currencyId;
+      }, () => {});
     }
     return sessionGemPricePromise;
   }

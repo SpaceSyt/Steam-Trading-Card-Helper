@@ -11,7 +11,7 @@ export function initTradeOffer() {
   if (slots.some(slot => !slot) || doc.getElementById("stch-trade-comparison")) return null;
   GM_addStyle(css);
   const currencyContext = initializeCurrencyContext({ configuredCurrencyId: state.cfg.currencyId });
-  const money = value => formatMoney(value, currencyContext);
+  const money = value => formatMoney(value, prices.currencyContext);
   const summaries = slots.map(slot => {
     const row = doc.createElement("div");
     row.className = "stch-trade-summary";
@@ -64,7 +64,7 @@ export function initTradeOffer() {
       let value = "交易数据未就绪";
       if (side) {
         value = side.totalMinor !== null ? money(side.totalMinor)
-          : !currencyContext?.currencyId ? "币种未识别"
+          : !side.pending && !prices.currencyContext?.verified ? "币种未识别"
           : side.pending ? `估价中（${side.pending} 件待查${side.missing ? `，${side.missing} 件缺价` : ""}）`
           : side.quantity === null ? "物品数量异常" : `—（${side.missing} 件缺价）`;
       }
@@ -79,7 +79,7 @@ export function initTradeOffer() {
       : difference === 0 ? "双方物品价值相同"
       : `${difference > 0 ? "对方物品价值比你高" : "你的物品价值比对方高"} ${money(Math.abs(difference))}`;
     setText(text, message + (prices.storageError ? " · 价格缓存读写失败" : ""));
-    retry.hidden = !currencyContext?.currencyId || !sides.some(side => side?.retryable && !side.pending);
+    retry.hidden = Boolean(prices.currencyContext?.currencyId && !prices.currencyContext.verified) || !sides.some(side => side?.retryable && !side.pending);
     const expiresAt = Math.min(...sides.map(side => side?.observedAt ?? Infinity)) + TRADE_PRICE_TTL;
     if (Number.isFinite(expiresAt)) expiryTimer = setTimeout(schedule, Math.max(1000, expiresAt - Date.now()));
   }

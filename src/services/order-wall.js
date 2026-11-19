@@ -346,6 +346,7 @@ function calculateAutomaticPrice(depth, options, sell) {
   const lowestSellMinor = normalizePositiveInteger(
     depth?.lowestSellMinor ?? depth?.amtMinSellOrder
   );
+  const incrementMinor = normalizePositiveInteger(options.incrementMinor) ?? 1;
   const instant = sell && strategy === "instant";
   const bestPriceMinor = sell && !instant ? lowestSellMinor : highestBuyMinor;
   if (bestPriceMinor === null) return null;
@@ -355,6 +356,7 @@ function calculateAutomaticPrice(depth, options, sell) {
   const detection = detectBuyOrderWalls(
     (instant ? [] : sell ? depth?.sellLevels ?? depth?.rgCompactSellOrders : depth?.buyLevels ?? depth?.rgCompactBuyOrders) ?? [],
     {
+      clusterGapMinor: incrementMinor,
       ...options.wallOptions,
       sell,
       bestPriceMinor,
@@ -367,7 +369,7 @@ function calculateAutomaticPrice(depth, options, sell) {
   const useWall = cluster && (sell ? strategy === "conservative" : strategy !== "aggressive");
   const wallReferencePriceMinor = useWall
     ? sell
-      ? cluster.bottomPriceMinor - (strategyRule.wallAnchor === "previous" ? 1 : 0)
+      ? cluster.bottomPriceMinor - (strategyRule.wallAnchor === "previous" ? incrementMinor : 0)
       : strategyRule.wallAnchor === "bottom" ? cluster.bottomPriceMinor : cluster.topPriceMinor
     : null;
   const strategyBasePriceMinor = (wallReferencePriceMinor ?? effectiveBestPriceMinor)
@@ -379,10 +381,11 @@ function calculateAutomaticPrice(depth, options, sell) {
   if (!sell && lowestSellMinor !== null && lowestSellMinor <= minimumPriceMinor) return null;
   const sellGuardMinor = lowestSellMinor === null
     ? null
-    : lowestSellMinor - 1;
+    : (Math.ceil(lowestSellMinor / incrementMinor) - 1) * incrementMinor;
   const adjustedPriceMinor = strategyBasePriceMinor + adjustmentMinor;
-  let finalPriceMinor = Math.max(minimumPriceMinor, adjustedPriceMinor);
-  const buyGuardMinor = instant || highestBuyMinor === null ? null : highestBuyMinor + 1;
+  let finalPriceMinor = Math.max(minimumPriceMinor, Math.round(adjustedPriceMinor / incrementMinor) * incrementMinor);
+  if (!sell && sellGuardMinor !== null && sellGuardMinor < minimumPriceMinor) return null;
+  const buyGuardMinor = instant || highestBuyMinor === null ? null : (Math.floor(highestBuyMinor / incrementMinor) + 1) * incrementMinor;
   if (sell) finalPriceMinor = Math.max(finalPriceMinor, buyGuardMinor ?? 0);
   else if (sellGuardMinor !== null) finalPriceMinor = Math.min(finalPriceMinor, sellGuardMinor);
 

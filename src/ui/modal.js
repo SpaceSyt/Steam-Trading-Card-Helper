@@ -9,7 +9,7 @@ import {
 import { ONBOARDING_SEEN_KEY, TAB_DEFINITIONS } from "../constants.js";
 
 import {
-  getActiveCurrencyContext,
+  getActiveCurrencyContext, CURRENCY_IDS,
 } from "../services/currency.js";
 
 import { startScan, requestStop, skipCurrentBadge } from "../features/scan.js";
@@ -475,9 +475,8 @@ import {
                 <div class="stch-toolbar">
             <label>无法自动识别币种时使用
               <select id="stch-currency-fallback" class="stch-input" style="width:138px">
-                <option value="23" ${Number(state.cfg.currencyId) === 23 ? "selected" : ""}>人民币 CNY (¥)</option>
-                <option value="1" ${Number(state.cfg.currencyId) === 1 ? "selected" : ""}>美元 USD ($)</option>
-                <option value="29" ${Number(state.cfg.currencyId) === 29 ? "selected" : ""}>港币 HKD (HK$)</option>
+                <option value="">—</option>
+                ${Object.entries(CURRENCY_IDS).map(([code, id]) => `<option value="${id}" ${state.cfg.currencyId === id ? "selected" : ""}>${code}</option>`).join("")}
               </select>
             </label>
             <span class="stch-settings-hint">当前使用：${currencyStatus}</span>

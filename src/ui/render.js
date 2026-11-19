@@ -401,6 +401,7 @@ import { enableCheckboxDragSelection } from "./checkbox-drag.js";
       priceSource: "lowest",
       adjustmentMinor: adjustmentCents,
       minimumPriceMinor: minimumCents,
+      incrementMinor: state.currencyContext?.incrementMinor,
     });
   }
 
