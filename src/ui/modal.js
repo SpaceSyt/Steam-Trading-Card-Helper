@@ -577,7 +577,7 @@ import {
         </div>
       </div>
       <div class="stch-footer">
-        <span class="stch-label">V2.6.2</span>
+        <span class="stch-label">V__VERSION__</span>
       </div>
     `;
     document.body.appendChild(modal);

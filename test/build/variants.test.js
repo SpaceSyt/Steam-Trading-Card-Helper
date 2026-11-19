@@ -15,6 +15,10 @@ for (const plus of [false, true]) {
       const directory = compatibility ? "" : "build/";
       test(`${filename}: language, feature scope, and compatibility exclusion`, () => {
         const source = readFileSync(new URL(`../../${directory}${filename}`, import.meta.url), "utf8");
+        const version = source.match(/^\/\/ @version\s+([^\s]+)$/m)?.[1];
+        const footerVersion = source.match(/<div class="stch-footer">\s*<span class="stch-label">V([^<]+)<\/span>/)?.[1];
+        assert.ok(version);
+        assert.equal(footerVersion, version, "Panel footer must show the installed script version");
         const name = source.match(/^\/\/ @name\s+(.+)$/m)?.[1];
         assert.ok(name);
         assert.equal(names.has(name), false, "Variant metadata name must be distinct");

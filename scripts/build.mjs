@@ -18,6 +18,7 @@ function compactMainModalHtml(source) {
     (_match, open, html, close) => {
       matches += 1;
       const compactHtml = html
+        .replace("__VERSION__", pkg.version)
         .split("\n")
         .map(line => line.trim())
         .filter(Boolean)
